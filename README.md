@@ -78,28 +78,27 @@ Copy the example environment file:
 cp .env.example .env
 ```
 
-### 2. Configure Azure OpenAI
+### 2. Configure Environment Variables
 
-Edit `.env` and add your Azure OpenAI credentials:
+Edit `.env` and fill in your actual values. The `.env.example` file contains detailed comments explaining each variable.
 
-```env
-AZURE_OPENAI_ENDPOINT=https://your-service.openai.azure.com
-AZURE_OPENAI_API_KEY=your-api-key-here
-AZURE_OPENAI_DEPLOYMENT_NAME=gpt-4
-AZURE_OPENAI_API_VERSION=2023-05-15
-AZURE_OPENAI_EMBEDDING_DEPLOYMENT=text-embedding-ada-002
-```
+**Required Configuration:**
+- `AZURE_OPENAI_ENDPOINT` - Your Azure OpenAI endpoint URL
+- `AZURE_OPENAI_API_KEY` - Your Azure OpenAI API key
+- `AZURE_OPENAI_DEPLOYMENT_NAME` - Your GPT-4 deployment name
 
-### 3. Configure Redis
+**Optional but Recommended:**
+- `REDIS_HOST` - Redis host for caching
+- `REDIS_PASSWORD` - Redis password
+- `AZURE_OPENAI_EMBEDDING_DEPLOYMENT` - Required for RAG functionality
 
-Add your Redis connection details:
+**Optional Application Settings:**
+- `APP_LOG_LEVEL` - Logging level (default: INFO)
+- `APP_RAG_TOP_K` - Number of articles for RAG context (default: 3)
+- `APP_RAG_SIMILARITY_THRESHOLD` - Minimum similarity for RAG (default: 0.3)
+- Cache TTL settings for performance tuning
 
-```env
-REDIS_HOST=your-redis-host.redis.cache.windows.net
-REDIS_PORT=6380
-REDIS_PASSWORD=your-redis-password
-REDIS_SSL=true
-```
+See `.env.example` for complete documentation of all available settings.
 
 ## Azure Setup
 
