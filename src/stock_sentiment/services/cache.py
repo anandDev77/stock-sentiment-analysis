@@ -21,6 +21,90 @@ from ..utils.logger import get_logger
 logger = get_logger(__name__)
 
 
+class CacheStats:
+    """
+    Cache statistics tracker that persists in Redis.
+    
+    This class tracks cache hits, misses, and other statistics
+    across app reloads by storing them in Redis.
+    """
+    
+    STATS_KEY = "cache:stats"
+    
+    @staticmethod
+    def get_stats(redis_client) -> Dict[str, int]:
+        """
+        Get cache statistics from Redis.
+        
+        Args:
+            redis_client: Redis client instance
+            
+        Returns:
+            Dictionary with statistics
+        """
+        if not redis_client:
+            return {'cache_hits': 0, 'cache_misses': 0, 'cache_sets': 0}
+        
+        try:
+            stats_data = redis_client.get(CacheStats.STATS_KEY)
+            if stats_data:
+                return json.loads(stats_data)
+        except Exception as e:
+            logger.error(f"Error getting cache stats: {e}")
+        
+        return {'cache_hits': 0, 'cache_misses': 0, 'cache_sets': 0}
+    
+    @staticmethod
+    def increment_hit(redis_client):
+        """Increment cache hit counter."""
+        if not redis_client:
+            return
+        try:
+            stats = CacheStats.get_stats(redis_client)
+            stats['cache_hits'] = stats.get('cache_hits', 0) + 1
+            redis_client.set(CacheStats.STATS_KEY, json.dumps(stats))
+        except Exception as e:
+            logger.error(f"Error incrementing cache hit: {e}")
+    
+    @staticmethod
+    def increment_miss(redis_client):
+        """Increment cache miss counter."""
+        if not redis_client:
+            return
+        try:
+            stats = CacheStats.get_stats(redis_client)
+            stats['cache_misses'] = stats.get('cache_misses', 0) + 1
+            redis_client.set(CacheStats.STATS_KEY, json.dumps(stats))
+        except Exception as e:
+            logger.error(f"Error incrementing cache miss: {e}")
+    
+    @staticmethod
+    def increment_set(redis_client):
+        """Increment cache set counter."""
+        if not redis_client:
+            return
+        try:
+            stats = CacheStats.get_stats(redis_client)
+            stats['cache_sets'] = stats.get('cache_sets', 0) + 1
+            redis_client.set(CacheStats.STATS_KEY, json.dumps(stats))
+        except Exception as e:
+            logger.error(f"Error incrementing cache set: {e}")
+    
+    @staticmethod
+    def reset(redis_client):
+        """Reset all cache statistics."""
+        if not redis_client:
+            return
+        try:
+            redis_client.set(CacheStats.STATS_KEY, json.dumps({
+                'cache_hits': 0,
+                'cache_misses': 0,
+                'cache_sets': 0
+            }))
+        except Exception as e:
+            logger.error(f"Error resetting cache stats: {e}")
+
+
 class RedisCache:
     """
     Redis cache utility for caching API responses and data.
@@ -85,9 +169,17 @@ class RedisCache:
             
         Returns:
             MD5 hash of the key string
+            
+        Note:
+            Keys are hashed for consistency and to avoid special character issues.
+            The same inputs will always generate the same key, ensuring cache
+            persistence across app reloads.
         """
-        key_string = f"{prefix}:{':'.join(str(arg) for arg in args)}"
-        return hashlib.md5(key_string.encode()).hexdigest()
+        # Normalize inputs to ensure consistent key generation
+        normalized_args = [str(arg).upper().strip() for arg in args]
+        key_string = f"{prefix}:{':'.join(normalized_args)}"
+        key_hash = hashlib.md5(key_string.encode()).hexdigest()
+        return key_hash
     
     def get(self, key: str) -> Optional[Any]:
         """
@@ -100,14 +192,27 @@ class RedisCache:
             Cached value or None if not found/error
         """
         if not self.client:
+            logger.debug(f"Cache client not available for key: {key[:20]}...")
             return None
         
         try:
+            # Check if key exists and get TTL
+            ttl = self.client.ttl(key)
             value = self.client.get(key)
             if value:
-                logger.debug(f"Cache hit for key: {key[:20]}...")
+                logger.info(f"Cache hit: key={key[:30]}... TTL={ttl}s remaining")
+                # Track hit in Redis stats
+                CacheStats.increment_hit(self.client)
                 return json.loads(value)
-            logger.debug(f"Cache miss for key: {key[:20]}...")
+            else:
+                if ttl == -2:  # Key doesn't exist
+                    logger.debug(f"Cache miss: key={key[:30]}... (key not found)")
+                elif ttl == -1:  # Key exists but no expiry
+                    logger.debug(f"Cache miss: key={key[:30]}... (key exists but no value)")
+                else:
+                    logger.debug(f"Cache miss: key={key[:30]}... (expired, was {abs(ttl)}s ago)")
+                # Track miss in Redis stats
+                CacheStats.increment_miss(self.client)
             return None
         except json.JSONDecodeError as e:
             logger.error(f"Error decoding cached value for key {key}: {e}")
@@ -129,13 +234,18 @@ class RedisCache:
             True if successful, False otherwise
         """
         if not self.client:
+            logger.warning(f"Cache client not available, cannot cache key: {key[:20]}...")
             return False
         
         try:
             serialized = json.dumps(value, default=str)
             result = self.client.setex(key, ttl, serialized)
             if result:
-                logger.debug(f"Cached value for key: {key[:20]}... (TTL: {ttl}s)")
+                logger.info(f"Cache set: key={key[:30]}... TTL={ttl}s ({ttl//60}min)")
+                # Track set in Redis stats
+                CacheStats.increment_set(self.client)
+            else:
+                logger.warning(f"Failed to cache value for key: {key[:20]}...")
             return bool(result)
         except (TypeError, ValueError) as e:
             logger.error(f"Error serializing value for cache: {e}")
@@ -304,6 +414,23 @@ class RedisCache:
         except Exception as e:
             logger.error(f"Error storing embedding: {e}")
             return False
+    
+    def get_cache_stats(self) -> Dict[str, int]:
+        """
+        Get cache statistics from Redis.
+        
+        Returns:
+            Dictionary with cache statistics (hits, misses, sets)
+        """
+        if not self.client:
+            return {'cache_hits': 0, 'cache_misses': 0, 'cache_sets': 0}
+        return CacheStats.get_stats(self.client)
+    
+    def reset_cache_stats(self):
+        """Reset cache statistics in Redis."""
+        if self.client:
+            CacheStats.reset(self.client)
+            logger.info("Cache statistics reset")
     
     def get_article_embedding(self, article_id: str) -> Optional[tuple]:
         """

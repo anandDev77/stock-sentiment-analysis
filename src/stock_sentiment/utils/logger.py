@@ -40,11 +40,13 @@ def setup_logger(
         datefmt="%Y-%m-%d %H:%M:%S"
     )
     
-    # Console handler
-    console_handler = logging.StreamHandler(sys.stdout)
+    # Console handler - use stderr (Streamlit captures stdout)
+    console_handler = logging.StreamHandler(sys.stderr)
     console_handler.setLevel(logging.INFO)
     console_handler.setFormatter(formatter)
     logger.addHandler(console_handler)
+    # Prevent propagation to avoid duplicate logs
+    logger.propagate = False
     
     # File handler (if specified)
     if log_file:
@@ -59,15 +61,35 @@ def setup_logger(
 
 def get_logger(name: Optional[str] = None) -> logging.Logger:
     """
-    Get a logger instance.
+    Get a logger instance, setting it up if not already configured.
     
     Args:
         name: Optional logger name (defaults to "stock_sentiment")
         
     Returns:
-        Logger instance
+        Logger instance with handlers configured
     """
     if name is None:
         name = "stock_sentiment"
-    return logging.getLogger(name)
+    
+    logger = logging.getLogger(name)
+    
+    # If logger doesn't have handlers, set it up
+    if not logger.handlers:
+        # Use stderr instead of stdout (Streamlit captures stdout)
+        console_handler = logging.StreamHandler(sys.stderr)
+        console_handler.setLevel(logging.INFO)
+        
+        # Create formatter with emoji support for better visibility
+        formatter = logging.Formatter(
+            fmt="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+            datefmt="%H:%M:%S"
+        )
+        console_handler.setFormatter(formatter)
+        logger.addHandler(console_handler)
+        logger.setLevel(logging.INFO)
+        # Prevent propagation to root logger (avoids duplicate logs)
+        logger.propagate = False
+    
+    return logger
 

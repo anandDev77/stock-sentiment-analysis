@@ -138,8 +138,8 @@ class AppSettings(BaseSettings):
     
     # Cache TTLs (in seconds)
     cache_ttl_sentiment: int = Field(default=86400, description="Sentiment cache TTL")  # 24 hours
-    cache_ttl_stock: int = Field(default=300, description="Stock data cache TTL")  # 5 minutes
-    cache_ttl_news: int = Field(default=1800, description="News cache TTL")  # 30 minutes
+    cache_ttl_stock: int = Field(default=3600, description="Stock data cache TTL")  # 1 hour (increased from 5 min)
+    cache_ttl_news: int = Field(default=7200, description="News cache TTL")  # 2 hours (increased from 30 min)
     
     # RAG settings
     rag_top_k: int = Field(default=3, description="Number of similar articles to retrieve")

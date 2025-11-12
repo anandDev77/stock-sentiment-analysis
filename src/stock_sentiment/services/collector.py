@@ -87,9 +87,10 @@ class StockDataCollector:
         
         # Check cache first
         if self.cache:
+            logger.debug(f"Checking cache for stock data: {symbol}")
             cached_data = self.cache.get_cached_stock_data(symbol)
             if cached_data:
-                logger.debug(f"Using cached stock data for {symbol}")
+                logger.info(f"Using cached stock data for {symbol}")
                 # Convert timestamp string back to datetime if needed
                 if isinstance(cached_data.get('timestamp'), str):
                     try:
@@ -99,7 +100,7 @@ class StockDataCollector:
                     except ValueError:
                         cached_data['timestamp'] = datetime.now()
                 return cached_data
-            logger.debug(f"Fetching fresh stock data for {symbol}")
+            logger.debug(f"Cache miss for {symbol}, fetching fresh data from API")
         
         try:
             ticker = yf.Ticker(symbol)
@@ -160,9 +161,10 @@ class StockDataCollector:
         
         # Check cache first
         if self.cache:
+            logger.debug(f"Checking cache for news: {symbol}")
             cached_news = self.cache.get_cached_news(symbol)
             if cached_news:
-                logger.debug(f"Using cached news for {symbol} ({len(cached_news)} articles)")
+                logger.info(f"Using cached news for {symbol} ({len(cached_news)} articles)")
                 # Convert timestamp strings back to datetime
                 for article in cached_news:
                     if isinstance(article.get('timestamp'), str):
@@ -173,7 +175,7 @@ class StockDataCollector:
                         except ValueError:
                             article['timestamp'] = datetime.now()
                 return cached_news
-            logger.debug(f"Fetching fresh news for {symbol}")
+            logger.debug(f"Cache miss for news {symbol}, fetching fresh data from API")
         
         try:
             ticker = yf.Ticker(symbol)

@@ -24,9 +24,12 @@ from stock_sentiment.services.sentiment import SentimentAnalyzer
 from stock_sentiment.services.collector import StockDataCollector
 from stock_sentiment.services.cache import RedisCache
 from stock_sentiment.services.rag import RAGService
-from stock_sentiment.utils.logger import get_logger
+from stock_sentiment.utils.logger import get_logger, setup_logger
 
+# Initialize root logger at app startup
+setup_logger("stock_sentiment", level="INFO")
 logger = get_logger(__name__)
+logger.info("Stock Sentiment Dashboard starting up")
 
 # Page configuration with custom theme
 st.set_page_config(
@@ -332,48 +335,104 @@ with st.sidebar:
     
     st.markdown("---")
     
-    # Performance stats with better design
-    try:
-        stats = analyzer.get_stats()
-        st.markdown("### 📊 Performance Metrics")
+    # Cache status indicator with detailed info
+    if 'cache_status' in st.session_state and st.session_state.cache_status:
+        cache_status = st.session_state.cache_status
+        st.markdown("### 🔄 Cache Status (Last Request)")
         
-        # Cache metrics
-        cache_container = st.container()
-        with cache_container:
-            col1, col2 = st.columns(2)
-            with col1:
-                st.metric(
-                    "Cache Hits",
-                    stats.get('cache_hits', 0),
-                    delta=None,
-                    delta_color="normal"
-                )
-            with col2:
-                st.metric(
-                    "Cache Misses",
-                    stats.get('cache_misses', 0),
-                    delta=None,
-                    delta_color="normal"
-                )
+        cache_col1, cache_col2 = st.columns(2)
+        with cache_col1:
+            if cache_status['stock']['hit']:
+                st.success("✅ Stock Data: **CACHED** (from Redis)")
+            elif cache_status['stock']['miss']:
+                st.info("🔄 Stock Data: **FRESH** (from API)")
+            else:
+                st.warning("⚠️ Stock Data: Unknown status")
             
-            total = stats.get('total_requests', 0)
-            if total > 0:
-                hit_rate = (stats.get('cache_hits', 0) / total) * 100
+            if cache_status['news']['hit']:
+                st.success("✅ News: **CACHED** (from Redis)")
+            elif cache_status['news']['miss']:
+                st.info("🔄 News: **FRESH** (from API)")
+            else:
+                st.warning("⚠️ News: Unknown status")
+        
+        with cache_col2:
+            total_sentiment = cache_status['sentiment']['hits'] + cache_status['sentiment']['misses']
+            if total_sentiment > 0:
+                hit_rate = (cache_status['sentiment']['hits'] / total_sentiment) * 100
                 st.metric(
-                    "Hit Rate",
-                    f"{hit_rate:.1f}%",
-                    delta=None,
-                    delta_color="normal"
+                    "Sentiment Cache",
+                    f"{hit_rate:.0f}%",
+                    f"{cache_status['sentiment']['hits']}/{total_sentiment} hits"
                 )
-            
-            st.metric(
-                "RAG Uses",
-                stats.get('rag_uses', 0),
-                delta=None,
-                delta_color="normal"
-            )
+            else:
+                st.info("No sentiment analysis yet")
+    
+    st.markdown("---")
+    
+    # Performance stats with better design
+    st.markdown("### 📊 Performance Metrics")
+    
+    # Get cache stats from Redis (persistent across reloads)
+    cache_stats = {}
+    if redis_cache and redis_cache.client:
+        cache_stats = redis_cache.get_cache_stats()
+    else:
+        cache_stats = {'cache_hits': 0, 'cache_misses': 0, 'cache_sets': 0}
+    
+    # Get analyzer stats (sentiment analysis specific)
+    analyzer_stats = {}
+    try:
+        analyzer_stats = analyzer.get_stats()
     except Exception:
-        pass
+        analyzer_stats = {'rag_uses': 0, 'total_requests': 0}
+    
+    # Cache metrics from Redis (persistent)
+    cache_col1, cache_col2 = st.columns(2)
+    with cache_col1:
+        st.metric(
+            "Cache Hits",
+            cache_stats.get('cache_hits', 0),
+            delta=None,
+            delta_color="normal",
+            help="Total cache hits (persisted in Redis)"
+        )
+    with cache_col2:
+        st.metric(
+            "Cache Misses",
+            cache_stats.get('cache_misses', 0),
+            delta=None,
+            delta_color="normal",
+            help="Total cache misses (persisted in Redis)"
+        )
+    
+    # Calculate hit rate
+    total_cache_ops = cache_stats.get('cache_hits', 0) + cache_stats.get('cache_misses', 0)
+    if total_cache_ops > 0:
+        hit_rate = (cache_stats.get('cache_hits', 0) / total_cache_ops) * 100
+        st.metric(
+            "Cache Hit Rate",
+            f"{hit_rate:.1f}%",
+            delta=f"{cache_stats.get('cache_hits', 0)}/{total_cache_ops}",
+            delta_color="normal",
+            help="Percentage of cache hits vs total cache operations"
+        )
+    
+    # RAG uses (from analyzer)
+    st.metric(
+        "RAG Uses",
+        analyzer_stats.get('rag_uses', 0),
+        delta=None,
+        delta_color="normal",
+        help="Number of times RAG context was used for sentiment analysis"
+    )
+    
+    # Reset button for cache stats
+    if st.button("🔄 Reset Cache Stats", use_container_width=True, help="Reset cache statistics in Redis"):
+        if redis_cache:
+            redis_cache.reset_cache_stats()
+            st.success("Cache statistics reset!")
+            st.rerun()
     
     st.markdown("---")
     st.markdown(
@@ -388,11 +447,37 @@ with st.sidebar:
 
 # Load data if button clicked
 if st.session_state.load_data and symbol:
+    # Track cache status for UI display
+    cache_status = {
+        'stock': {'hit': False, 'miss': False},
+        'news': {'hit': False, 'miss': False},
+        'sentiment': {'hits': 0, 'misses': 0}
+    }
+    
     with st.spinner("🔄 Collecting data and analyzing sentiment..."):
-        # Collect data
+        # Check cache BEFORE collecting to track status accurately
+        if redis_cache and redis_cache.client:
+            # Check stock cache
+            cached_stock_key = redis_cache._generate_key("stock", symbol)
+            cached_stock_exists = redis_cache.client.exists(cached_stock_key)
+            if cached_stock_exists:
+                cache_status['stock']['hit'] = True
+            else:
+                cache_status['stock']['miss'] = True
+            
+            # Check news cache
+            cached_news_key = redis_cache._generate_key("news", symbol)
+            cached_news_exists = redis_cache.client.exists(cached_news_key)
+            if cached_news_exists:
+                cache_status['news']['hit'] = True
+            else:
+                cache_status['news']['miss'] = True
+        
+        # Collect data (this will use cache if available)
         data = collector.collect_all_data(symbol)
         st.session_state.data = data
         st.session_state.symbol = symbol
+        st.session_state.cache_status = cache_status
         
         # Store articles in RAG for future retrieval
         if rag_service and data['news']:
@@ -404,7 +489,15 @@ if st.session_state.load_data and symbol:
         for article in data['news']:
             text_to_analyze = article.get('summary', article.get('title', ''))
             if text_to_analyze:
-                news_sentiments.append(analyzer.analyze_sentiment(text_to_analyze, symbol=symbol))
+                # Check if sentiment is cached
+                if redis_cache:
+                    cached_sentiment = redis_cache.get_cached_sentiment(text_to_analyze)
+                    if cached_sentiment:
+                        cache_status['sentiment']['hits'] += 1
+                    else:
+                        cache_status['sentiment']['misses'] += 1
+                sentiment_result = analyzer.analyze_sentiment(text_to_analyze, symbol=symbol)
+                news_sentiments.append(sentiment_result)
             else:
                 news_sentiments.append({'positive': 0, 'negative': 0, 'neutral': 1})
 
