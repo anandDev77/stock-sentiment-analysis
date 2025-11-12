@@ -28,12 +28,136 @@ from stock_sentiment.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-# Page configuration
+# Page configuration with custom theme
 st.set_page_config(
     page_title="Stock Sentiment Dashboard",
     page_icon="📈",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
+
+# Custom CSS for modern UI/UX
+st.markdown("""
+<style>
+    /* Main container styling */
+    .main .block-container {
+        padding-top: 2rem;
+        padding-bottom: 2rem;
+    }
+    
+    /* Header styling */
+    h1 {
+        color: #1f77b4;
+        font-weight: 700;
+        margin-bottom: 0.5rem;
+        border-bottom: 3px solid #1f77b4;
+        padding-bottom: 0.5rem;
+    }
+    
+    /* Subheader styling */
+    h2 {
+        color: #2c3e50;
+        font-weight: 600;
+        margin-top: 1.5rem;
+        margin-bottom: 1rem;
+    }
+    
+    h3 {
+        color: #34495e;
+        font-weight: 600;
+    }
+    
+    /* Metric cards enhancement */
+    [data-testid="stMetricValue"] {
+        font-size: 2rem;
+        font-weight: 700;
+    }
+    
+    [data-testid="stMetricDelta"] {
+        font-size: 1rem;
+    }
+    
+    /* Sidebar styling */
+    .css-1d391kg {
+        padding-top: 2rem;
+    }
+    
+    /* Status badges */
+    .status-badge {
+        padding: 0.5rem 1rem;
+        border-radius: 20px;
+        font-weight: 600;
+        display: inline-block;
+        margin: 0.25rem 0;
+    }
+    
+    /* Card-like containers */
+    .info-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        padding: 1.5rem;
+        border-radius: 10px;
+        color: white;
+        margin: 1rem 0;
+    }
+    
+    /* Button styling */
+    .stButton > button {
+        width: 100%;
+        border-radius: 8px;
+        font-weight: 600;
+        transition: all 0.3s ease;
+    }
+    
+    .stButton > button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+    
+    /* Tab styling */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 8px;
+    }
+    
+    .stTabs [data-baseweb="tab"] {
+        border-radius: 8px 8px 0 0;
+        padding: 12px 24px;
+        font-weight: 600;
+    }
+    
+    /* Expander styling */
+    .streamlit-expanderHeader {
+        font-weight: 600;
+        font-size: 1rem;
+    }
+    
+    /* Loading spinner */
+    .stSpinner > div {
+        border-top-color: #1f77b4;
+    }
+    
+    /* Empty state */
+    .empty-state {
+        text-align: center;
+        padding: 3rem;
+        color: #7f8c8d;
+    }
+    
+    /* Chart containers */
+    .plotly-container {
+        background: white;
+        border-radius: 8px;
+        padding: 1rem;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    
+    /* Responsive design */
+    @media (max-width: 768px) {
+        .main .block-container {
+            padding: 1rem;
+        }
+    }
+</style>
+""", unsafe_allow_html=True)
 
 # Initialize settings
 try:
@@ -98,62 +222,6 @@ if analyzer is None:
     st.error("Failed to initialize sentiment analyzer. Please check your configuration.")
     st.stop()
 
-# Streamlit app layout
-st.title("📈 Stock Sentiment Dashboard")
-st.markdown("Analyze stock sentiment using AI-powered sentiment analysis with Azure OpenAI")
-
-# Sidebar for input
-with st.sidebar:
-    st.header("Configuration")
-    symbol = st.text_input(
-        "Enter Stock Symbol (e.g., AAPL):",
-        value="AAPL",
-        key="stock_symbol"
-    ).upper()
-    
-    st.info(
-        "ℹ️ Using Azure OpenAI for sentiment analysis with RAG and Redis caching. "
-        "Configure in .env file."
-    )
-    
-    # Show cache status
-    if redis_cache and redis_cache.client:
-        st.success("✅ Redis cache connected")
-    else:
-        st.warning("⚠️ Redis cache not available - caching disabled")
-    
-    # Show RAG status
-    if rag_service:
-        if rag_service.embeddings_enabled:
-            st.success("✅ RAG enabled (embeddings working)")
-        else:
-            st.warning("⚠️ RAG disabled (embedding model not available)")
-    else:
-        st.warning("⚠️ RAG service not available")
-    
-    if st.button("🔍 Load Data", type="primary", use_container_width=True):
-        st.session_state.load_data = True
-        st.session_state.symbol = symbol
-
-# Add debug stats to sidebar after analyzer is initialized
-with st.sidebar:
-    st.divider()
-    try:
-        stats = analyzer.get_stats()
-        st.subheader("📊 Performance Stats")
-        col1, col2 = st.columns(2)
-        with col1:
-            st.metric("Cache Hits", stats.get('cache_hits', 0))
-            st.metric("RAG Uses", stats.get('rag_uses', 0))
-        with col2:
-            st.metric("Cache Misses", stats.get('cache_misses', 0))
-            total = stats.get('total_requests', 0)
-            if total > 0:
-                hit_rate = (stats.get('cache_hits', 0) / total) * 100
-                st.metric("Cache Hit Rate", f"{hit_rate:.1f}%")
-    except Exception:
-        pass
-
 # Initialize session state
 if 'load_data' not in st.session_state:
     st.session_state.load_data = False
@@ -163,10 +231,164 @@ if 'news_sentiments' not in st.session_state:
     st.session_state.news_sentiments = []
 if 'social_sentiments' not in st.session_state:
     st.session_state.social_sentiments = []
+if 'symbol' not in st.session_state:
+    st.session_state.symbol = "AAPL"
+if 'title_shown' not in st.session_state:
+    st.session_state.title_shown = False
 
-# Load data if button clicked or symbol changed
+# Main header - only show once
+if not st.session_state.title_shown:
+    st.title("📈 Stock Sentiment Dashboard")
+    st.markdown(
+        """
+        <div style='background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+                    padding: 1.5rem; border-radius: 10px; color: white; margin-bottom: 2rem;'>
+            <h3 style='color: white; margin: 0;'>🤖 AI-Powered Financial Intelligence</h3>
+            <p style='margin: 0.5rem 0 0 0; opacity: 0.9;'>
+                Analyze stock sentiment using Azure OpenAI with RAG and Redis caching for enhanced accuracy
+            </p>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+    st.session_state.title_shown = True
+
+# Sidebar for input - Enhanced UI
+with st.sidebar:
+    # Logo/Header section
+    st.markdown(
+        """
+        <div style='text-align: center; padding: 1rem 0; border-bottom: 2px solid #e0e0e0; margin-bottom: 1.5rem;'>
+            <h2 style='color: #1f77b4; margin: 0;'>⚙️ Configuration</h2>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+    
+    # Stock symbol input with better styling
+    symbol = st.text_input(
+        "📊 Stock Symbol",
+        value=st.session_state.symbol,
+        key="stock_symbol",
+        help="Enter a valid stock ticker symbol (e.g., AAPL, MSFT, GOOGL)"
+    ).upper()
+    
+    # Status indicators with better visual design
+    st.markdown("### 🔌 System Status")
+    
+    status_col1, status_col2 = st.columns(2)
+    
+    with status_col1:
+        if redis_cache and redis_cache.client:
+            st.markdown(
+                """
+                <div style='background: #d4edda; color: #155724; padding: 0.75rem; 
+                            border-radius: 8px; text-align: center; font-weight: 600;'>
+                    ✅ Redis
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+        else:
+            st.markdown(
+                """
+                <div style='background: #f8d7da; color: #721c24; padding: 0.75rem; 
+                            border-radius: 8px; text-align: center; font-weight: 600;'>
+                    ⚠️ Redis
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+    
+    with status_col2:
+        if rag_service and rag_service.embeddings_enabled:
+            st.markdown(
+                """
+                <div style='background: #d4edda; color: #155724; padding: 0.75rem; 
+                            border-radius: 8px; text-align: center; font-weight: 600;'>
+                    ✅ RAG
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+        else:
+            st.markdown(
+                """
+                <div style='background: #fff3cd; color: #856404; padding: 0.75rem; 
+                            border-radius: 8px; text-align: center; font-weight: 600;'>
+                    ⚠️ RAG
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+    
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    # Enhanced load button
+    if st.button("🚀 Load Data", type="primary"):
+        st.session_state.load_data = True
+        st.session_state.symbol = symbol
+        st.session_state.title_shown = False  # Reset to show title again after load
+    
+    st.markdown("---")
+    
+    # Performance stats with better design
+    try:
+        stats = analyzer.get_stats()
+        st.markdown("### 📊 Performance Metrics")
+        
+        # Cache metrics
+        cache_container = st.container()
+        with cache_container:
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric(
+                    "Cache Hits",
+                    stats.get('cache_hits', 0),
+                    delta=None,
+                    delta_color="normal"
+                )
+            with col2:
+                st.metric(
+                    "Cache Misses",
+                    stats.get('cache_misses', 0),
+                    delta=None,
+                    delta_color="normal"
+                )
+            
+            total = stats.get('total_requests', 0)
+            if total > 0:
+                hit_rate = (stats.get('cache_hits', 0) / total) * 100
+                st.metric(
+                    "Hit Rate",
+                    f"{hit_rate:.1f}%",
+                    delta=None,
+                    delta_color="normal"
+                )
+            
+            st.metric(
+                "RAG Uses",
+                stats.get('rag_uses', 0),
+                delta=None,
+                delta_color="normal"
+            )
+    except Exception:
+        pass
+    
+    st.markdown("---")
+    st.markdown(
+        """
+        <div style='text-align: center; padding: 1rem; color: #7f8c8d; font-size: 0.85rem;'>
+            Powered by Azure OpenAI<br>
+            with RAG & Redis Caching
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+# Load data if button clicked
 if st.session_state.load_data and symbol:
-    with st.spinner("Collecting data and analyzing sentiment..."):
+    with st.spinner("🔄 Collecting data and analyzing sentiment..."):
         # Collect data
         data = collector.collect_all_data(symbol)
         st.session_state.data = data
@@ -182,7 +404,6 @@ if st.session_state.load_data and symbol:
         for article in data['news']:
             text_to_analyze = article.get('summary', article.get('title', ''))
             if text_to_analyze:
-                # Pass symbol for RAG context retrieval
                 news_sentiments.append(analyzer.analyze_sentiment(text_to_analyze, symbol=symbol))
             else:
                 news_sentiments.append({'positive': 0, 'negative': 0, 'neutral': 1})
@@ -198,8 +419,9 @@ if st.session_state.load_data and symbol:
         st.session_state.news_sentiments = news_sentiments
         st.session_state.social_sentiments = social_sentiments
         st.session_state.load_data = False
+        st.session_state.title_shown = False  # Show title again after loading
 
-# Create tabs
+# Create tabs with better styling
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "📊 Overview",
     "📈 Price Analysis",
@@ -213,7 +435,28 @@ news_sentiments = st.session_state.news_sentiments
 social_sentiments = st.session_state.social_sentiments
 
 if data is None:
-    st.info("👆 Enter a stock symbol and click 'Load Data' to get started")
+    # Enhanced empty state
+    st.markdown(
+        """
+        <div class='empty-state'>
+            <h2 style='color: #7f8c8d; margin-bottom: 1rem;'>👆 Get Started</h2>
+            <p style='font-size: 1.1rem; color: #95a5a6;'>
+                Enter a stock symbol in the sidebar and click <strong>'Load Data'</strong> to begin analysis
+            </p>
+            <div style='margin-top: 2rem; padding: 2rem; background: #f8f9fa; border-radius: 10px;'>
+                <h4 style='color: #34495e;'>💡 Popular Symbols</h4>
+                <div style='display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; margin-top: 1rem;'>
+                    <span style='padding: 0.5rem 1rem; background: white; border-radius: 6px; font-weight: 600;'>AAPL</span>
+                    <span style='padding: 0.5rem 1rem; background: white; border-radius: 6px; font-weight: 600;'>MSFT</span>
+                    <span style='padding: 0.5rem 1rem; background: white; border-radius: 6px; font-weight: 600;'>GOOGL</span>
+                    <span style='padding: 0.5rem 1rem; background: white; border-radius: 6px; font-weight: 600;'>TSLA</span>
+                    <span style='padding: 0.5rem 1rem; background: white; border-radius: 6px; font-weight: 600;'>AMZN</span>
+                </div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
 else:
     # Aggregate sentiment scores
     def aggregate_sentiments(sentiments):
@@ -227,67 +470,144 @@ else:
     social_agg = aggregate_sentiments(social_sentiments)
     
     current_symbol = st.session_state.get('symbol', symbol)
+    price_data = data.get('price_data', {})
+    company_name = price_data.get('company_name', current_symbol)
 
-    # Tab 1: Overview
+    # Tab 1: Overview - Enhanced design
     with tab1:
-        st.header(f"📊 Overview - {current_symbol}")
+        # Hero section with key metrics
+        st.markdown(
+            f"""
+            <div style='background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+                        padding: 2rem; border-radius: 12px; color: white; margin-bottom: 2rem;'>
+                <div style='display: flex; justify-content: space-between; align-items: center;'>
+                    <div>
+                        <h2 style='color: white; margin: 0;'>{company_name}</h2>
+                        <p style='margin: 0.5rem 0 0 0; opacity: 0.9; font-size: 1.1rem;'>{current_symbol}</p>
+                    </div>
+                    <div style='text-align: right;'>
+                        <h1 style='color: white; margin: 0; border: none;'>${price_data.get('price', 0):.2f}</h1>
+                    </div>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
         
-        # Stock info and metrics
+        # Key metrics in a grid
         col1, col2, col3, col4 = st.columns(4)
-
-        with col1:
-            st.metric("Current Price", f"${data['price_data']['price']:.2f}")
         
-        with col2:
-            market_cap = data['price_data']['market_cap']
+        with col1:
+            market_cap = price_data.get('market_cap', 0)
             if market_cap > 0:
-                st.metric("Market Cap", f"${market_cap/1e9:.2f}B")
+                st.metric(
+                    "Market Cap",
+                    f"${market_cap/1e9:.2f}B",
+                    help="Total market capitalization"
+                )
             else:
                 st.metric("Market Cap", "N/A")
-
-        with col3:
-            # Calculate net sentiment from news only
+        
+        with col2:
             net_sentiment = news_agg['positive'] - news_agg['negative']
-            st.metric("Net Sentiment", f"{net_sentiment:.2%}")
-
+            delta_color = "normal" if abs(net_sentiment) < 0.1 else ("inverse" if net_sentiment < 0 else "normal")
+            st.metric(
+                "Net Sentiment",
+                f"{net_sentiment:+.2%}",
+                delta=f"{'Positive' if net_sentiment > 0 else 'Negative' if net_sentiment < 0 else 'Neutral'}",
+                delta_color=delta_color,
+                help="Overall sentiment score from news analysis"
+            )
+        
+        with col3:
+            st.metric(
+                "Positive",
+                f"{news_agg['positive']:.1%}",
+                help="Positive sentiment percentage"
+            )
+        
         with col4:
-            company_name = data['price_data'].get('company_name', current_symbol)
-            st.metric("Company", company_name)
+            st.metric(
+                "Negative",
+                f"{news_agg['negative']:.1%}",
+                help="Negative sentiment percentage"
+            )
         
-        st.divider()
+        st.markdown("<br>", unsafe_allow_html=True)
         
-        # Quick sentiment overview
-        st.subheader("News Sentiment Summary")
+        # Sentiment visualization with enhanced design
+        st.subheader("📊 Sentiment Breakdown")
         news_sentiment_df = pd.DataFrame({
             'Sentiment': ['Positive', 'Negative', 'Neutral'],
             'Score': [news_agg['positive'], news_agg['negative'], news_agg['neutral']]
         })
+        
         fig_news = px.bar(
             news_sentiment_df,
             x='Sentiment',
             y='Score',
             labels={'Score': 'Score', 'Sentiment': 'Sentiment Type'},
             color='Sentiment',
-            color_discrete_map={'Positive': 'green', 'Negative': 'red', 'Neutral': 'gray'}
+            color_discrete_map={
+                'Positive': '#2ecc71',
+                'Negative': '#e74c3c',
+                'Neutral': '#95a5a6'
+            },
+            text='Score'
         )
-        fig_news.update_layout(showlegend=False, height=300)
-        st.plotly_chart(fig_news, width='stretch', key="overview_news_sentiment")
+        fig_news.update_traces(
+            texttemplate='%{text:.1%}',
+            textposition='outside',
+            marker_line_color='white',
+            marker_line_width=2
+        )
+        fig_news.update_layout(
+            showlegend=False,
+            height=400,
+            plot_bgcolor='rgba(0,0,0,0)',
+            paper_bgcolor='rgba(0,0,0,0)',
+            font=dict(size=12),
+            yaxis=dict(tickformat='.0%', range=[0, 1])
+        )
+        st.plotly_chart(fig_news, width='stretch', key="overview_sentiment_chart")
         
-        # Social media data not available
-        if not data['social_media']:
+        # Quick insights
+        st.markdown("---")
+        st.subheader("💡 Quick Insights")
+        
+        insights_col1, insights_col2 = st.columns(2)
+        
+        with insights_col1:
+            if news_agg['positive'] > 0.5:
+                st.success(f"✅ **Strong Positive Sentiment** ({news_agg['positive']:.1%})")
+            elif news_agg['negative'] > 0.5:
+                st.error(f"⚠️ **Strong Negative Sentiment** ({news_agg['negative']:.1%})")
+            else:
+                st.info("⚖️ **Balanced Sentiment** - Mixed market perception")
+        
+        with insights_col2:
+            if net_sentiment > 0.2:
+                st.success("📈 **Bullish Outlook** - Positive market sentiment")
+            elif net_sentiment < -0.2:
+                st.warning("📉 **Bearish Outlook** - Negative market sentiment")
+            else:
+                st.info("📊 **Neutral Outlook** - Balanced market sentiment")
+        
+        # Social media note
+        if not data.get('social_media'):
             st.info(
-                "ℹ️ Social media sentiment data is not available. We only use free APIs. "
-                "To add social media data, integrate with Reddit API (PRAW) or Twitter API."
+                "ℹ️ **Note:** Social media sentiment data requires API integration. "
+                "Currently using news articles for sentiment analysis."
             )
 
-    # Tab 2: Price Analysis
+    # Tab 2: Price Analysis - Enhanced
     with tab2:
         st.header(f"📈 Price Analysis - {current_symbol}")
         
         try:
             ticker = yf.Ticker(current_symbol)
             period = st.selectbox(
-                "Time Period",
+                "📅 Time Period",
                 ["1d", "5d", "1mo", "3mo", "6mo", "1y", "2y", "5y"],
                 index=5,
                 key="price_period"
@@ -295,187 +615,228 @@ else:
             hist = ticker.history(period=period)
             
             if not hist.empty:
-                col1, col2, col3, col4 = st.columns(4)
+                # Enhanced metrics display
+                metrics_col1, metrics_col2, metrics_col3, metrics_col4 = st.columns(4)
                 
-                with col1:
+                with metrics_col1:
                     current_price = hist['Close'].iloc[-1]
                     prev_price = hist['Close'].iloc[-2] if len(hist) > 1 else current_price
                     change = current_price - prev_price
                     change_pct = (change / prev_price) * 100 if prev_price > 0 else 0
+                    delta_color = "normal" if change >= 0 else "inverse"
                     st.metric(
                         "Current Price",
                         f"${current_price:.2f}",
-                        f"{change:+.2f} ({change_pct:+.2f}%)"
+                        f"{change:+.2f} ({change_pct:+.2f}%)",
+                        delta_color=delta_color
                     )
                 
-                with col2:
+                with metrics_col2:
                     high = hist['High'].max()
                     st.metric("52W High", f"${high:.2f}")
                 
-                with col3:
+                with metrics_col3:
                     low = hist['Low'].min()
                     st.metric("52W Low", f"${low:.2f}")
                 
-                with col4:
+                with metrics_col4:
                     volume = hist['Volume'].iloc[-1]
                     st.metric("Volume", f"{volume:,.0f}")
                 
-                # Price chart
+                st.markdown("<br>", unsafe_allow_html=True)
+                
+                # Enhanced price chart
                 fig = go.Figure()
                 fig.add_trace(go.Scatter(
                     x=hist.index,
                     y=hist['Close'],
                     mode='lines',
                     name='Close Price',
-                    line=dict(color='#1f77b4', width=2)
+                    line=dict(color='#1f77b4', width=3),
+                    fill='tonexty',
+                    fillcolor='rgba(31, 119, 180, 0.1)'
                 ))
                 fig.update_layout(
-                    title=f"{current_symbol} Price Chart ({period})",
+                    title=dict(
+                        text=f"{current_symbol} Price Chart ({period})",
+                        font=dict(size=20, color='#2c3e50')
+                    ),
                     xaxis_title="Date",
                     yaxis_title="Price ($)",
                     height=500,
-                    hovermode='x unified'
+                    hovermode='x unified',
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    font=dict(size=12),
+                    showlegend=False
                 )
                 st.plotly_chart(fig, width='stretch', key="price_chart")
                 
-                # Volume chart
+                # Volume chart with better styling
                 fig_vol = go.Figure()
                 fig_vol.add_trace(go.Bar(
                     x=hist.index,
                     y=hist['Volume'],
                     name='Volume',
-                    marker_color='rgba(31, 119, 180, 0.5)'
+                    marker_color='rgba(31, 119, 180, 0.6)',
+                    marker_line_color='rgba(31, 119, 180, 0.8)',
+                    marker_line_width=1
                 ))
                 fig_vol.update_layout(
-                    title="Trading Volume",
+                    title=dict(
+                        text="Trading Volume",
+                        font=dict(size=18, color='#2c3e50')
+                    ),
                     xaxis_title="Date",
                     yaxis_title="Volume",
-                    height=300
+                    height=300,
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    showlegend=False
                 )
                 st.plotly_chart(fig_vol, width='stretch', key="volume_chart")
             else:
-                st.warning("No price data available for this symbol.")
+                st.warning("⚠️ No price data available for this symbol.")
         except Exception as e:
             logger.error(f"Error fetching price data: {e}")
-            st.error(f"Error fetching price data: {e}")
+            st.error(f"❌ Error fetching price data: {e}")
 
-    # Tab 3: News & Sentiment
+    # Tab 3: News & Sentiment - Enhanced
     with tab3:
-        st.header(f"📰 News & Sentiment - {current_symbol}")
+        st.header(f"📰 News & Sentiment Analysis")
         
-        # Sentiment breakdown
-        st.subheader("News Sentiment")
-        news_sentiment_df = pd.DataFrame({
-            'Sentiment': ['Positive', 'Negative', 'Neutral'],
-            'Score': [news_agg['positive'], news_agg['negative'], news_agg['neutral']]
-        })
-        fig_news = px.bar(
-            news_sentiment_df,
-            x='Sentiment',
-            y='Score',
-            labels={'Score': 'Score', 'Sentiment': 'Sentiment Type'},
-            color='Sentiment',
-            color_discrete_map={'Positive': 'green', 'Negative': 'red', 'Neutral': 'gray'}
-        )
-        fig_news.update_layout(showlegend=False, height=300)
-        st.plotly_chart(fig_news, width='stretch', key="news_sentiment_breakdown")
-        st.caption(
-            f"Positive: {news_agg['positive']:.2%} | "
-            f"Negative: {news_agg['negative']:.2%} | "
-            f"Neutral: {news_agg['neutral']:.2%}"
-        )
+        # Sentiment summary cards
+        sentiment_col1, sentiment_col2, sentiment_col3 = st.columns(3)
         
-        # Social media sentiment not available
-        if not data['social_media']:
-            st.info(
-                "ℹ️ Social media sentiment data is not available. We only use free APIs. "
-                "To add social media data, integrate with Reddit API (PRAW) or Twitter API."
+        with sentiment_col1:
+            st.markdown(
+                f"""
+                <div style='background: #d4edda; padding: 1.5rem; border-radius: 10px; text-align: center;'>
+                    <h3 style='color: #155724; margin: 0;'>{news_agg['positive']:.1%}</h3>
+                    <p style='color: #155724; margin: 0.5rem 0 0 0; font-weight: 600;'>Positive</p>
+                </div>
+                """,
+                unsafe_allow_html=True
             )
-
+        
+        with sentiment_col2:
+            st.markdown(
+                f"""
+                <div style='background: #f8d7da; padding: 1.5rem; border-radius: 10px; text-align: center;'>
+                    <h3 style='color: #721c24; margin: 0;'>{news_agg['negative']:.1%}</h3>
+                    <p style='color: #721c24; margin: 0.5rem 0 0 0; font-weight: 600;'>Negative</p>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+        
+        with sentiment_col3:
+            st.markdown(
+                f"""
+                <div style='background: #e2e3e5; padding: 1.5rem; border-radius: 10px; text-align: center;'>
+                    <h3 style='color: #383d41; margin: 0;'>{news_agg['neutral']:.1%}</h3>
+                    <p style='color: #383d41; margin: 0.5rem 0 0 0; font-weight: 600;'>Neutral</p>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+        
+        st.markdown("<br>", unsafe_allow_html=True)
+        
         # Sentiment over time
-        st.subheader("📅 Sentiment Over Time")
-
-        if data['news']:
+        if data.get('news'):
+            st.subheader("📅 Sentiment Trend Over Time")
             news_df = pd.DataFrame(data['news'])
             news_df['sentiment'] = [s['positive'] - s['negative'] for s in news_sentiments]
             news_df['timestamp'] = pd.to_datetime(news_df['timestamp'])
             news_df = news_df.sort_values('timestamp')
-
+            
             fig_news_time = px.line(
                 news_df,
                 x='timestamp',
                 y='sentiment',
                 title='News Sentiment Over Time',
-                markers=True
+                markers=True,
+                color_discrete_sequence=['#1f77b4']
             )
-            fig_news_time.add_hline(y=0, line_dash="dash", line_color="gray")
-            fig_news_time.update_layout(height=400)
-            st.plotly_chart(fig_news_time, width='stretch', key="news_sentiment_time")
-
-        # Detailed news articles
-        if data['news']:
+            fig_news_time.add_hline(
+                y=0,
+                line_dash="dash",
+                line_color="gray",
+                annotation_text="Neutral"
+            )
+            fig_news_time.update_layout(
+                height=400,
+                plot_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)',
+                hovermode='x unified'
+            )
+            st.plotly_chart(fig_news_time, width='stretch', key="sentiment_trend")
+        
+        # News articles with enhanced design
+        if data.get('news'):
             st.subheader("📰 Recent News Articles")
+            st.markdown(f"*Showing {len(data['news'][:10])} of {len(data['news'])} articles*")
+            
             for i, article in enumerate(data['news'][:10]):
-                # Determine sentiment label
                 sentiment = news_sentiments[i] if i < len(news_sentiments) else {
                     'positive': 0, 'negative': 0, 'neutral': 1
                 }
                 
+                # Determine sentiment badge
                 if sentiment['positive'] > sentiment['negative'] and sentiment['positive'] > sentiment['neutral']:
-                    sentiment_label = "🟢 Positive"
+                    badge_color = "#2ecc71"
+                    badge_text = "🟢 Positive"
                 elif sentiment['negative'] > sentiment['positive'] and sentiment['negative'] > sentiment['neutral']:
-                    sentiment_label = "🔴 Negative"
+                    badge_color = "#e74c3c"
+                    badge_text = "🔴 Negative"
                 else:
-                    sentiment_label = "⚪ Neutral"
+                    badge_color = "#95a5a6"
+                    badge_text = "⚪ Neutral"
                 
-                # Get article data
                 title = article.get('title', 'No title available')
-                source = article.get('source', 'Unknown Source')
-                if source == 'Unknown' or not source or source == 'Unknown Source':
+                source = article.get('source', 'News Source')
+                if source in ['Unknown', 'Unknown Source', '']:
                     source = 'News Source'
                 
-                # Truncate title for expander header if too long
-                display_title = title
-                if len(display_title) > 60:
-                    display_title = display_title[:60] + "..."
-                
-                with st.expander(f"{sentiment_label} | {display_title} | {source}"):
-                    col1, col2, col3 = st.columns(3)
-                    with col1:
+                # Enhanced article card
+                with st.expander(
+                    f"{badge_text} | {title[:60]}{'...' if len(title) > 60 else ''} | {source}",
+                    expanded=False
+                ):
+                    # Sentiment metrics
+                    metric_col1, metric_col2, metric_col3 = st.columns(3)
+                    with metric_col1:
                         st.metric("Positive", f"{sentiment['positive']:.1%}")
-                    with col2:
+                    with metric_col2:
                         st.metric("Negative", f"{sentiment['negative']:.1%}")
-                    with col3:
+                    with metric_col3:
                         st.metric("Neutral", f"{sentiment['neutral']:.1%}")
                     
                     st.divider()
                     
-                    # Show full title
+                    # Article content
                     if title and title != 'No title available':
-                        st.write(f"**Title:** {title}")
+                        st.markdown(f"**Title:** {title}")
                     
-                    # Show summary if available
                     summary = article.get('summary', '')
                     if summary:
-                        st.write(f"**Summary:** {summary}")
-                    elif not title or title == 'No title available':
-                        st.write("No summary or title available.")
+                        st.markdown(f"**Summary:** {summary}")
                     
-                    # Show link if URL is available
                     url = article.get('url', '')
                     if url:
-                        st.markdown(f"🔗 [Read full article]({url})")
+                        st.markdown(f"🔗 [Read full article]({url})", unsafe_allow_html=True)
                     else:
                         st.info("No article link available")
 
-    # Tab 4: Technical Analysis
+    # Tab 4: Technical Analysis - Enhanced
     with tab4:
         st.header(f"🔧 Technical Analysis - {current_symbol}")
         
         try:
             ticker = yf.Ticker(current_symbol)
             period = st.selectbox(
-                "Time Period",
+                "📅 Analysis Period",
                 ["1mo", "3mo", "6mo", "1y", "2y"],
                 index=2,
                 key="tech_period"
@@ -500,48 +861,56 @@ else:
                 hist['MACD'] = hist['EMA_12'] - hist['EMA_26']
                 hist['Signal'] = hist['MACD'].ewm(span=9, adjust=False).mean()
                 
-                # Price chart with moving averages
+                # Enhanced price chart with moving averages
                 fig = go.Figure()
                 fig.add_trace(go.Scatter(
                     x=hist.index,
                     y=hist['Close'],
                     mode='lines',
                     name='Close Price',
-                    line=dict(color='#1f77b4', width=2)
+                    line=dict(color='#1f77b4', width=3)
                 ))
                 fig.add_trace(go.Scatter(
                     x=hist.index,
                     y=hist['SMA_20'],
                     mode='lines',
                     name='SMA 20',
-                    line=dict(color='orange', width=1, dash='dash')
+                    line=dict(color='#ff9800', width=2, dash='dash')
                 ))
                 fig.add_trace(go.Scatter(
                     x=hist.index,
                     y=hist['SMA_50'],
                     mode='lines',
                     name='SMA 50',
-                    line=dict(color='red', width=1, dash='dash')
+                    line=dict(color='#e74c3c', width=2, dash='dash')
                 ))
                 fig.update_layout(
-                    title=f"{current_symbol} Price with Moving Averages",
+                    title=dict(
+                        text=f"{current_symbol} Price with Moving Averages",
+                        font=dict(size=20, color='#2c3e50')
+                    ),
                     xaxis_title="Date",
                     yaxis_title="Price ($)",
-                    height=400
+                    height=450,
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    hovermode='x unified',
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
                 )
                 st.plotly_chart(fig, width='stretch', key="tech_price_ma")
                 
-                col1, col2 = st.columns(2)
+                # RSI and MACD side by side
+                tech_col1, tech_col2 = st.columns(2)
                 
-                with col1:
-                    # RSI Chart
+                with tech_col1:
+                    st.subheader("📊 Relative Strength Index (RSI)")
                     fig_rsi = go.Figure()
                     fig_rsi.add_trace(go.Scatter(
                         x=hist.index,
                         y=hist['RSI'],
                         mode='lines',
                         name='RSI',
-                        line=dict(color='purple', width=2)
+                        line=dict(color='#9b59b6', width=2)
                     ))
                     fig_rsi.add_hline(
                         y=70,
@@ -556,67 +925,61 @@ else:
                         annotation_text="Oversold (30)"
                     )
                     fig_rsi.update_layout(
-                        title="Relative Strength Index (RSI)",
-                        xaxis_title="Date",
-                        yaxis_title="RSI",
-                        height=300,
-                        yaxis=dict(range=[0, 100])
+                        height=350,
+                        yaxis=dict(range=[0, 100]),
+                        plot_bgcolor='rgba(0,0,0,0)',
+                        paper_bgcolor='rgba(0,0,0,0)',
+                        showlegend=False
                     )
                     st.plotly_chart(fig_rsi, width='stretch', key="rsi_chart")
                     
                     current_rsi = hist['RSI'].iloc[-1]
-                    st.metric("Current RSI", f"{current_rsi:.2f}")
+                    rsi_status = "Overbought" if current_rsi > 70 else "Oversold" if current_rsi < 30 else "Normal"
+                    st.metric("Current RSI", f"{current_rsi:.2f}", rsi_status)
                 
-                with col2:
-                    # MACD Chart
+                with tech_col2:
+                    st.subheader("📈 MACD Indicator")
                     fig_macd = go.Figure()
                     fig_macd.add_trace(go.Scatter(
                         x=hist.index,
                         y=hist['MACD'],
                         mode='lines',
                         name='MACD',
-                        line=dict(color='blue', width=2)
+                        line=dict(color='#3498db', width=2)
                     ))
                     fig_macd.add_trace(go.Scatter(
                         x=hist.index,
                         y=hist['Signal'],
                         mode='lines',
                         name='Signal',
-                        line=dict(color='red', width=2)
+                        line=dict(color='#e74c3c', width=2)
                     ))
                     fig_macd.add_hline(y=0, line_dash="dash", line_color="gray")
                     fig_macd.update_layout(
-                        title="MACD (Moving Average Convergence Divergence)",
-                        xaxis_title="Date",
-                        yaxis_title="MACD",
-                        height=300
+                        height=350,
+                        plot_bgcolor='rgba(0,0,0,0)',
+                        paper_bgcolor='rgba(0,0,0,0)',
+                        hovermode='x unified',
+                        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
                     )
                     st.plotly_chart(fig_macd, width='stretch', key="macd_chart")
                     
                     current_macd = hist['MACD'].iloc[-1]
                     current_signal = hist['Signal'].iloc[-1]
-                    st.metric("MACD", f"{current_macd:.2f}", f"Signal: {current_signal:.2f}")
-                
+                    macd_trend = "Bullish" if current_macd > current_signal else "Bearish"
+                    st.metric("MACD", f"{current_macd:.2f}", f"Signal: {current_signal:.2f} ({macd_trend})")
             else:
-                st.warning("No data available for technical analysis.")
+                st.warning("⚠️ No data available for technical analysis.")
         except Exception as e:
             logger.error(f"Error performing technical analysis: {e}")
-            st.error(f"Error performing technical analysis: {e}")
+            st.error(f"❌ Error performing technical analysis: {e}")
 
-    # Tab 5: AI Insights
+    # Tab 5: AI Insights - Enhanced
     with tab5:
-        st.header(f"🤖 AI Insights - {current_symbol}")
+        st.header(f"🤖 AI-Powered Insights")
         
-        # Overall AI-generated insights
-        st.subheader("📊 Overall Sentiment Analysis")
-        
-        # Use only news data
-        overall_positive = news_agg['positive']
-        overall_negative = news_agg['negative']
-        overall_neutral = news_agg['neutral']
-        net_sentiment = overall_positive - overall_negative
-        
-        # Generate AI insight summary
+        # Overall sentiment analysis with enhanced design
+        net_sentiment = news_agg['positive'] - news_agg['negative']
         sentiment_label = (
             'Positive' if net_sentiment > 0.1
             else 'Negative' if net_sentiment < -0.1
@@ -628,22 +991,67 @@ else:
             else 'relatively neutral'
         )
         
-        insight_text = f"""
-        Based on the sentiment analysis of news articles for {current_symbol}:
+        # Insight card
+        st.markdown(
+            f"""
+            <div style='background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+                        padding: 2rem; border-radius: 12px; color: white; margin-bottom: 2rem;'>
+                <h3 style='color: white; margin: 0 0 1rem 0;'>📊 Overall Sentiment Analysis</h3>
+                <div style='display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem;'>
+                    <div style='text-align: center;'>
+                        <div style='font-size: 2rem; font-weight: 700;'>{news_agg['positive']:.1%}</div>
+                        <div style='opacity: 0.9;'>Positive</div>
+                    </div>
+                    <div style='text-align: center;'>
+                        <div style='font-size: 2rem; font-weight: 700;'>{news_agg['negative']:.1%}</div>
+                        <div style='opacity: 0.9;'>Negative</div>
+                    </div>
+                    <div style='text-align: center;'>
+                        <div style='font-size: 2rem; font-weight: 700;'>{news_agg['neutral']:.1%}</div>
+                        <div style='opacity: 0.9;'>Neutral</div>
+                    </div>
+                </div>
+                <div style='margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid rgba(255,255,255,0.3);'>
+                    <p style='margin: 0; font-size: 1.1rem;'>
+                        <strong>Overall Sentiment:</strong> {sentiment_label} ({net_sentiment:+.2%})
+                    </p>
+                    <p style='margin: 0.5rem 0 0 0; opacity: 0.9;'>
+                        Market perception of {current_symbol} is {perception}.
+                    </p>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
         
-        - **Overall Sentiment**: {sentiment_label}
-        - **Net Sentiment Score**: {net_sentiment:.2%}
-        - **Positive Sentiment**: {overall_positive:.2%}
-        - **Negative Sentiment**: {overall_negative:.2%}
-        - **Neutral Sentiment**: {overall_neutral:.2%}
+        # Key insights with better design
+        st.subheader("🔍 Key Insights")
         
-        The sentiment analysis indicates that the market perception of {current_symbol} is {perception}.
-        """
+        insights = []
+        if news_agg['positive'] > 0.5:
+            insights.append(("✅", f"News sentiment is predominantly positive ({news_agg['positive']:.1%})", "success"))
+        elif news_agg['negative'] > 0.5:
+            insights.append(("⚠️", f"News sentiment is predominantly negative ({news_agg['negative']:.1%})", "warning"))
         
-        st.markdown(insight_text)
+        if net_sentiment > 0.2:
+            insights.append(("📈", "Strong positive sentiment overall - Bullish outlook", "success"))
+        elif net_sentiment < -0.2:
+            insights.append(("📉", "Strong negative sentiment overall - Bearish outlook", "error"))
+        else:
+            insights.append(("⚖️", "Sentiment is relatively balanced", "info"))
         
-        # Sentiment visualization
-        st.subheader("📈 News Sentiment Breakdown")
+        for icon, text, alert_type in insights:
+            if alert_type == "success":
+                st.success(f"{icon} {text}")
+            elif alert_type == "warning":
+                st.warning(f"{icon} {text}")
+            elif alert_type == "error":
+                st.error(f"{icon} {text}")
+            else:
+                st.info(f"{icon} {text}")
+        
+        # Sentiment breakdown chart
+        st.subheader("📈 Detailed Sentiment Breakdown")
         news_sentiment_df = pd.DataFrame({
             'Sentiment': ['Positive', 'Negative', 'Neutral'],
             'Score': [news_agg['positive'], news_agg['negative'], news_agg['neutral']]
@@ -655,39 +1063,25 @@ else:
             y='Score',
             labels={'Score': 'Score', 'Sentiment': 'Sentiment Type'},
             color='Sentiment',
-            color_discrete_map={'Positive': 'green', 'Negative': 'red', 'Neutral': 'gray'}
+            color_discrete_map={
+                'Positive': '#2ecc71',
+                'Negative': '#e74c3c',
+                'Neutral': '#95a5a6'
+            },
+            text='Score'
+        )
+        fig_comparison.update_traces(
+            texttemplate='%{text:.1%}',
+            textposition='outside',
+            marker_line_color='white',
+            marker_line_width=2
         )
         fig_comparison.update_layout(
             title="News Sentiment Breakdown",
             height=400,
-            showlegend=False
+            showlegend=False,
+            plot_bgcolor='rgba(0,0,0,0)',
+            paper_bgcolor='rgba(0,0,0,0)',
+            yaxis=dict(tickformat='.0%', range=[0, 1])
         )
-        st.plotly_chart(fig_comparison, width='stretch', key="sentiment_comparison")
-        
-        # Note about social media
-        if not data['social_media']:
-            st.info(
-                "ℹ️ Social media sentiment data is not available. We only use free APIs. "
-                "To add social media data, integrate with Reddit API (PRAW) or Twitter API."
-            )
-        
-        # Key insights
-        st.subheader("🔍 Key Insights")
-        
-        insights = []
-        if news_agg['positive'] > 0.5:
-            insights.append(f"✅ News sentiment is predominantly positive ({news_agg['positive']:.2%})")
-        elif news_agg['negative'] > 0.5:
-            insights.append(f"⚠️ News sentiment is predominantly negative ({news_agg['negative']:.2%})")
-        
-        if net_sentiment > 0.2:
-            insights.append("📈 Strong positive sentiment overall")
-        elif net_sentiment < -0.2:
-            insights.append("📉 Strong negative sentiment overall")
-        
-        if insights:
-            for insight in insights:
-                st.write(insight)
-        else:
-            st.info("Sentiment is relatively balanced.")
-
+        st.plotly_chart(fig_comparison, width='stretch', key="ai_sentiment_breakdown")
