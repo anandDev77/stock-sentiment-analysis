@@ -1,13 +1,32 @@
+"""
+Stock Sentiment Analysis Dashboard - Streamlit Application
+
+This is the main Streamlit application for the Stock Sentiment Analysis dashboard.
+It provides an interactive interface for analyzing stock sentiment using AI.
+"""
+
 import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import yfinance as yf
-from datetime import datetime, timedelta
-from sentiment_analyzer import SentimentAnalyzer
-from data_collector import StockDataCollector
-from redis_cache import RedisCache
-from rag_service import RAGService
+from datetime import datetime
+import sys
+from pathlib import Path
+
+# Add src directory to Python path for imports
+src_path = Path(__file__).parent.parent.parent
+if str(src_path) not in sys.path:
+    sys.path.insert(0, str(src_path))
+
+from stock_sentiment.config.settings import get_settings
+from stock_sentiment.services.sentiment import SentimentAnalyzer
+from stock_sentiment.services.collector import StockDataCollector
+from stock_sentiment.services.cache import RedisCache
+from stock_sentiment.services.rag import RAGService
+from stock_sentiment.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 # Page configuration
 st.set_page_config(
@@ -16,33 +35,68 @@ st.set_page_config(
     layout="wide"
 )
 
+# Initialize settings
+try:
+    settings = get_settings()
+except ValueError as e:
+    st.error(f"Configuration Error: {e}")
+    st.stop()
+
 # Initialize Redis cache and RAG service
 @st.cache_resource
-def get_redis_cache():
+def get_redis_cache(_settings):
+    """Get Redis cache instance."""
     try:
-        return RedisCache()
+        if _settings.is_redis_available():
+            cache = RedisCache(settings=_settings)
+            if cache.client:
+                return cache
+        return None
     except Exception as e:
-        st.warning(f"Redis cache not available: {e}")
+        logger.warning(f"Redis cache not available: {e}")
         return None
 
 @st.cache_resource
-def get_rag_service(_cache):
-    if _cache:
+def get_rag_service(_settings, _cache):
+    """Get RAG service instance."""
+    if _cache and _settings.is_rag_available():
         try:
-            return RAGService(_cache)
+            return RAGService(settings=_settings, redis_cache=_cache)
         except Exception as e:
-            st.warning(f"RAG service not available: {e}")
+            logger.warning(f"RAG service not available: {e}")
             return None
     return None
 
 @st.cache_resource
-def get_collector(_cache):
-    return StockDataCollector(_cache)
+def get_collector(_settings, _cache):
+    """Get stock data collector instance."""
+    return StockDataCollector(settings=_settings, redis_cache=_cache)
+
+@st.cache_resource
+def get_analyzer(_settings, _cache, _rag_service):
+    """Get sentiment analyzer instance."""
+    try:
+        return SentimentAnalyzer(
+            settings=_settings,
+            redis_cache=_cache,
+            rag_service=_rag_service
+        )
+    except ValueError as e:
+        logger.error(f"Configuration Error: {e}")
+        return None
+    except Exception as e:
+        logger.error(f"Error initializing Azure OpenAI: {e}")
+        return None
 
 # Initialize components
-redis_cache = get_redis_cache()
-rag_service = get_rag_service(redis_cache)
-collector = get_collector(redis_cache)
+redis_cache = get_redis_cache(settings)
+rag_service = get_rag_service(settings, redis_cache)
+collector = get_collector(settings, redis_cache)
+analyzer = get_analyzer(settings, redis_cache, rag_service)
+
+if analyzer is None:
+    st.error("Failed to initialize sentiment analyzer. Please check your configuration.")
+    st.stop()
 
 # Streamlit app layout
 st.title("📈 Stock Sentiment Dashboard")
@@ -51,9 +105,16 @@ st.markdown("Analyze stock sentiment using AI-powered sentiment analysis with Az
 # Sidebar for input
 with st.sidebar:
     st.header("Configuration")
-    symbol = st.text_input("Enter Stock Symbol (e.g., AAPL):", value="AAPL", key="stock_symbol").upper()
+    symbol = st.text_input(
+        "Enter Stock Symbol (e.g., AAPL):",
+        value="AAPL",
+        key="stock_symbol"
+    ).upper()
     
-    st.info("ℹ️ Using Azure OpenAI for sentiment analysis with RAG and Redis caching. Configure in .env file.")
+    st.info(
+        "ℹ️ Using Azure OpenAI for sentiment analysis with RAG and Redis caching. "
+        "Configure in .env file."
+    )
     
     # Show cache status
     if redis_cache and redis_cache.client:
@@ -74,16 +135,6 @@ with st.sidebar:
         st.session_state.load_data = True
         st.session_state.symbol = symbol
 
-# Initialize analyzer with Azure OpenAI, Redis cache, and RAG
-try:
-    analyzer = SentimentAnalyzer(redis_cache=redis_cache, rag_service=rag_service)
-except ValueError as e:
-    st.error(f"Configuration Error: {e}")
-    st.stop()
-except Exception as e:
-    st.error(f"Error initializing Azure OpenAI: {e}")
-    st.stop()
-
 # Add debug stats to sidebar after analyzer is initialized
 with st.sidebar:
     st.divider()
@@ -100,7 +151,7 @@ with st.sidebar:
             if total > 0:
                 hit_rate = (stats.get('cache_hits', 0) / total) * 100
                 st.metric("Cache Hit Rate", f"{hit_rate:.1f}%")
-    except:
+    except Exception:
         pass
 
 # Initialize session state
@@ -149,7 +200,13 @@ if st.session_state.load_data and symbol:
         st.session_state.load_data = False
 
 # Create tabs
-tab1, tab2, tab3, tab4, tab5 = st.tabs(["📊 Overview", "📈 Price Analysis", "📰 News & Sentiment", "🔧 Technical Analysis", "🤖 AI Insights"])
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    "📊 Overview",
+    "📈 Price Analysis",
+    "📰 News & Sentiment",
+    "🔧 Technical Analysis",
+    "🤖 AI Insights"
+])
 
 data = st.session_state.data
 news_sentiments = st.session_state.news_sentiments
@@ -160,6 +217,7 @@ if data is None:
 else:
     # Aggregate sentiment scores
     def aggregate_sentiments(sentiments):
+        """Aggregate sentiment scores from multiple analyses."""
         if not sentiments:
             return {'positive': 0, 'negative': 0, 'neutral': 1}
         df = pd.DataFrame(sentiments)
@@ -188,7 +246,7 @@ else:
                 st.metric("Market Cap", "N/A")
 
         with col3:
-            # Calculate net sentiment from news only (no fake social media data)
+            # Calculate net sentiment from news only
             net_sentiment = news_agg['positive'] - news_agg['negative']
             st.metric("Net Sentiment", f"{net_sentiment:.2%}")
 
@@ -215,9 +273,12 @@ else:
         fig_news.update_layout(showlegend=False, height=300)
         st.plotly_chart(fig_news, width='stretch', key="overview_news_sentiment")
         
-        # Social media data not available (only using free APIs)
+        # Social media data not available
         if not data['social_media']:
-            st.info("ℹ️ Social media sentiment data is not available. We only use free APIs. To add social media data, integrate with Reddit API (PRAW) or Twitter API.")
+            st.info(
+                "ℹ️ Social media sentiment data is not available. We only use free APIs. "
+                "To add social media data, integrate with Reddit API (PRAW) or Twitter API."
+            )
 
     # Tab 2: Price Analysis
     with tab2:
@@ -225,7 +286,12 @@ else:
         
         try:
             ticker = yf.Ticker(current_symbol)
-            period = st.selectbox("Time Period", ["1d", "5d", "1mo", "3mo", "6mo", "1y", "2y", "5y"], index=5, key="price_period")
+            period = st.selectbox(
+                "Time Period",
+                ["1d", "5d", "1mo", "3mo", "6mo", "1y", "2y", "5y"],
+                index=5,
+                key="price_period"
+            )
             hist = ticker.history(period=period)
             
             if not hist.empty:
@@ -236,7 +302,11 @@ else:
                     prev_price = hist['Close'].iloc[-2] if len(hist) > 1 else current_price
                     change = current_price - prev_price
                     change_pct = (change / prev_price) * 100 if prev_price > 0 else 0
-                    st.metric("Current Price", f"${current_price:.2f}", f"{change:+.2f} ({change_pct:+.2f}%)")
+                    st.metric(
+                        "Current Price",
+                        f"${current_price:.2f}",
+                        f"{change:+.2f} ({change_pct:+.2f}%)"
+                    )
                 
                 with col2:
                     high = hist['High'].max()
@@ -286,6 +356,7 @@ else:
             else:
                 st.warning("No price data available for this symbol.")
         except Exception as e:
+            logger.error(f"Error fetching price data: {e}")
             st.error(f"Error fetching price data: {e}")
 
     # Tab 3: News & Sentiment
@@ -308,11 +379,18 @@ else:
         )
         fig_news.update_layout(showlegend=False, height=300)
         st.plotly_chart(fig_news, width='stretch', key="news_sentiment_breakdown")
-        st.caption(f"Positive: {news_agg['positive']:.2%} | Negative: {news_agg['negative']:.2%} | Neutral: {news_agg['neutral']:.2%}")
+        st.caption(
+            f"Positive: {news_agg['positive']:.2%} | "
+            f"Negative: {news_agg['negative']:.2%} | "
+            f"Neutral: {news_agg['neutral']:.2%}"
+        )
         
         # Social media sentiment not available
         if not data['social_media']:
-            st.info("ℹ️ Social media sentiment data is not available. We only use free APIs. To add social media data, integrate with Reddit API (PRAW) or Twitter API.")
+            st.info(
+                "ℹ️ Social media sentiment data is not available. We only use free APIs. "
+                "To add social media data, integrate with Reddit API (PRAW) or Twitter API."
+            )
 
         # Sentiment over time
         st.subheader("📅 Sentiment Over Time")
@@ -334,34 +412,27 @@ else:
             fig_news_time.update_layout(height=400)
             st.plotly_chart(fig_news_time, width='stretch', key="news_sentiment_time")
 
-        # Social media sentiment over time - not available
-        if not data['social_media']:
-            st.info("ℹ️ Social media sentiment over time is not available. We only use free APIs.")
-
         # Detailed news articles
         if data['news']:
             st.subheader("📰 Recent News Articles")
             for i, article in enumerate(data['news'][:10]):
                 # Determine sentiment label
-                sentiment = news_sentiments[i]
+                sentiment = news_sentiments[i] if i < len(news_sentiments) else {
+                    'positive': 0, 'negative': 0, 'neutral': 1
+                }
+                
                 if sentiment['positive'] > sentiment['negative'] and sentiment['positive'] > sentiment['neutral']:
                     sentiment_label = "🟢 Positive"
-                    sentiment_color = "green"
                 elif sentiment['negative'] > sentiment['positive'] and sentiment['negative'] > sentiment['neutral']:
                     sentiment_label = "🔴 Negative"
-                    sentiment_color = "red"
                 else:
                     sentiment_label = "⚪ Neutral"
-                    sentiment_color = "gray"
                 
                 # Get article data
                 title = article.get('title', 'No title available')
                 source = article.get('source', 'Unknown Source')
                 if source == 'Unknown' or not source or source == 'Unknown Source':
                     source = 'News Source'
-                
-                # Get full title for display inside expander
-                full_title = title
                 
                 # Truncate title for expander header if too long
                 display_title = title
@@ -380,27 +451,22 @@ else:
                     st.divider()
                     
                     # Show full title
-                    if full_title and full_title != 'No title available':
-                        st.write(f"**Title:** {full_title}")
+                    if title and title != 'No title available':
+                        st.write(f"**Title:** {title}")
                     
                     # Show summary if available
                     summary = article.get('summary', '')
                     if summary:
                         st.write(f"**Summary:** {summary}")
-                    elif not full_title or full_title == 'No title available':
+                    elif not title or title == 'No title available':
                         st.write("No summary or title available.")
                     
-                    # Always show link if URL is available
+                    # Show link if URL is available
                     url = article.get('url', '')
                     if url:
                         st.markdown(f"🔗 [Read full article]({url})")
                     else:
                         st.info("No article link available")
-
-        # Social media posts - not available
-        if not data['social_media']:
-            st.subheader("💬 Social Media Posts")
-            st.info("ℹ️ Social media posts are not available. We only use free APIs. To add social media data, integrate with Reddit API (PRAW) or Twitter API.")
 
     # Tab 4: Technical Analysis
     with tab4:
@@ -408,7 +474,12 @@ else:
         
         try:
             ticker = yf.Ticker(current_symbol)
-            period = st.selectbox("Time Period", ["1mo", "3mo", "6mo", "1y", "2y"], index=2, key="tech_period")
+            period = st.selectbox(
+                "Time Period",
+                ["1mo", "3mo", "6mo", "1y", "2y"],
+                index=2,
+                key="tech_period"
+            )
             hist = ticker.history(period=period)
             
             if not hist.empty:
@@ -431,9 +502,27 @@ else:
                 
                 # Price chart with moving averages
                 fig = go.Figure()
-                fig.add_trace(go.Scatter(x=hist.index, y=hist['Close'], mode='lines', name='Close Price', line=dict(color='#1f77b4', width=2)))
-                fig.add_trace(go.Scatter(x=hist.index, y=hist['SMA_20'], mode='lines', name='SMA 20', line=dict(color='orange', width=1, dash='dash')))
-                fig.add_trace(go.Scatter(x=hist.index, y=hist['SMA_50'], mode='lines', name='SMA 50', line=dict(color='red', width=1, dash='dash')))
+                fig.add_trace(go.Scatter(
+                    x=hist.index,
+                    y=hist['Close'],
+                    mode='lines',
+                    name='Close Price',
+                    line=dict(color='#1f77b4', width=2)
+                ))
+                fig.add_trace(go.Scatter(
+                    x=hist.index,
+                    y=hist['SMA_20'],
+                    mode='lines',
+                    name='SMA 20',
+                    line=dict(color='orange', width=1, dash='dash')
+                ))
+                fig.add_trace(go.Scatter(
+                    x=hist.index,
+                    y=hist['SMA_50'],
+                    mode='lines',
+                    name='SMA 50',
+                    line=dict(color='red', width=1, dash='dash')
+                ))
                 fig.update_layout(
                     title=f"{current_symbol} Price with Moving Averages",
                     xaxis_title="Date",
@@ -447,9 +536,25 @@ else:
                 with col1:
                     # RSI Chart
                     fig_rsi = go.Figure()
-                    fig_rsi.add_trace(go.Scatter(x=hist.index, y=hist['RSI'], mode='lines', name='RSI', line=dict(color='purple', width=2)))
-                    fig_rsi.add_hline(y=70, line_dash="dash", line_color="red", annotation_text="Overbought (70)")
-                    fig_rsi.add_hline(y=30, line_dash="dash", line_color="green", annotation_text="Oversold (30)")
+                    fig_rsi.add_trace(go.Scatter(
+                        x=hist.index,
+                        y=hist['RSI'],
+                        mode='lines',
+                        name='RSI',
+                        line=dict(color='purple', width=2)
+                    ))
+                    fig_rsi.add_hline(
+                        y=70,
+                        line_dash="dash",
+                        line_color="red",
+                        annotation_text="Overbought (70)"
+                    )
+                    fig_rsi.add_hline(
+                        y=30,
+                        line_dash="dash",
+                        line_color="green",
+                        annotation_text="Oversold (30)"
+                    )
                     fig_rsi.update_layout(
                         title="Relative Strength Index (RSI)",
                         xaxis_title="Date",
@@ -465,8 +570,20 @@ else:
                 with col2:
                     # MACD Chart
                     fig_macd = go.Figure()
-                    fig_macd.add_trace(go.Scatter(x=hist.index, y=hist['MACD'], mode='lines', name='MACD', line=dict(color='blue', width=2)))
-                    fig_macd.add_trace(go.Scatter(x=hist.index, y=hist['Signal'], mode='lines', name='Signal', line=dict(color='red', width=2)))
+                    fig_macd.add_trace(go.Scatter(
+                        x=hist.index,
+                        y=hist['MACD'],
+                        mode='lines',
+                        name='MACD',
+                        line=dict(color='blue', width=2)
+                    ))
+                    fig_macd.add_trace(go.Scatter(
+                        x=hist.index,
+                        y=hist['Signal'],
+                        mode='lines',
+                        name='Signal',
+                        line=dict(color='red', width=2)
+                    ))
                     fig_macd.add_hline(y=0, line_dash="dash", line_color="gray")
                     fig_macd.update_layout(
                         title="MACD (Moving Average Convergence Divergence)",
@@ -483,6 +600,7 @@ else:
             else:
                 st.warning("No data available for technical analysis.")
         except Exception as e:
+            logger.error(f"Error performing technical analysis: {e}")
             st.error(f"Error performing technical analysis: {e}")
 
     # Tab 5: AI Insights
@@ -492,28 +610,39 @@ else:
         # Overall AI-generated insights
         st.subheader("📊 Overall Sentiment Analysis")
         
-        # Use only news data (no fake social media)
+        # Use only news data
         overall_positive = news_agg['positive']
         overall_negative = news_agg['negative']
         overall_neutral = news_agg['neutral']
         net_sentiment = overall_positive - overall_negative
         
         # Generate AI insight summary
+        sentiment_label = (
+            'Positive' if net_sentiment > 0.1
+            else 'Negative' if net_sentiment < -0.1
+            else 'Neutral'
+        )
+        perception = (
+            'generally positive' if net_sentiment > 0.1
+            else 'generally negative' if net_sentiment < -0.1
+            else 'relatively neutral'
+        )
+        
         insight_text = f"""
         Based on the sentiment analysis of news articles for {current_symbol}:
         
-        - **Overall Sentiment**: {'Positive' if net_sentiment > 0.1 else 'Negative' if net_sentiment < -0.1 else 'Neutral'}
+        - **Overall Sentiment**: {sentiment_label}
         - **Net Sentiment Score**: {net_sentiment:.2%}
         - **Positive Sentiment**: {overall_positive:.2%}
         - **Negative Sentiment**: {overall_negative:.2%}
         - **Neutral Sentiment**: {overall_neutral:.2%}
         
-        The sentiment analysis indicates that the market perception of {current_symbol} is {'generally positive' if net_sentiment > 0.1 else 'generally negative' if net_sentiment < -0.1 else 'relatively neutral'}.
+        The sentiment analysis indicates that the market perception of {current_symbol} is {perception}.
         """
         
         st.markdown(insight_text)
         
-        # Sentiment visualization (news only)
+        # Sentiment visualization
         st.subheader("📈 News Sentiment Breakdown")
         news_sentiment_df = pd.DataFrame({
             'Sentiment': ['Positive', 'Negative', 'Neutral'],
@@ -537,7 +666,10 @@ else:
         
         # Note about social media
         if not data['social_media']:
-            st.info("ℹ️ Social media sentiment data is not available. We only use free APIs. To add social media data, integrate with Reddit API (PRAW) or Twitter API.")
+            st.info(
+                "ℹ️ Social media sentiment data is not available. We only use free APIs. "
+                "To add social media data, integrate with Reddit API (PRAW) or Twitter API."
+            )
         
         # Key insights
         st.subheader("🔍 Key Insights")
@@ -558,3 +690,4 @@ else:
                 st.write(insight)
         else:
             st.info("Sentiment is relatively balanced.")
+
