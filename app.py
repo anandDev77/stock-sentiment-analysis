@@ -23,25 +23,28 @@ collector = get_collector()
 
 # Streamlit app layout
 st.title("📈 Stock Sentiment Dashboard")
-st.markdown("Analyze stock sentiment using AI-powered sentiment analysis with Ollama")
+st.markdown("Analyze stock sentiment using AI-powered sentiment analysis with Azure OpenAI")
 
 # Sidebar for input
 with st.sidebar:
     st.header("Configuration")
     symbol = st.text_input("Enter Stock Symbol (e.g., AAPL):", value="AAPL", key="stock_symbol").upper()
-    model_name = st.selectbox(
-        "Ollama Model",
-        options=["llama2:7b", "llama2:13b", "mistral:7b", "llama3:8b"],
-        index=0,
-        key="model_select"
-    )
+    
+    st.info("ℹ️ Using Azure OpenAI for sentiment analysis. Configure in .env file.")
     
     if st.button("🔍 Load Data", type="primary", use_container_width=True):
         st.session_state.load_data = True
         st.session_state.symbol = symbol
 
-# Initialize analyzer with selected model
-analyzer = SentimentAnalyzer(model_name=model_name)
+# Initialize analyzer with Azure OpenAI
+try:
+    analyzer = SentimentAnalyzer()
+except ValueError as e:
+    st.error(f"Configuration Error: {e}")
+    st.stop()
+except Exception as e:
+    st.error(f"Error initializing Azure OpenAI: {e}")
+    st.stop()
 
 # Initialize session state
 if 'load_data' not in st.session_state:

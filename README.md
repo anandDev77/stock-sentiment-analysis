@@ -1,28 +1,22 @@
 # Stock Sentiment Dashboard
 
-A real-time stock sentiment analysis dashboard built with Streamlit and Ollama. This application analyzes sentiment from news articles and social media posts to provide insights into stock market sentiment.
+A real-time stock sentiment analysis dashboard built with Streamlit and Azure OpenAI. This application analyzes sentiment from news articles to provide insights into stock market sentiment.
 
 ## Features
 
 - 📈 Real-time stock price and market cap information
-- 📰 News sentiment analysis using AI (Ollama)
-- 💬 Social media sentiment analysis
+- 📰 News sentiment analysis using AI (Azure OpenAI)
 - 📊 Interactive visualizations with Plotly
 - ⏱️ Time-series sentiment tracking
-- 🔍 Detailed article and post breakdowns
+- 🔍 Detailed article breakdowns
 
 ## Prerequisites
 
 1. **Python 3.8 or higher**
-2. **Ollama** - Download and install from [ollama.ai](https://ollama.ai)
-3. **Ollama Model** - Pull a compatible model:
-   ```bash
-   ollama pull llama2:7b
-   ```
-   Or use other models like:
-   - `llama2:13b`
-   - `mistral:7b`
-   - `llama3:8b`
+2. **Azure OpenAI Account** - You need an Azure OpenAI resource with:
+   - An endpoint URL
+   - An API key
+   - A deployed model (e.g., gpt-4)
 
 ## Installation
 
@@ -33,9 +27,12 @@ A real-time stock sentiment analysis dashboard built with Streamlit and Ollama. 
    pip install -r requirements.txt
    ```
 
-3. Make sure Ollama is running:
-   ```bash
-   ollama serve
+3. Create a `.env` file in the root directory with your Azure OpenAI configuration:
+   ```env
+   AZURE_OPENAI_ENDPOINT=https://your-endpoint.api.cognitive.microsoft.com
+   AZURE_OPENAI_API_KEY=your-api-key
+   AZURE_OPENAI_DEPLOYMENT_NAME=gpt-4
+   AZURE_OPENAI_API_VERSION=2023-05-15
    ```
 
 ## Usage
@@ -49,40 +46,48 @@ A real-time stock sentiment analysis dashboard built with Streamlit and Ollama. 
 
 3. Enter a stock symbol (e.g., AAPL, GOOGL, MSFT) in the sidebar
 
-4. Select an Ollama model from the dropdown
-
-5. Click "Analyze Sentiment" to see the results
+4. Click "Load Data" to fetch and analyze sentiment
 
 ## Project Structure
 
 ```
 stock-sentiment-analysis2/
 ├── app.py                 # Main Streamlit dashboard
-├── sentiment_analyzer.py  # Sentiment analysis using Ollama
+├── sentiment_analyzer.py # Sentiment analysis using Azure OpenAI
 ├── data_collector.py      # Stock data and news collection
 ├── requirements.txt       # Python dependencies
+├── .env                  # Azure OpenAI configuration (not in git)
 └── README.md             # This file
 ```
 
 ## How It Works
 
-1. **Data Collection**: The app fetches stock data, news articles, and social media posts using `yfinance` and other APIs
-2. **Sentiment Analysis**: Each text is analyzed using Ollama (LLM) to determine positive, negative, and neutral sentiment scores
+1. **Data Collection**: The app fetches stock data and news articles using `yfinance` (free API)
+2. **Sentiment Analysis**: Each text is analyzed using Azure OpenAI to determine positive, negative, and neutral sentiment scores
 3. **Visualization**: Results are displayed with interactive charts and detailed breakdowns
+
+## Configuration
+
+The app uses environment variables from the `.env` file for Azure OpenAI configuration:
+
+- `AZURE_OPENAI_ENDPOINT`: Your Azure OpenAI endpoint URL
+- `AZURE_OPENAI_API_KEY`: Your Azure OpenAI API key
+- `AZURE_OPENAI_DEPLOYMENT_NAME`: The name of your deployed model (e.g., "gpt-4")
+- `AZURE_OPENAI_API_VERSION`: The API version to use (e.g., "2023-05-15")
 
 ## Notes
 
-- The social media data is currently simulated. For production use, integrate with Reddit API (PRAW) or Twitter API
-- Make sure Ollama is running and the selected model is available before analyzing
-- The app uses TextBlob as a fallback if Ollama fails to parse the response
+- The app only uses free APIs for data collection (yfinance for stock prices and news)
+- Social media data is not included (would require Reddit/Twitter API integration)
+- The app uses TextBlob as a fallback if Azure OpenAI fails to parse the response
+- Make sure your `.env` file is properly configured before running the app
 
 ## Troubleshooting
 
-- **Ollama connection error**: Make sure Ollama is installed and running (`ollama serve`)
-- **Model not found**: Pull the model first using `ollama pull <model-name>`
+- **Azure OpenAI connection error**: Check your `.env` file and verify your endpoint, API key, and deployment name are correct
 - **No data for symbol**: Check if the stock symbol is valid and try again
+- **Import errors**: Make sure all dependencies are installed: `pip install -r requirements.txt`
 
 ## License
 
 This project is open source and available for educational purposes.
-
