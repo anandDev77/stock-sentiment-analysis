@@ -135,12 +135,21 @@ class SentimentAnalyzer:
             if relevant_articles:
                 rag_used = True
                 self.rag_uses += 1
-                rag_context = "\n\nRelevant context from recent news:\n"
+                # Format RAG context with better structure and metadata
+                rag_context = ""
                 for i, article in enumerate(relevant_articles, 1):
-                    title = article.get('title', '')
-                    summary = article.get('summary', '')[:200]
-                    rag_context += f"{i}. {title}: {summary}\n"
-                logger.info(f"Using {len(relevant_articles)} relevant articles for RAG context")
+                    title = article.get('title', 'N/A')
+                    summary = article.get('summary', '')[:250]  # Increased context
+                    source = article.get('source', 'Unknown')
+                    similarity = article.get('similarity', 0.0)
+                    
+                    rag_context += f"""
+### Article {i} (Relevance: {similarity:.2%})
+**Title:** {title}
+**Source:** {source}
+**Summary:** {summary}
+"""
+                logger.info(f"Using {len(relevant_articles)} relevant articles for RAG context (avg similarity: {sum(a.get('similarity', 0) for a in relevant_articles) / len(relevant_articles):.3f})")
             else:
                 logger.debug("No relevant RAG context found")
         
@@ -152,43 +161,91 @@ class SentimentAnalyzer:
                 context_text += f"{i}. {title}\n"
             rag_context += context_text
         
-        # Build prompt
-        prompt = f"""Analyze the sentiment of the following text about stocks/finance.
-Return ONLY a valid JSON object with scores (0-1) for: positive, negative, neutral.
-The scores should sum to approximately 1.0.
+        # Build enhanced prompt with better RAG context formatting
+        if rag_context:
+            context_section = f"""
+## Relevant Context from Recent News:
 {rag_context}
-Text: "{text}"
 
-Return only the JSON object, no other text:
+Use this context to better understand the market sentiment and news surrounding this topic.
+"""
+        else:
+            context_section = ""
+        
+        prompt = f"""You are an expert financial sentiment analyst specializing in stock market analysis.
+
+## Task:
+Analyze the sentiment of the following text about stocks/finance. Consider both the explicit sentiment and implicit market implications.
+
+{context_section}
+## Text to Analyze:
+"{text}"
+
+## Instructions:
+1. Analyze the sentiment considering the provided context (if any)
+2. Return ONLY a valid JSON object with no additional text
+3. Provide scores between 0.0 and 1.0 for each category
+4. Ensure scores sum to approximately 1.0
+5. Consider market context, financial implications, and investor sentiment
+
+## Required JSON Format:
+{{
+    "positive": <float>,
+    "negative": <float>,
+    "neutral": <float>
+}}
+
+Return only the JSON object:
 """
         
+        # Enhanced system prompt with better instructions
+        system_prompt = """You are a professional financial sentiment analyzer with expertise in:
+- Stock market analysis and investor sentiment
+- Financial news interpretation
+- Market trend analysis
+- Risk assessment
+
+Your task is to analyze sentiment in financial texts and return structured JSON responses.
+Always consider:
+- Market context and recent news
+- Financial implications
+- Investor sentiment indicators
+- Risk factors
+
+Respond ONLY with valid JSON. No explanations, no markdown, just the JSON object."""
+        
         try:
-            logger.info(f"Sending request to Azure OpenAI (RAG: {'Yes' if rag_used else 'No'})")
+            logger.info(f"Sending request to Azure OpenAI (RAG: {'Yes' if rag_used else 'No'}, Context articles: {len(relevant_articles) if rag_used else 0})")
             response = self.client.chat.completions.create(
                 model=self.deployment_name,
                 messages=[
-                    {
-                        "role": "system",
-                        "content": (
-                            "You are a financial sentiment analyzer. "
-                            "Always respond with valid JSON only. "
-                            "Consider the context provided when analyzing sentiment."
-                        )
-                    },
+                    {"role": "system", "content": system_prompt},
                     {"role": "user", "content": prompt}
                 ],
-                temperature=0.3,
-                max_tokens=150
+                temperature=0.2,  # Lower temperature for more consistent results
+                max_tokens=200,  # Increased for better responses
+                response_format={"type": "json_object"}  # Use structured output if supported
             )
             
             # Extract JSON from response
             content = response.choices[0].message.content.strip()
             
-            # Try to extract JSON from the response
-            json_match = re.search(r'\{[^{}]*\}', content, re.DOTALL)
+            # Try to parse JSON - handle both structured output and regular responses
+            result = None
+            try:
+                # First try direct JSON parsing (for structured output)
+                result = json.loads(content)
+            except json.JSONDecodeError:
+                # Fallback: try to extract JSON from markdown or text
+                json_match = re.search(r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', content, re.DOTALL)
+                if json_match:
+                    try:
+                        result = json.loads(json_match.group())
+                    except json.JSONDecodeError:
+                        logger.warning("Could not parse JSON from response")
+                        result = None
             
-            if json_match:
-                result = json.loads(json_match.group())
+            if result:
                 sentiment_scores = SentimentScores.from_dict(result)
                 
                 # Cache the result

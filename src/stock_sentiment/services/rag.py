@@ -97,12 +97,13 @@ class RAGService:
             logger.warning(f"RAG embeddings disabled - {e}")
             self.embeddings_enabled = False
     
-    def get_embedding(self, text: str) -> Optional[List[float]]:
+    def get_embedding(self, text: str, use_cache: bool = True) -> Optional[List[float]]:
         """
-        Get embedding vector for text using Azure OpenAI.
+        Get embedding vector for text using Azure OpenAI with optional caching.
         
         Args:
             text: Text to generate embedding for
+            use_cache: Whether to use Redis cache for embeddings (default: True)
             
         Returns:
             Embedding vector as list of floats, or None if failed
@@ -115,13 +116,36 @@ class RAGService:
             logger.warning("No embedding deployment configured")
             return None
         
+        # Check cache first if enabled
+        if use_cache and self.cache and self.cache.client:
+            cache_key = f"query_embedding:{hashlib.md5(text.encode()).hexdigest()}"
+            cached_embedding = self.cache.client.get(cache_key)
+            if cached_embedding:
+                try:
+                    embedding = json.loads(cached_embedding)
+                    logger.debug(f"Using cached embedding for query (length: {len(text)})")
+                    return embedding
+                except Exception as e:
+                    logger.warning(f"Error loading cached embedding: {e}")
+        
         try:
             response = self.client.embeddings.create(
                 model=self.embedding_deployment,
                 input=text
             )
             embedding = response.data[0].embedding
-            logger.debug(f"Generated embedding using {self.embedding_deployment}")
+            logger.debug(f"Generated embedding using {self.embedding_deployment} (length: {len(text)})")
+            
+            # Cache the embedding if enabled
+            if use_cache and self.cache and self.cache.client:
+                cache_key = f"query_embedding:{hashlib.md5(text.encode()).hexdigest()}"
+                # Cache query embeddings for 24 hours
+                self.cache.client.setex(
+                    cache_key,
+                    86400,
+                    json.dumps(embedding)
+                )
+            
             return embedding
         except Exception as e:
             logger.error(f"Error getting embedding: {e}")
@@ -233,15 +257,27 @@ class RAGService:
                 logger.warning("Could not get query embedding")
                 return []
             
-            # Get all article embeddings for this symbol
+            # Get all article embeddings for this symbol using SCAN (production-safe)
+            # Using SCAN instead of KEYS to avoid blocking Redis
             pattern = f"embedding:{symbol}:*"
-            keys = self.cache.client.keys(pattern)
+            keys = []
+            cursor = 0
+            
+            while True:
+                cursor, partial_keys = self.cache.client.scan(
+                    cursor=cursor,
+                    match=pattern,
+                    count=100  # Process in batches
+                )
+                keys.extend(partial_keys)
+                if cursor == 0:
+                    break
             
             if not keys:
                 logger.debug(f"No stored articles found for {symbol}")
                 return []
             
-            logger.debug(f"Searching {len(keys)} articles for {symbol}")
+            logger.debug(f"Searching {len(keys)} articles for {symbol} using SCAN")
             
             # Calculate similarities
             similarities = []
@@ -257,11 +293,20 @@ class RAGService:
                         logger.warning(f"Error processing embedding: {e}")
                         continue
             
-            # Sort by similarity and get top_k
+            # Sort by similarity and filter by threshold
             similarities.sort(reverse=True, key=lambda x: x[0])
-            results = []
             
-            for similarity, article_id in similarities[:top_k]:
+            # Apply similarity threshold from settings
+            # This prevents low-quality matches from polluting the context
+            similarity_threshold = self.settings.app.rag_similarity_threshold
+            filtered_similarities = [
+                (sim, aid) for sim, aid in similarities 
+                if sim >= similarity_threshold
+            ]
+            
+            # Get top_k from filtered results
+            results = []
+            for similarity, article_id in filtered_similarities[:top_k]:
                 metadata_key = f"article:{symbol}:{article_id}"
                 metadata_data = self.cache.client.get(metadata_key)
                 if metadata_data:
@@ -275,12 +320,14 @@ class RAGService:
             
             if results:
                 top_similarity = results[0].get('similarity', 0)
+                avg_similarity = sum(r.get('similarity', 0) for r in results) / len(results)
                 logger.info(
                     f"Retrieved {len(results)} relevant articles "
-                    f"(top similarity: {top_similarity:.3f})"
+                    f"(top: {top_similarity:.3f}, avg: {avg_similarity:.3f}, "
+                    f"threshold: {similarity_threshold})"
                 )
             else:
-                logger.debug("No similar articles found")
+                logger.debug(f"No similar articles found above threshold {similarity_threshold}")
             
             return results
         except Exception as e:

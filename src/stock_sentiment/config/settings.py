@@ -143,6 +143,7 @@ class AppSettings(BaseSettings):
     
     # RAG settings
     rag_top_k: int = Field(default=3, description="Number of similar articles to retrieve")
+    rag_similarity_threshold: float = Field(default=0.3, description="Minimum similarity score for RAG retrieval (0.0-1.0)")
     
     if PYDANTIC_V2:
         # Pydantic v2 reads from os.environ (already loaded by dotenv above)
