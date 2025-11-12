@@ -2,18 +2,28 @@ import requests
 import yfinance as yf
 import pandas as pd
 from bs4 import BeautifulSoup
-from typing import List, Dict
+from typing import List, Dict, Optional
 import time
 from datetime import datetime, timedelta
+from redis_cache import RedisCache
 
 class StockDataCollector:
-    def __init__(self):
+    def __init__(self, redis_cache: Optional[RedisCache] = None):
         self.headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
         }
+        self.cache = redis_cache
 
     def get_stock_price(self, symbol: str) -> Dict:
-        """Fetch current stock price and basic info."""
+        """Fetch current stock price and basic info with caching."""
+        # Check cache first
+        if self.cache:
+            cached_data = self.cache.get_cached_stock_data(symbol)
+            if cached_data:
+                print(f"✅ CACHE: Using cached stock data for {symbol}")
+                return cached_data
+            print(f"❌ CACHE: Fetching fresh stock data for {symbol}")
+        
         try:
             ticker = yf.Ticker(symbol)
             info = ticker.info
@@ -21,20 +31,34 @@ class StockDataCollector:
 
             if not hist.empty:
                 current_price = hist['Close'].iloc[-1]
-                return {
+                result = {
                     'symbol': symbol,
                     'price': current_price,
                     'company_name': info.get('longName', symbol),
                     'market_cap': info.get('marketCap', 0),
                     'timestamp': datetime.now()
                 }
+                
+                # Cache the result (5 minutes TTL)
+                if self.cache:
+                    self.cache.cache_stock_data(symbol, result, ttl=300)
+                
+                return result
         except Exception as e:
             print(f"Error fetching price for {symbol}: {e}")
 
         return {'symbol': symbol, 'price': 0, 'company_name': symbol, 'market_cap': 0}
 
     def get_news_headlines(self, symbol: str, limit: int = 10) -> List[Dict]:
-        """Fetch recent news headlines for a stock."""
+        """Fetch recent news headlines for a stock with caching."""
+        # Check cache first
+        if self.cache:
+            cached_news = self.cache.get_cached_news(symbol)
+            if cached_news:
+                print(f"✅ CACHE: Using cached news for {symbol} ({len(cached_news)} articles)")
+                return cached_news
+            print(f"❌ CACHE: Fetching fresh news for {symbol}")
+        
         try:
             ticker = yf.Ticker(symbol)
             news = ticker.news
@@ -149,6 +173,10 @@ class StockDataCollector:
                 
                 headlines.append(headline_data)
 
+            # Cache the results (30 minutes TTL)
+            if self.cache:
+                self.cache.cache_news(symbol, headlines, ttl=1800)
+
             return headlines
 
         except Exception as e:
@@ -177,4 +205,3 @@ class StockDataCollector:
             'news': self.get_news_headlines(symbol),
             'social_media': self.get_reddit_sentiment_data(symbol)
         }
-

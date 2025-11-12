@@ -6,6 +6,8 @@ import yfinance as yf
 from datetime import datetime, timedelta
 from sentiment_analyzer import SentimentAnalyzer
 from data_collector import StockDataCollector
+from redis_cache import RedisCache
+from rag_service import RAGService
 
 # Page configuration
 st.set_page_config(
@@ -14,12 +16,33 @@ st.set_page_config(
     layout="wide"
 )
 
-# Initialize components
+# Initialize Redis cache and RAG service
 @st.cache_resource
-def get_collector():
-    return StockDataCollector()
+def get_redis_cache():
+    try:
+        return RedisCache()
+    except Exception as e:
+        st.warning(f"Redis cache not available: {e}")
+        return None
 
-collector = get_collector()
+@st.cache_resource
+def get_rag_service(_cache):
+    if _cache:
+        try:
+            return RAGService(_cache)
+        except Exception as e:
+            st.warning(f"RAG service not available: {e}")
+            return None
+    return None
+
+@st.cache_resource
+def get_collector(_cache):
+    return StockDataCollector(_cache)
+
+# Initialize components
+redis_cache = get_redis_cache()
+rag_service = get_rag_service(redis_cache)
+collector = get_collector(redis_cache)
 
 # Streamlit app layout
 st.title("📈 Stock Sentiment Dashboard")
@@ -30,21 +53,55 @@ with st.sidebar:
     st.header("Configuration")
     symbol = st.text_input("Enter Stock Symbol (e.g., AAPL):", value="AAPL", key="stock_symbol").upper()
     
-    st.info("ℹ️ Using Azure OpenAI for sentiment analysis. Configure in .env file.")
+    st.info("ℹ️ Using Azure OpenAI for sentiment analysis with RAG and Redis caching. Configure in .env file.")
+    
+    # Show cache status
+    if redis_cache and redis_cache.client:
+        st.success("✅ Redis cache connected")
+    else:
+        st.warning("⚠️ Redis cache not available - caching disabled")
+    
+    # Show RAG status
+    if rag_service:
+        if rag_service.embeddings_enabled:
+            st.success("✅ RAG enabled (embeddings working)")
+        else:
+            st.warning("⚠️ RAG disabled (embedding model not available)")
+    else:
+        st.warning("⚠️ RAG service not available")
     
     if st.button("🔍 Load Data", type="primary", use_container_width=True):
         st.session_state.load_data = True
         st.session_state.symbol = symbol
 
-# Initialize analyzer with Azure OpenAI
+# Initialize analyzer with Azure OpenAI, Redis cache, and RAG
 try:
-    analyzer = SentimentAnalyzer()
+    analyzer = SentimentAnalyzer(redis_cache=redis_cache, rag_service=rag_service)
 except ValueError as e:
     st.error(f"Configuration Error: {e}")
     st.stop()
 except Exception as e:
     st.error(f"Error initializing Azure OpenAI: {e}")
     st.stop()
+
+# Add debug stats to sidebar after analyzer is initialized
+with st.sidebar:
+    st.divider()
+    try:
+        stats = analyzer.get_stats()
+        st.subheader("📊 Performance Stats")
+        col1, col2 = st.columns(2)
+        with col1:
+            st.metric("Cache Hits", stats.get('cache_hits', 0))
+            st.metric("RAG Uses", stats.get('rag_uses', 0))
+        with col2:
+            st.metric("Cache Misses", stats.get('cache_misses', 0))
+            total = stats.get('total_requests', 0)
+            if total > 0:
+                hit_rate = (stats.get('cache_hits', 0) / total) * 100
+                st.metric("Cache Hit Rate", f"{hit_rate:.1f}%")
+    except:
+        pass
 
 # Initialize session state
 if 'load_data' not in st.session_state:
@@ -64,12 +121,18 @@ if st.session_state.load_data and symbol:
         st.session_state.data = data
         st.session_state.symbol = symbol
         
-        # Analyze sentiment
+        # Store articles in RAG for future retrieval
+        if rag_service and data['news']:
+            for article in data['news']:
+                rag_service.store_article(article, symbol)
+        
+        # Analyze sentiment with RAG context
         news_sentiments = []
         for article in data['news']:
             text_to_analyze = article.get('summary', article.get('title', ''))
             if text_to_analyze:
-                news_sentiments.append(analyzer.analyze_sentiment(text_to_analyze))
+                # Pass symbol for RAG context retrieval
+                news_sentiments.append(analyzer.analyze_sentiment(text_to_analyze, symbol=symbol))
             else:
                 news_sentiments.append({'positive': 0, 'negative': 0, 'neutral': 1})
 
@@ -77,7 +140,7 @@ if st.session_state.load_data and symbol:
         for post in data['social_media']:
             text_to_analyze = post.get('text', '')
             if text_to_analyze:
-                social_sentiments.append(analyzer.analyze_sentiment(text_to_analyze))
+                social_sentiments.append(analyzer.analyze_sentiment(text_to_analyze, symbol=symbol))
             else:
                 social_sentiments.append({'positive': 0, 'negative': 0, 'neutral': 1})
         
