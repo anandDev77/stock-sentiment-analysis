@@ -115,6 +115,7 @@ class RedisCache:
     Attributes:
         client: Redis client instance (None if connection failed)
         settings: Application settings instance
+        last_tier_used: Track which cache was used (for UI display)
         
     Example:
         >>> cache = RedisCache()
@@ -135,6 +136,7 @@ class RedisCache:
         """
         self.settings = settings or get_settings()
         self.client: Optional[Redis] = None
+        self.last_tier_used: Optional[str] = None  # Track last cache tier used (for UI)
         
         if not self.settings.is_redis_available():
             logger.warning("Redis configuration not available - caching disabled")
@@ -142,6 +144,9 @@ class RedisCache:
         
         try:
             redis_config = self.settings.redis
+            
+            # Use exact same connection approach as master branch (proven to work)
+            # Connection pooling can be added later as an enhancement if needed
             self.client = redis.Redis(
                 host=redis_config.host,
                 port=redis_config.port,
@@ -152,9 +157,44 @@ class RedisCache:
                 socket_connect_timeout=5,
                 socket_timeout=5
             )
+            
             # Test connection
             self.client.ping()
             logger.info(f"Redis connected to {redis_config.host}:{redis_config.port}")
+        except redis.ConnectionError as conn_err:
+            logger.error(f"Redis connection failed: {conn_err}")
+            logger.warning(
+                "Connection failed. Possible causes:\n"
+                "1. Firewall rule not saved/applied (wait 1-2 minutes after saving)\n"
+                "2. IP address changed (check current IP with: curl ifconfig.me)\n"
+                "3. Connection coming from different IP (VPN, proxy, corporate network)\n"
+                "4. Firewall rule format incorrect\n"
+                "\n"
+                "Troubleshooting:\n"
+                "1. Run 'make test-redis' to check your current IP\n"
+                "2. Verify IP in Azure Portal matches your current IP\n"
+                "3. Wait 1-2 minutes after saving firewall rules\n"
+                "4. Check if you're behind VPN/proxy\n"
+                "5. Try 'Allow access from all networks' temporarily to test"
+            )
+            self.client = None
+        except redis.TimeoutError as timeout_err:
+            logger.error(f"Redis connection timeout: {timeout_err}")
+            logger.warning(
+                "Connection timeout. Possible causes:\n"
+                "1. Firewall blocking (even if IP is whitelisted, wait 1-2 min after saving)\n"
+                "2. Network latency/firewall rules not propagated yet\n"
+                "3. Azure Redis service issues\n"
+                "\n"
+                "Troubleshooting:\n"
+                "1. Wait 1-2 minutes after adding firewall rule (Azure needs time to apply)\n"
+                "2. Run 'make test-redis' to verify your current IP\n"
+                "3. Check Azure Portal -> Redis -> Networking -> Verify rule is saved\n"
+                "4. Try 'Allow access from all networks' temporarily to test\n"
+                "\n"
+                "The app will continue without Redis caching."
+            )
+            self.client = None
         except Exception as e:
             logger.error(f"Could not connect to Redis: {e}")
             self.client = None
@@ -192,7 +232,6 @@ class RedisCache:
             Cached value or None if not found/error
         """
         if not self.client:
-            logger.debug(f"Cache client not available for key: {key[:20]}...")
             return None
         
         try:
@@ -200,19 +239,14 @@ class RedisCache:
             ttl = self.client.ttl(key)
             value = self.client.get(key)
             if value:
-                logger.info(f"Cache hit: key={key[:30]}... TTL={ttl}s remaining")
                 # Track hit in Redis stats
                 CacheStats.increment_hit(self.client)
+                self.last_tier_used = "Redis"
                 return json.loads(value)
             else:
-                if ttl == -2:  # Key doesn't exist
-                    logger.debug(f"Cache miss: key={key[:30]}... (key not found)")
-                elif ttl == -1:  # Key exists but no expiry
-                    logger.debug(f"Cache miss: key={key[:30]}... (key exists but no value)")
-                else:
-                    logger.debug(f"Cache miss: key={key[:30]}... (expired, was {abs(ttl)}s ago)")
                 # Track miss in Redis stats
                 CacheStats.increment_miss(self.client)
+                self.last_tier_used = "MISS"
             return None
         except json.JSONDecodeError as e:
             logger.error(f"Error decoding cached value for key {key}: {e}")
@@ -241,7 +275,6 @@ class RedisCache:
             serialized = json.dumps(value, default=str)
             result = self.client.setex(key, ttl, serialized)
             if result:
-                logger.info(f"Cache set: key={key[:30]}... TTL={ttl}s ({ttl//60}min)")
                 # Track set in Redis stats
                 CacheStats.increment_set(self.client)
             else:
@@ -409,7 +442,6 @@ class RedisCache:
             
             self.client.setex(embedding_key, ttl, json.dumps(embedding))
             self.client.setex(metadata_key, ttl, json.dumps(metadata, default=str))
-            logger.debug(f"Stored embedding for article: {article_id[:8]}...")
             return True
         except Exception as e:
             logger.error(f"Error storing embedding: {e}")
@@ -431,6 +463,65 @@ class RedisCache:
         if self.client:
             CacheStats.reset(self.client)
             logger.info("Cache statistics reset")
+    
+    def clear_all_cache(self) -> bool:
+        """
+        Clear all cached data from Redis.
+        
+        This will remove:
+        - Stock data cache
+        - News cache
+        - Sentiment cache
+        - RAG embeddings and metadata
+        - All other cached data
+        
+        Returns:
+            True if successful, False otherwise
+        """
+        if not self.client:
+            logger.warning("Cannot clear cache: Redis client not available")
+            return False
+        
+        try:
+            # Use FLUSHDB to clear all keys in current database
+            # This is faster than deleting keys individually
+            self.client.flushdb()
+            logger.info("All Redis cache data cleared")
+            return True
+        except Exception as e:
+            logger.error(f"Error clearing cache: {e}")
+            return False
+    
+    def clear_cache_by_pattern(self, pattern: str) -> int:
+        """
+        Clear cache keys matching a pattern.
+        
+        Args:
+            pattern: Redis key pattern (e.g., "stock:*", "news:*", "sentiment:*")
+            
+        Returns:
+            Number of keys deleted
+        """
+        if not self.client:
+            return 0
+        
+        try:
+            deleted_count = 0
+            cursor = 0
+            
+            # Use SCAN to safely iterate over keys matching pattern
+            while True:
+                cursor, keys = self.client.scan(cursor=cursor, match=pattern, count=100)
+                if keys:
+                    deleted_count += self.client.delete(*keys)
+                if cursor == 0:
+                    break
+            
+            logger.info(f"Cleared {deleted_count} keys matching pattern: {pattern}")
+            return deleted_count
+        except Exception as e:
+            logger.error(f"Error clearing cache by pattern {pattern}: {e}")
+            return 0
     
     def get_article_embedding(self, article_id: str) -> Optional[tuple]:
         """

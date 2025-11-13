@@ -143,7 +143,7 @@ class AppSettings(BaseSettings):
     
     # RAG settings
     rag_top_k: int = Field(default=3, description="Number of similar articles to retrieve")
-    rag_similarity_threshold: float = Field(default=0.3, description="Minimum similarity score for RAG retrieval (0.0-1.0)")
+    rag_similarity_threshold: float = Field(default=0.01, description="Minimum similarity score for RAG retrieval (0.0-1.0). Lower values return more articles but may include less relevant ones. For RRF scores, use 0.01-0.03. For cosine similarity, use 0.3-0.7.")
     
     if PYDANTIC_V2:
         # Pydantic v2 reads from os.environ (already loaded by dotenv above)
@@ -239,6 +239,17 @@ class Settings:
         return (
             self.azure_openai.embedding_deployment is not None
             and self.azure_openai.embedding_deployment != ""
+        )
+    
+    def is_azure_openai_available(self) -> bool:
+        """Check if Azure OpenAI is configured and available."""
+        return (
+            self.azure_openai.endpoint is not None
+            and self.azure_openai.endpoint != ""
+            and self.azure_openai.api_key is not None
+            and self.azure_openai.api_key != ""
+            and self.azure_openai.deployment_name is not None
+            and self.azure_openai.deployment_name != ""
         )
 
 
