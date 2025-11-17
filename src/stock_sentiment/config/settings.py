@@ -129,6 +129,46 @@ class RedisSettings(BaseSettings):
             case_sensitive = False
 
 
+class AzureAISearchSettings(BaseSettings):
+    """Azure AI Search configuration settings."""
+    
+    endpoint: str = Field(..., description="Azure AI Search endpoint URL")
+    api_key: str = Field(..., description="Azure AI Search API key")
+    index_name: str = Field(default="stock-articles", description="Index name")
+    semantic_config_name: Optional[str] = Field(
+        default=None,
+        description="Semantic configuration name (optional, requires Standard tier)"
+    )
+    vector_dimension: int = Field(default=1536, description="Embedding vector dimension")
+    
+    if PYDANTIC_V2:
+        model_config = SettingsConfigDict(
+            env_prefix="AZURE_AI_SEARCH_",
+            case_sensitive=False,
+            extra="ignore"
+        )
+        
+        @field_validator("endpoint")
+        @classmethod
+        def validate_endpoint(cls, v):
+            """Validate that endpoint is a valid URL."""
+            if not v.startswith("http"):
+                raise ValueError("Azure AI Search endpoint must be a valid URL")
+            return v.rstrip("/")
+    else:
+        @validator("endpoint")
+        def validate_endpoint(cls, v):
+            """Validate that endpoint is a valid URL."""
+            if not v.startswith("http"):
+                raise ValueError("Azure AI Search endpoint must be a valid URL")
+            return v.rstrip("/")
+        
+        class Config:
+            """Pydantic v1 configuration."""
+            env_prefix = "AZURE_AI_SEARCH_"
+            case_sensitive = False
+
+
 class AppSettings(BaseSettings):
     """Application-wide settings."""
     
@@ -228,6 +268,28 @@ class Settings:
             # Redis is optional, so we allow it to fail
             self.redis = None
         
+        try:
+            import os
+            if PYDANTIC_V2:
+                # Azure AI Search is optional
+                search_endpoint = os.getenv("AZURE_AI_SEARCH_ENDPOINT")
+                search_api_key = os.getenv("AZURE_AI_SEARCH_API_KEY")
+                if search_endpoint and search_api_key:
+                    self.azure_ai_search = AzureAISearchSettings(
+                        endpoint=search_endpoint,
+                        api_key=search_api_key,
+                        index_name=os.getenv("AZURE_AI_SEARCH_INDEX_NAME", "stock-articles"),
+                        semantic_config_name=os.getenv("AZURE_AI_SEARCH_SEMANTIC_CONFIG_NAME"),
+                        vector_dimension=int(os.getenv("AZURE_AI_SEARCH_VECTOR_DIMENSION", "1536"))
+                    )
+                else:
+                    self.azure_ai_search = None
+            else:
+                self.azure_ai_search = AzureAISearchSettings()
+        except Exception as e:
+            # Azure AI Search is optional, so we allow it to fail
+            self.azure_ai_search = None
+        
         self.app = AppSettings()
     
     def is_redis_available(self) -> bool:
@@ -250,6 +312,16 @@ class Settings:
             and self.azure_openai.api_key != ""
             and self.azure_openai.deployment_name is not None
             and self.azure_openai.deployment_name != ""
+        )
+    
+    def is_azure_ai_search_available(self) -> bool:
+        """Check if Azure AI Search is configured and available."""
+        return (
+            self.azure_ai_search is not None
+            and self.azure_ai_search.endpoint is not None
+            and self.azure_ai_search.endpoint != ""
+            and self.azure_ai_search.api_key is not None
+            and self.azure_ai_search.api_key != ""
         )
 
 

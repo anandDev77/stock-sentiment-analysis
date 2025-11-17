@@ -4,7 +4,6 @@ Stock data collection service.
 This module provides functionality to collect stock market data including:
 - Stock prices and company information
 - News articles and headlines
-- Social media data (placeholder for future integration)
 """
 
 from typing import List, Dict, Optional
@@ -13,7 +12,6 @@ import yfinance as yf
 from dateutil import parser
 
 from ..config.settings import Settings, get_settings
-from ..models.stock import StockData, NewsArticle
 from ..utils.logger import get_logger
 from ..utils.validators import validate_stock_symbol, sanitize_text
 from .cache import RedisCache

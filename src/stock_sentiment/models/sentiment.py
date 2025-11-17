@@ -100,31 +100,4 @@ class SentimentScores:
             return "neutral"
 
 
-@dataclass
-class SentimentResult:
-    """
-    Complete sentiment analysis result.
-    
-    Attributes:
-        scores: Sentiment scores
-        text: Original text analyzed
-        source: Source of the text (e.g., "news", "social_media")
-        cached: Whether this result was retrieved from cache
-        rag_used: Whether RAG context was used in analysis
-    """
-    scores: SentimentScores
-    text: str
-    source: str = "unknown"
-    cached: bool = False
-    rag_used: bool = False
-    
-    def to_dict(self) -> Dict:
-        """Convert to dictionary format."""
-        return {
-            "scores": self.scores.to_dict(),
-            "text": self.text,
-            "source": self.source,
-            "cached": self.cached,
-            "rag_used": self.rag_used
-        }
 

@@ -15,7 +15,7 @@ from openai import AzureOpenAI
 from textblob import TextBlob
 
 from ..config.settings import Settings, get_settings
-from ..models.sentiment import SentimentScores, SentimentResult
+from ..models.sentiment import SentimentScores
 from ..utils.logger import get_logger
 from ..utils.preprocessing import preprocess_text, is_financial_text
 from ..utils.retry import retry_with_exponential_backoff
@@ -100,6 +100,9 @@ class SentimentAnalyzer:
             name="azure_openai_sentiment"
         )
         
+        # Initialize RAG filters (can be set via set_rag_filters)
+        self._rag_filters = {}
+        
         logger.info(
             f"SentimentAnalyzer initialized with deployment: {self.deployment_name}"
         )
@@ -151,10 +154,17 @@ class SentimentAnalyzer:
             # Track RAG attempt (even if no articles found)
             self.rag_attempts += 1
             
+            # Get filter parameters if provided (from UI)
+            filter_params = getattr(self, '_rag_filters', {})
+            
             relevant_articles = self.rag_service.retrieve_relevant_context(
                 query=text,
                 symbol=symbol,
-                top_k=self.settings.app.rag_top_k
+                top_k=self.settings.app.rag_top_k,
+                date_range=filter_params.get('date_range'),
+                sources=filter_params.get('sources'),
+                exclude_sources=filter_params.get('exclude_sources'),
+                days_back=filter_params.get('days_back')
             )
             
             if relevant_articles:
@@ -374,6 +384,29 @@ Respond ONLY with valid JSON. No explanations, no markdown, just the JSON object
         except Exception as e:
             logger.error(f"TextBlob fallback error: {e}")
             return {'positive': 0.0, 'negative': 0.0, 'neutral': 1.0}
+    
+    def set_rag_filters(
+        self,
+        date_range: Optional[tuple] = None,
+        sources: Optional[List[str]] = None,
+        exclude_sources: Optional[List[str]] = None,
+        days_back: Optional[int] = None
+    ):
+        """
+        Set RAG filter parameters for context retrieval.
+        
+        Args:
+            date_range: Optional tuple of (start_date, end_date) as datetime objects
+            sources: Optional list of source names to include
+            exclude_sources: Optional list of source names to exclude
+            days_back: Optional number of days to look back
+        """
+        self._rag_filters = {
+            'date_range': date_range,
+            'sources': sources,
+            'exclude_sources': exclude_sources,
+            'days_back': days_back
+        }
     
     def get_stats(self) -> Dict[str, int]:
         """

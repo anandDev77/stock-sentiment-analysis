@@ -369,6 +369,99 @@ with st.sidebar:
     
     st.markdown("<br>", unsafe_allow_html=True)
     
+    # Initialize search filters if not exists
+    if 'search_filters' not in st.session_state:
+        st.session_state.search_filters = {
+            "date_range": None,
+            "sources": None,
+            "exclude_unknown": True,
+            "days_back": None
+        }
+    
+    # Search Filters Section
+    with st.expander("🔍 Search Filters", expanded=False):
+        # Date Range Filter
+        st.subheader("📅 Date Range")
+        use_date_filter = st.checkbox("Filter by date", value=False, key="use_date_filter")
+        
+        date_range = None
+        days_back = None
+        date_option = None
+        
+        if use_date_filter:
+            date_option = st.radio(
+                "Date range",
+                ["Last 3 days", "Last 7 days", "Last 30 days", "Custom range"],
+                horizontal=False,
+                key="date_option"
+            )
+            
+            if date_option == "Custom range":
+                from datetime import datetime, timedelta
+                start_date = st.date_input(
+                    "Start date",
+                    value=datetime.now().date() - timedelta(days=7),
+                    key="start_date"
+                )
+                end_date = st.date_input(
+                    "End date",
+                    value=datetime.now().date(),
+                    key="end_date"
+                )
+                if start_date and end_date:
+                    date_range = (
+                        datetime.combine(start_date, datetime.min.time()),
+                        datetime.combine(end_date, datetime.max.time())
+                    )
+            else:
+                days_map = {"Last 3 days": 3, "Last 7 days": 7, "Last 30 days": 30}
+                days_back = days_map[date_option]
+        
+        # Source Filter
+        st.subheader("📰 News Sources")
+        use_source_filter = st.checkbox("Filter by source", value=False, key="use_source_filter")
+        
+        selected_sources = None
+        exclude_unknown = st.checkbox("Exclude 'Unknown' sources", value=True, key="exclude_unknown")
+        
+        if use_source_filter:
+            source_options = ["Trusted Only", "Custom"]
+            source_choice = st.radio(
+                "Source filter",
+                source_options,
+                horizontal=False,
+                key="source_choice"
+            )
+            
+            if source_choice == "Trusted Only":
+                selected_sources = ["Reuters", "Bloomberg", "CNBC", "Wall Street Journal"]
+            elif source_choice == "Custom":
+                # Get available sources from previous data if available
+                available_sources = ["Reuters", "Bloomberg", "CNBC", "Wall Street Journal", "Yahoo Finance", "MarketWatch"]
+                if st.session_state.data and 'news' in st.session_state.data:
+                    news_sources = set()
+                    for article in st.session_state.data.get('news', []):
+                        source = article.get('source', '')
+                        if source and source != 'Unknown':
+                            news_sources.add(source)
+                    if news_sources:
+                        available_sources = sorted(list(news_sources))
+                
+                selected_sources = st.multiselect(
+                    "Select sources",
+                    available_sources,
+                    default=available_sources[:3] if available_sources else [],
+                    key="selected_sources"
+                )
+        
+        # Store filters in session state
+        st.session_state.search_filters = {
+            "date_range": date_range if use_date_filter else None,
+            "sources": selected_sources if use_source_filter else None,
+            "exclude_unknown": exclude_unknown,
+            "days_back": days_back if use_date_filter and date_option and date_option != "Custom range" else None
+        }
+    
     # Enhanced load button
     if st.button("🚀 Load Data", type="primary"):
         st.session_state.load_data = True
@@ -715,6 +808,17 @@ if st.session_state.load_data and symbol:
                         cache_status['sentiment']['misses'] += 1
             # Update cache status after sentiment tracking
             st.session_state.cache_status = cache_status
+        
+        # Set RAG filters from UI if available
+        if 'search_filters' in st.session_state:
+            filters = st.session_state.search_filters
+            exclude_sources = ["Unknown"] if filters.get("exclude_unknown", True) else None
+            analyzer.set_rag_filters(
+                date_range=filters.get("date_range"),
+                sources=filters.get("sources"),
+                exclude_sources=exclude_sources,
+                days_back=filters.get("days_back")
+            )
         
         # Batch analyze with parallel processing
         news_sentiments = analyzer.batch_analyze(
