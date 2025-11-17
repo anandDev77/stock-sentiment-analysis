@@ -166,6 +166,11 @@ class AzureAISearchVectorDB(VectorDatabase):
             search_config = self.settings.azure_ai_search
             index_name = search_config.index_name
             
+            # Get vector search parameters from settings
+            vector_m = self.settings.app.vector_search_m
+            vector_ef_construction = self.settings.app.vector_search_ef_construction
+            vector_ef_search = self.settings.app.vector_search_ef_search
+            
             # Check if index exists
             try:
                 existing_index = self._index_client.get_index(index_name)
@@ -203,9 +208,9 @@ class AzureAISearchVectorDB(VectorDatabase):
                         name="default-algorithm",
                         kind=VectorSearchAlgorithmKind.HNSW,
                         parameters={
-                            "m": 4,
-                            "efConstruction": 400,
-                            "efSearch": 500,
+                            "m": vector_m,
+                            "efConstruction": vector_ef_construction,
+                            "efSearch": vector_ef_search,
                             "metric": VectorSearchAlgorithmMetric.COSINE
                         }
                     )

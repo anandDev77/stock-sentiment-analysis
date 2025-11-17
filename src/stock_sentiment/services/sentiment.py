@@ -95,8 +95,8 @@ class SentimentAnalyzer:
         # Circuit breaker for Azure OpenAI API calls
         # Prevents cascading failures if API is down
         self.circuit_breaker = CircuitBreaker(
-            failure_threshold=5,  # Open after 5 failures
-            timeout=60,  # Wait 60s before trying again
+            failure_threshold=self.settings.app.circuit_breaker_failure_threshold,
+            timeout=self.settings.app.circuit_breaker_timeout,
             name="azure_openai_sentiment"
         )
         
@@ -290,7 +290,12 @@ Analyze the sentiment following these examples. Consider:
 
 Respond ONLY with valid JSON. No explanations, no markdown, just the JSON object."""
         
-        @retry_with_exponential_backoff(max_attempts=3, initial_delay=1.0, max_delay=10.0)
+        @retry_with_exponential_backoff(
+            max_attempts=self.settings.app.retry_max_attempts,
+            initial_delay=self.settings.app.retry_initial_delay,
+            max_delay=self.settings.app.retry_max_delay,
+            exponential_base=self.settings.app.retry_exponential_base
+        )
         def _call_openai_internal():
             return self.client.chat.completions.create(
                 model=self.deployment_name,
@@ -298,8 +303,8 @@ Respond ONLY with valid JSON. No explanations, no markdown, just the JSON object
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": prompt}
                 ],
-                temperature=0.2,  # Lower temperature for more consistent results
-                max_tokens=200,  # Increased for better responses
+                temperature=self.settings.app.sentiment_temperature,
+                max_tokens=self.settings.app.sentiment_max_tokens,
                 response_format={"type": "json_object"}  # Use structured output if supported
             )
         
@@ -455,7 +460,7 @@ Respond ONLY with valid JSON. No explanations, no markdown, just the JSON object
         self,
         texts: List[str],
         symbol: Optional[str] = None,
-        max_workers: int = 5
+        max_workers: Optional[int] = None
     ) -> List[Dict[str, float]]:
         """
         Analyze sentiment for multiple texts in parallel (industry best practice).
@@ -466,7 +471,7 @@ Respond ONLY with valid JSON. No explanations, no markdown, just the JSON object
         Args:
             texts: List of texts to analyze
             symbol: Optional stock symbol for RAG context
-            max_workers: Maximum number of parallel workers (default: 5)
+            max_workers: Maximum number of parallel workers (default: from settings)
             
         Returns:
             List of sentiment score dictionaries in same order as input
@@ -475,6 +480,10 @@ Respond ONLY with valid JSON. No explanations, no markdown, just the JSON object
         
         if not texts:
             return []
+        
+        # Use configured max_workers if not provided
+        if max_workers is None:
+            max_workers = self.settings.app.sentiment_max_workers
         
         # For small batches, sequential might be faster (avoid overhead)
         if len(texts) <= 2:

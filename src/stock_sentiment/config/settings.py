@@ -209,12 +209,53 @@ class AppSettings(BaseSettings):
     
     # Cache TTLs (in seconds)
     cache_ttl_sentiment: int = Field(default=86400, description="Sentiment cache TTL")  # 24 hours
-    cache_ttl_stock: int = Field(default=3600, description="Stock data cache TTL")  # 1 hour (increased from 5 min)
-    cache_ttl_news: int = Field(default=7200, description="News cache TTL")  # 2 hours (increased from 30 min)
+    cache_ttl_stock: int = Field(default=3600, description="Stock data cache TTL")  # 1 hour
+    cache_ttl_news: int = Field(default=7200, description="News cache TTL")  # 2 hours
+    cache_ttl_rag_articles: int = Field(default=604800, description="RAG article cache TTL (7 days in seconds)")
+    
+    # Redis connection settings
+    redis_connect_timeout: int = Field(default=5, description="Redis connection timeout in seconds")
+    redis_socket_timeout: int = Field(default=5, description="Redis socket timeout in seconds")
     
     # RAG settings
     rag_top_k: int = Field(default=3, description="Number of similar articles to retrieve")
     rag_similarity_threshold: float = Field(default=0.01, description="Minimum similarity score for RAG retrieval (0.0-1.0). Lower values return more articles but may include less relevant ones. For RRF scores, use 0.01-0.03. For cosine similarity, use 0.3-0.7.")
+    rag_batch_size: int = Field(default=100, description="Batch size for RAG embedding generation (max 2048 for Azure OpenAI)")
+    rag_similarity_auto_adjust_multiplier: float = Field(default=0.8, description="Multiplier for auto-adjusting similarity threshold when too high (0.0-1.0)")
+    rag_temporal_decay_days: int = Field(default=7, description="Number of days for temporal decay calculation in RAG")
+    
+    # Sentiment analysis settings
+    sentiment_temperature: float = Field(default=0.2, description="Temperature for sentiment analysis model (0.0-2.0, lower = more consistent)")
+    sentiment_max_tokens: int = Field(default=200, description="Maximum tokens for sentiment analysis response")
+    sentiment_batch_size: int = Field(default=100, description="Batch size for parallel sentiment analysis")
+    sentiment_max_workers: int = Field(default=5, description="Maximum parallel workers for batch sentiment analysis")
+    
+    # Retry settings
+    retry_max_attempts: int = Field(default=3, description="Maximum retry attempts for API calls")
+    retry_initial_delay: float = Field(default=1.0, description="Initial retry delay in seconds")
+    retry_max_delay: float = Field(default=10.0, description="Maximum retry delay in seconds")
+    retry_exponential_base: float = Field(default=2.0, description="Exponential base for retry backoff")
+    
+    # Circuit breaker settings
+    circuit_breaker_failure_threshold: int = Field(default=5, description="Number of failures before opening circuit breaker")
+    circuit_breaker_timeout: int = Field(default=60, description="Seconds to wait before trying half-open state")
+    
+    # API timeout settings
+    api_timeout: int = Field(default=10, description="Default timeout for external API calls in seconds")
+    
+    # Data collection limits
+    news_limit_default: int = Field(default=10, description="Default limit for news articles per source")
+    news_title_max_length: int = Field(default=200, description="Maximum length for news article titles")
+    news_summary_max_length: int = Field(default=500, description="Maximum length for news article summaries")
+    
+    # UI display settings
+    ui_articles_per_page: int = Field(default=10, description="Number of articles to display per page in UI")
+    ui_show_all_articles: bool = Field(default=False, description="Show all articles by default (overrides pagination)")
+    
+    # Vector search settings (Azure AI Search)
+    vector_search_m: int = Field(default=4, description="HNSW parameter m (number of bi-directional links)")
+    vector_search_ef_construction: int = Field(default=400, description="HNSW parameter efConstruction (size of dynamic candidate list)")
+    vector_search_ef_search: int = Field(default=500, description="HNSW parameter efSearch (size of dynamic candidate list for search)")
     
     if PYDANTIC_V2:
         # Pydantic v2 reads from os.environ (already loaded by dotenv above)

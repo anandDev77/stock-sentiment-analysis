@@ -859,6 +859,10 @@ if st.session_state.load_data and symbol:
         st.session_state.data = data
         st.session_state.symbol = symbol
         
+        # Reset pagination when new data is loaded
+        st.session_state.article_page = 1
+        st.session_state.show_all_articles = False
+        
         # Show data source breakdown
         if data.get('news'):
             source_breakdown = {}
@@ -882,7 +886,7 @@ if st.session_state.load_data and symbol:
         # Batch processing is 10-100x faster than individual API calls
         if rag_service and data['news']:
             logger.info(f"App: Storing {len(data['news'])} articles in RAG from multiple sources")
-            rag_service.store_articles_batch(data['news'], symbol, batch_size=100)
+            rag_service.store_articles_batch(data['news'], symbol)
         
         # Also store Reddit posts in RAG if available
         if rag_service and data.get('social_media'):
@@ -897,7 +901,7 @@ if st.session_state.load_data and symbol:
                     'url': post.get('url', ''),
                     'timestamp': post.get('timestamp', datetime.now())
                 })
-            rag_service.store_articles_batch(reddit_articles, symbol, batch_size=100)
+            rag_service.store_articles_batch(reddit_articles, symbol)
         
         # Analyze sentiment with RAG context using parallel processing (industry best practice)
         # Parallel processing provides 5-10x performance improvement
@@ -1382,10 +1386,66 @@ else:
         # News articles with enhanced design
         if data.get('news'):
             st.subheader("📰 Recent News Articles")
-            st.markdown(f"*Showing {len(data['news'][:10])} of {len(data['news'])} articles*")
             
-            for i, article in enumerate(data['news'][:10]):
-                sentiment = news_sentiments[i] if i < len(news_sentiments) else {
+            # Pagination controls
+            total_articles = len(data['news'])
+            articles_per_page = settings.app.ui_articles_per_page
+            
+            # Initialize session state for pagination
+            if 'article_page' not in st.session_state:
+                st.session_state.article_page = 1
+            if 'show_all_articles' not in st.session_state:
+                st.session_state.show_all_articles = False
+            
+            # Pagination controls
+            col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
+            
+            with col1:
+                show_all = st.checkbox(
+                    "Show All Articles",
+                    value=st.session_state.show_all_articles,
+                    key="show_all_articles_checkbox",
+                    help="Display all articles at once (may be slow for large lists)"
+                )
+                st.session_state.show_all_articles = show_all
+            
+            if not show_all and total_articles > articles_per_page:
+                total_pages = (total_articles + articles_per_page - 1) // articles_per_page
+                
+                with col2:
+                    if st.button("◀ Previous", disabled=st.session_state.article_page <= 1):
+                        st.session_state.article_page = max(1, st.session_state.article_page - 1)
+                        st.rerun()
+                
+                with col3:
+                    st.markdown(f"**Page {st.session_state.article_page} of {total_pages}**")
+                
+                with col4:
+                    if st.button("Next ▶", disabled=st.session_state.article_page >= total_pages):
+                        st.session_state.article_page = min(total_pages, st.session_state.article_page + 1)
+                        st.rerun()
+            
+            # Determine which articles to display
+            if show_all:
+                articles_to_display = data['news']
+                start_idx = 0
+                end_idx = total_articles
+            else:
+                start_idx = (st.session_state.article_page - 1) * articles_per_page
+                end_idx = min(start_idx + articles_per_page, total_articles)
+                articles_to_display = data['news'][start_idx:end_idx]
+            
+            # Display article count
+            if show_all:
+                st.markdown(f"*Showing all {total_articles} articles*")
+            else:
+                st.markdown(f"*Showing articles {start_idx + 1}-{end_idx} of {total_articles}*")
+            
+            # Display articles
+            for i, article in enumerate(articles_to_display):
+                # Calculate actual index in full list for sentiment lookup
+                actual_idx = start_idx + i if not show_all else i
+                sentiment = news_sentiments[actual_idx] if actual_idx < len(news_sentiments) else {
                     'positive': 0, 'negative': 0, 'neutral': 1
                 }
                 

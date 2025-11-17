@@ -119,7 +119,7 @@ class RAGService:
     def get_embeddings_batch(
         self, 
         texts: List[str], 
-        batch_size: int = 100,
+        batch_size: Optional[int] = None,
         use_cache: bool = True
     ) -> List[Optional[List[float]]]:
         """
@@ -142,6 +142,10 @@ class RAGService:
         """
         if not texts:
             return []
+        
+        # Use configured batch_size if not provided
+        if batch_size is None:
+            batch_size = self.settings.app.rag_batch_size
         
         if not self.embedding_deployment:
             logger.warning("No embedding deployment configured")
@@ -191,7 +195,12 @@ class RAGService:
                 batch = texts_to_fetch[i:i + batch_size]
                 batch_indices = fetch_indices[i:i + batch_size]
                 
-                @retry_with_exponential_backoff(max_attempts=3, initial_delay=1.0, max_delay=10.0)
+                @retry_with_exponential_backoff(
+                    max_attempts=self.settings.app.retry_max_attempts,
+                    initial_delay=self.settings.app.retry_initial_delay,
+                    max_delay=self.settings.app.retry_max_delay,
+                    exponential_base=self.settings.app.retry_exponential_base
+                )
                 def _get_batch_embeddings_internal():
                     return self.client.embeddings.create(
                         model=self.embedding_deployment,
@@ -259,7 +268,12 @@ class RAGService:
                 except Exception as e:
                     logger.warning(f"Error loading cached embedding: {e}")
         
-        @retry_with_exponential_backoff(max_attempts=3, initial_delay=1.0, max_delay=10.0)
+        @retry_with_exponential_backoff(
+            max_attempts=self.settings.app.retry_max_attempts,
+            initial_delay=self.settings.app.retry_initial_delay,
+            max_delay=self.settings.app.retry_max_delay,
+            exponential_base=self.settings.app.retry_exponential_base
+        )
         def _get_embedding_internal():
             return self.client.embeddings.create(
                 model=self.embedding_deployment,
@@ -289,7 +303,7 @@ class RAGService:
         self, 
         articles: List[Dict], 
         symbol: str,
-        batch_size: int = 100
+        batch_size: Optional[int] = None
     ) -> int:
         """
         Store multiple articles with batch embedding generation (industry best practice).
@@ -316,6 +330,10 @@ class RAGService:
         if not articles:
             logger.warning(f"Cannot store articles: empty articles list provided for {symbol}")
             return 0
+        
+        # Use configured batch_size if not provided
+        if batch_size is None:
+            batch_size = self.settings.app.rag_batch_size
         
         stored_count = 0
         
@@ -410,7 +428,7 @@ class RAGService:
             
             # Also mark as stored in Redis for duplicate checking (if Redis available)
             if self.cache and self.cache.client:
-                ttl = 86400 * 7  # 7 days
+                ttl = self.settings.app.cache_ttl_rag_articles
                 for metadata in article_metadata:
                     try:
                         self.cache.client.setex(metadata['duplicate_key'], ttl, "1")
@@ -419,7 +437,7 @@ class RAGService:
         else:
             # Fallback to Redis storage (original implementation)
             logger.info(f"RAG Storage: Using Redis fallback for {len(article_texts)} articles (symbol={symbol}, Azure AI Search not available)")
-            ttl = 86400 * 7  # 7 days
+            ttl = self.settings.app.cache_ttl_rag_articles
             
             for metadata, embedding in zip(article_metadata, embeddings):
                 if embedding is None:
@@ -905,7 +923,7 @@ class RAGService:
                         # RRF scores are typically 0.01-0.15, so if threshold > max_score, auto-lower it
                         if similarity_threshold > max_score and max_score > 0:
                             # Use a threshold slightly below the max score to allow some results through
-                            adjusted_threshold = max(0.01, max_score * 0.8)  # 80% of max score
+                            adjusted_threshold = max(0.01, max_score * self.settings.app.rag_similarity_auto_adjust_multiplier)
                             logger.warning(
                                 f"Similarity threshold {similarity_threshold} too high (max score: {max_score:.3f}). "
                                 f"Auto-adjusting to {adjusted_threshold:.3f}"
@@ -1133,8 +1151,9 @@ class RAGService:
                 age_days = (now - article_time.replace(tzinfo=None)).days
                 
                 # Apply decay: 1.0 for today, 0.5 for 7 days ago, 0.1 for 30+ days
-                # Formula: decay = 1.0 / (1 + age_days / 7)
-                decay = max(0.1, 1.0 / (1 + age_days / 7))
+                # Formula: decay = 1.0 / (1 + age_days / decay_days)
+                decay_days = self.settings.app.rag_temporal_decay_days
+                decay = max(0.1, 1.0 / (1 + age_days / decay_days))
                 
                 # Boost score by 20% for recency (weighted by decay)
                 current_score = result.get('rrf_score', result.get('similarity', 0))

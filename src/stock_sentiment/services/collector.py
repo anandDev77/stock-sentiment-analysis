@@ -165,7 +165,7 @@ class StockDataCollector:
             'timestamp': normalize_datetime(datetime.now())
         }
     
-    def get_news_headlines(self, symbol: str, limit: int = 10) -> List[Dict]:
+    def get_news_headlines(self, symbol: str, limit: Optional[int] = None) -> List[Dict]:
         """
         Fetch recent news headlines for a stock.
         
@@ -181,6 +181,9 @@ class StockDataCollector:
             - url: Article URL
             - timestamp: Publication timestamp
         """
+        if limit is None:
+            limit = self.settings.app.news_limit_default
+        
         if not validate_stock_symbol(symbol):
             logger.warning(f"Invalid stock symbol: {symbol}")
             return []
@@ -421,8 +424,8 @@ class StockDataCollector:
                         post_timestamp = normalize_datetime(post_timestamp)
                         
                         posts.append({
-                            'title': post_title[:200],  # Limit title length
-                            'summary': post_text[:500] if post_text else post_title[:500],  # Use text or title as summary
+                                'title': post_title[:self.settings.app.news_title_max_length],
+                                'summary': post_text[:self.settings.app.news_summary_max_length] if post_text else post_title[:self.settings.app.news_summary_max_length],
                             'source': f'Reddit r/{subreddit_name}',
                             'url': post.url if hasattr(post, 'url') else f"https://reddit.com{post.permalink}" if hasattr(post, 'permalink') else '',
                             'timestamp': post_timestamp,
@@ -450,7 +453,7 @@ class StockDataCollector:
             logger.error(f"Error fetching Reddit data for {symbol}: {e}")
             return []
     
-    def get_alpha_vantage_news(self, symbol: str, limit: int = 10) -> List[Dict]:
+    def get_alpha_vantage_news(self, symbol: str, limit: Optional[int] = None) -> List[Dict]:
         """
         Get news from Alpha Vantage API.
         
@@ -459,11 +462,14 @@ class StockDataCollector:
         
         Args:
             symbol: Stock ticker symbol
-            limit: Maximum number of articles to return
+            limit: Maximum number of articles to return (default: from settings)
             
         Returns:
             List of news article dictionaries
         """
+        if limit is None:
+            limit = self.settings.app.news_limit_default
+        
         if not self.settings.data_sources.alpha_vantage_enabled:
             return []
         
@@ -484,7 +490,7 @@ class StockDataCollector:
                 'limit': min(limit, 50)  # Alpha Vantage max is 50
             }
             
-            response = requests.get(url, params=params, timeout=10)
+            response = requests.get(url, params=params, timeout=self.settings.app.api_timeout)
             response.raise_for_status()
             data = response.json()
             
@@ -536,7 +542,7 @@ class StockDataCollector:
             logger.error(f"Error fetching Alpha Vantage news for {symbol}: {e}")
             return []
     
-    def get_finnhub_news(self, symbol: str, limit: int = 10) -> List[Dict]:
+    def get_finnhub_news(self, symbol: str, limit: Optional[int] = None) -> List[Dict]:
         """
         Get news from Finnhub API.
         
@@ -545,11 +551,14 @@ class StockDataCollector:
         
         Args:
             symbol: Stock ticker symbol
-            limit: Maximum number of articles to return
+            limit: Maximum number of articles to return (default: from settings)
             
         Returns:
             List of news article dictionaries
         """
+        if limit is None:
+            limit = self.settings.app.news_limit_default
+        
         if not self.settings.data_sources.finnhub_enabled:
             return []
         
@@ -570,7 +579,7 @@ class StockDataCollector:
                 'to': datetime.now().strftime('%Y-%m-%d')
             }
             
-            response = requests.get(url, params=params, timeout=10)
+            response = requests.get(url, params=params, timeout=self.settings.app.api_timeout)
             response.raise_for_status()
             data = response.json()
             

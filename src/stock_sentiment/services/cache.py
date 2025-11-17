@@ -154,8 +154,8 @@ class RedisCache:
                 ssl=redis_config.ssl,
                 ssl_cert_reqs=None,
                 decode_responses=True,
-                socket_connect_timeout=5,
-                socket_timeout=5
+                socket_connect_timeout=self.settings.app.redis_connect_timeout,
+                socket_timeout=self.settings.app.redis_socket_timeout
             )
             
             # Test connection
