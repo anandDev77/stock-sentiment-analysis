@@ -12,6 +12,7 @@ import plotly.graph_objects as go
 import yfinance as yf
 from datetime import datetime
 import sys
+import time
 from pathlib import Path
 
 # Add src directory to Python path for imports
@@ -26,6 +27,10 @@ from stock_sentiment.services.cache import RedisCache
 from stock_sentiment.services.rag import RAGService
 from stock_sentiment.services.cost_tracker import CostTracker
 from stock_sentiment.utils.logger import get_logger, setup_logger
+from stock_sentiment.utils.ui_helpers import (
+    show_toast, filter_articles, get_error_recovery_ui,
+    generate_comparison_insights
+)
 
 # Initialize root logger at app startup
 setup_logger("stock_sentiment", level="INFO")
@@ -248,6 +253,14 @@ if 'symbol' not in st.session_state:
     st.session_state.symbol = "AAPL"
 if 'title_shown' not in st.session_state:
     st.session_state.title_shown = False
+if 'recent_searches' not in st.session_state:
+    st.session_state.recent_searches = []
+if 'data_errors' not in st.session_state:
+    st.session_state.data_errors = {}
+if 'show_comparison' not in st.session_state:
+    st.session_state.show_comparison = False
+if 'comparison_stocks' not in st.session_state:
+    st.session_state.comparison_stocks = []
 
 # Main header - only show once
 if not st.session_state.title_shown:
@@ -530,11 +543,28 @@ with st.sidebar:
             "data_sources": data_source_filters
         }
     
+    # Recent searches
+    if st.session_state.recent_searches:
+        st.markdown("### 🔍 Recent Searches")
+        for sym in st.session_state.recent_searches[-5:]:  # Show last 5
+            if st.button(sym, key=f"recent_{sym}", width='stretch'):
+                st.session_state.symbol = sym
+                st.session_state.load_data = True
+                st.rerun()
+        st.markdown("---")
+    
     # Enhanced load button
-    if st.button("🚀 Load Data", type="primary"):
+    if st.button("🚀 Load Data", type="primary", width='stretch'):
         st.session_state.load_data = True
         st.session_state.symbol = symbol
         st.session_state.title_shown = False  # Reset to show title again after load
+        
+        # Add to recent searches
+        if symbol and symbol not in st.session_state.recent_searches:
+            st.session_state.recent_searches.append(symbol)
+            # Keep only last 10
+            if len(st.session_state.recent_searches) > 10:
+                st.session_state.recent_searches = st.session_state.recent_searches[-10:]
     
     st.markdown("---")
     
@@ -751,7 +781,7 @@ with st.sidebar:
     # Cache management buttons
     cache_col1, cache_col2 = st.columns(2)
     with cache_col1:
-        if st.button("🔄 Reset Cache Stats", use_container_width=True, help="Reset cache statistics counters (hits/misses)"):
+        if st.button("🔄 Reset Cache Stats", width='stretch', help="Reset cache statistics counters (hits/misses)"):
             if redis_cache:
                 redis_cache.reset_cache_stats()
                 st.success("Cache statistics reset!")
@@ -766,7 +796,7 @@ with st.sidebar:
             # Show confirmation buttons
             confirm_col1, confirm_col2 = st.columns(2)
             with confirm_col1:
-                if st.button("✅ Confirm", use_container_width=True, type="primary"):
+                if st.button("✅ Confirm", width='stretch', type="primary"):
                     if redis_cache and redis_cache.client:
                         if redis_cache.clear_all_cache():
                             st.success("All cache data cleared!")
@@ -782,11 +812,11 @@ with st.sidebar:
                         st.warning("Redis cache not available")
                         st.session_state.confirm_clear_cache = False
             with confirm_col2:
-                if st.button("❌ Cancel", use_container_width=True):
+                if st.button("❌ Cancel", width='stretch'):
                     st.session_state.confirm_clear_cache = False
                     st.rerun()
         else:
-            if st.button("🗑️ Clear All Cache", use_container_width=True, help="Clear all cached data from Redis (stock, news, sentiment, RAG)"):
+            if st.button("🗑️ Clear All Cache", width='stretch', help="Clear all cached data from Redis (stock, news, sentiment, RAG)"):
                 if redis_cache and redis_cache.client:
                     st.session_state.confirm_clear_cache = True
                     st.warning("⚠️ This will delete ALL cached data. Please confirm.")
@@ -816,10 +846,18 @@ if st.session_state.load_data and symbol:
     # Update session state immediately so UI can show it
     st.session_state.cache_status = cache_status
     
-    with st.spinner("🔄 Collecting data and analyzing sentiment..."):
-        # Collect stock data and track cache status in real-time
+    # Multi-step progress bar for better UX
+    progress_bar = st.progress(0)
+    status_text = st.empty()
+    
+    try:
+        # Step 1: Fetching stock data (20%)
+        status_text.text("📊 Fetching stock data...")
+        progress_bar.progress(0.2)
+        
         if redis_cache:
             redis_cache.last_tier_used = None  # Reset before call
+        
         # Get data source filters from UI
         data_source_filters = None
         if 'search_filters' in st.session_state and 'data_sources' in st.session_state.search_filters:
@@ -827,9 +865,37 @@ if st.session_state.load_data and symbol:
             enabled_sources = [k for k, v in data_source_filters.items() if v]
             logger.info(f"App: Data source filters applied - Enabled: {', '.join(enabled_sources)}")
         
+        # Step 2: Collecting news articles (40%)
+        status_text.text("📰 Collecting news articles from multiple sources...")
+        progress_bar.progress(0.4)
+        
         # Collect data with source filters using collect_all_data
         # This method handles all sources and respects the filters
         data = collector.collect_all_data(symbol, data_source_filters=data_source_filters)
+        
+        # Clear any previous errors
+        if symbol in st.session_state.data_errors:
+            del st.session_state.data_errors[symbol]
+        
+    except Exception as e:
+        # Error handling with retry
+        progress_bar.empty()
+        status_text.empty()
+        
+        error_msg = f"Failed to fetch data: {str(e)}"
+        logger.error(f"Data collection error: {e}")
+        
+        st.session_state.data_errors[symbol] = error_msg
+        
+        if get_error_recovery_ui(error_msg, retry_key=f"retry_data_{symbol}"):
+            st.rerun()
+        
+        st.stop()
+    
+    try:
+        # Step 3: Storing in RAG (60%)
+        status_text.text("💾 Storing articles in RAG for context retrieval...")
+        progress_bar.progress(0.6)
         
         # Track cache status for stock data
         if redis_cache:
@@ -951,6 +1017,10 @@ if st.session_state.load_data and symbol:
                 days_back=filters.get("days_back")
             )
         
+        # Step 4: Analyzing sentiment (80%)
+        status_text.text("🤖 Analyzing sentiment with AI...")
+        progress_bar.progress(0.8)
+        
         # Batch analyze with parallel processing
         news_sentiments = analyzer.batch_analyze(
             texts=news_texts,
@@ -976,24 +1046,52 @@ if st.session_state.load_data and symbol:
             if not text:
                 social_sentiments[i] = {'positive': 0, 'negative': 0, 'neutral': 1}
         
+        # Step 5: Complete (100%)
+        status_text.text("✅ Analysis complete!")
+        progress_bar.progress(1.0)
+        
         st.session_state.news_sentiments = news_sentiments
         st.session_state.social_sentiments = social_sentiments
         
         # Final update of cache status (already updated incrementally above)
         st.session_state.cache_status = cache_status
         
-        st.session_state.load_data = False
-        st.session_state.title_shown = False  # Show title again after loading
-        # Force rerun to update UI with new cache status
-        st.rerun()
+        # Show success toast
+        time.sleep(0.3)  # Brief pause to show completion
+        progress_bar.empty()
+        status_text.empty()
+        
+        show_toast(f"✅ Successfully analyzed {symbol}!", "success")
+        
+    except Exception as e:
+        progress_bar.empty()
+        status_text.empty()
+        
+        error_msg = f"Failed to analyze sentiment: {str(e)}"
+        logger.error(f"Sentiment analysis error: {e}")
+        
+        if get_error_recovery_ui(error_msg, retry_key=f"retry_sentiment_{symbol}"):
+            st.rerun()
+        
+        # Show partial data if available
+        if data and data.get('news'):
+            st.warning("⚠️ Some data was collected but sentiment analysis failed. Showing available data.")
+        else:
+            st.stop()
+    
+    st.session_state.load_data = False
+    st.session_state.title_shown = False  # Show title again after loading
+    # Force rerun to update UI with new cache status
+    st.rerun()
 
-# Create tabs with better styling
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
+# Create tabs with better styling - including comparison tab
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "📊 Overview",
     "📈 Price Analysis",
     "📰 News & Sentiment",
     "🔧 Technical Analysis",
-    "🤖 AI Insights"
+    "🤖 AI Insights",
+    "📊 Comparison"
 ])
 
 data = st.session_state.data
@@ -1002,6 +1100,7 @@ social_sentiments = st.session_state.social_sentiments
 
 # Show active data sources and breakdown if data is available
 if data is not None:
+    
     # Show active data sources indicator
     if 'search_filters' in st.session_state and 'data_sources' in st.session_state.search_filters:
         active_sources = [k.replace('_', ' ').title() for k, v in st.session_state.search_filters['data_sources'].items() if v]
@@ -1163,9 +1262,22 @@ else:
             plot_bgcolor='rgba(0,0,0,0)',
             paper_bgcolor='rgba(0,0,0,0)',
             font=dict(size=12),
-            yaxis=dict(tickformat='.0%', range=[0, 1])
+            yaxis=dict(tickformat='.0%', range=[0, 1]),
+            clickmode='event+select'  # Enable click events for drill-down
         )
-        st.plotly_chart(fig_news, width='stretch', key="overview_sentiment_chart")
+        
+        # Enhanced hover template
+        fig_news.update_traces(
+            hovertemplate="<b>%{x}</b><br>Score: %{y:.1%}<extra></extra>"
+        )
+        
+        st.plotly_chart(fig_news, width='stretch', key="overview_sentiment_chart", on_select="rerun")
+        
+        # Show drill-down info if chart is clicked
+        if fig_news.data and hasattr(st.session_state, 'selected_chart_data'):
+            selected_data = st.session_state.get('selected_chart_data')
+            if selected_data:
+                st.info(f"Selected: {selected_data}")
         
         # Quick insights
         st.markdown("---")
@@ -1387,8 +1499,81 @@ else:
         if data.get('news'):
             st.subheader("📰 Recent News Articles")
             
+            # Search and filter section
+            search_col1, search_col2, search_col3 = st.columns([3, 1, 1])
+            
+            with search_col1:
+                search_query = st.text_input(
+                    "🔍 Search articles...",
+                    key="article_search",
+                    placeholder="Search by title, source, or content",
+                    help="Filter articles by keywords"
+                )
+            
+            with search_col2:
+                sentiment_filter = st.selectbox(
+                    "Sentiment",
+                    ["All", "Positive", "Negative", "Neutral"],
+                    key="sentiment_filter",
+                    help="Filter by sentiment"
+                )
+            
+            with search_col3:
+                sort_option = st.selectbox(
+                    "Sort by",
+                    ["Date (Newest)", "Date (Oldest)", "Sentiment (Positive)", "Sentiment (Negative)", "Source"],
+                    key="sort_option"
+                )
+            
+            # Get unique sources for filter
+            unique_sources = list(set([article.get('source', 'Unknown') for article in data['news']]))
+            source_filter = st.multiselect(
+                "Filter by Source",
+                options=unique_sources,
+                key="source_filter",
+                help="Select sources to display"
+            )
+            
+            # Apply filters
+            filtered_articles = filter_articles(
+                data['news'],
+                search_query=search_query if search_query else None,
+                sentiment_filter=sentiment_filter.lower() if sentiment_filter != "All" else None,
+                source_filter=source_filter if source_filter else None,
+                sentiments=news_sentiments
+            )
+            
+            # Sort articles
+            if sort_option == "Date (Newest)":
+                filtered_articles.sort(key=lambda x: x.get('timestamp', datetime.min), reverse=True)
+            elif sort_option == "Date (Oldest)":
+                filtered_articles.sort(key=lambda x: x.get('timestamp', datetime.min))
+            elif sort_option == "Sentiment (Positive)":
+                # Sort by positive sentiment score
+                filtered_indices = [data['news'].index(a) for a in filtered_articles if a in data['news']]
+                filtered_articles.sort(
+                    key=lambda x: news_sentiments[data['news'].index(x)]['positive'] if x in data['news'] else 0,
+                    reverse=True
+                )
+            elif sort_option == "Sentiment (Negative)":
+                filtered_articles.sort(
+                    key=lambda x: news_sentiments[data['news'].index(x)]['negative'] if x in data['news'] else 0,
+                    reverse=True
+                )
+            elif sort_option == "Source":
+                filtered_articles.sort(key=lambda x: x.get('source', ''))
+            
+            # Update news_sentiments to match filtered articles
+            filtered_sentiments = []
+            for article in filtered_articles:
+                if article in data['news']:
+                    idx = data['news'].index(article)
+                    filtered_sentiments.append(news_sentiments[idx] if idx < len(news_sentiments) else {'positive': 0, 'negative': 0, 'neutral': 1})
+                else:
+                    filtered_sentiments.append({'positive': 0, 'negative': 0, 'neutral': 1})
+            
             # Pagination controls
-            total_articles = len(data['news'])
+            total_articles = len(filtered_articles)
             articles_per_page = settings.app.ui_articles_per_page
             
             # Initialize session state for pagination
@@ -1397,10 +1582,14 @@ else:
             if 'show_all_articles' not in st.session_state:
                 st.session_state.show_all_articles = False
             
-            # Pagination controls
-            col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
+            # Reset page if filters changed
+            if search_query or sentiment_filter != "All" or source_filter:
+                st.session_state.article_page = 1
             
-            with col1:
+            # Pagination controls
+            pag_col1, pag_col2, pag_col3, pag_col4 = st.columns([2, 1, 1, 1])
+            
+            with pag_col1:
                 show_all = st.checkbox(
                     "Show All Articles",
                     value=st.session_state.show_all_articles,
@@ -1412,30 +1601,35 @@ else:
             if not show_all and total_articles > articles_per_page:
                 total_pages = (total_articles + articles_per_page - 1) // articles_per_page
                 
-                with col2:
+                with pag_col2:
                     if st.button("◀ Previous", disabled=st.session_state.article_page <= 1):
                         st.session_state.article_page = max(1, st.session_state.article_page - 1)
                         st.rerun()
                 
-                with col3:
+                with pag_col3:
                     st.markdown(f"**Page {st.session_state.article_page} of {total_pages}**")
                 
-                with col4:
+                with pag_col4:
                     if st.button("Next ▶", disabled=st.session_state.article_page >= total_pages):
                         st.session_state.article_page = min(total_pages, st.session_state.article_page + 1)
                         st.rerun()
             
             # Determine which articles to display
             if show_all:
-                articles_to_display = data['news']
+                articles_to_display = filtered_articles
+                sentiments_to_display = filtered_sentiments
                 start_idx = 0
                 end_idx = total_articles
             else:
                 start_idx = (st.session_state.article_page - 1) * articles_per_page
                 end_idx = min(start_idx + articles_per_page, total_articles)
-                articles_to_display = data['news'][start_idx:end_idx]
+                articles_to_display = filtered_articles[start_idx:end_idx]
+                sentiments_to_display = filtered_sentiments[start_idx:end_idx]
             
             # Display article count
+            if search_query or sentiment_filter != "All" or source_filter:
+                st.info(f"🔍 Found {total_articles} article(s) matching your filters")
+            
             if show_all:
                 st.markdown(f"*Showing all {total_articles} articles*")
             else:
@@ -1443,9 +1637,8 @@ else:
             
             # Display articles
             for i, article in enumerate(articles_to_display):
-                # Calculate actual index in full list for sentiment lookup
-                actual_idx = start_idx + i if not show_all else i
-                sentiment = news_sentiments[actual_idx] if actual_idx < len(news_sentiments) else {
+                # Use filtered sentiments
+                sentiment = sentiments_to_display[i] if i < len(sentiments_to_display) else {
                     'positive': 0, 'negative': 0, 'neutral': 1
                 }
                 
@@ -1751,3 +1944,191 @@ else:
             yaxis=dict(tickformat='.0%', range=[0, 1])
         )
         st.plotly_chart(fig_comparison, width='stretch', key="ai_sentiment_breakdown")
+    
+    # Tab 6: Stock Comparison - Enhanced with AI Insights
+    with tab6:
+        st.header("📊 Stock Comparison")
+        st.markdown("Compare multiple stocks side-by-side with AI-powered insights")
+        
+        # Initialize comparison state
+        if 'comparison_stocks' not in st.session_state:
+            st.session_state.comparison_stocks = []
+        if 'comparison_data' not in st.session_state:
+            st.session_state.comparison_data = {}
+        if 'comparison_sentiments' not in st.session_state:
+            st.session_state.comparison_sentiments = {}
+        if 'comparison_insights' not in st.session_state:
+            st.session_state.comparison_insights = None
+        
+        current_symbol = st.session_state.get('symbol', 'AAPL')
+        
+        # Stock selector
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            compare_stocks = st.multiselect(
+                "Select stocks to compare (2-5 recommended)",
+                options=['AAPL', 'MSFT', 'GOOGL', 'TSLA', 'AMZN', 'META', 'NVDA', 'NFLX', 'AMD', 'INTC'] + 
+                        [s for s in st.session_state.recent_searches if s not in ['AAPL', 'MSFT', 'GOOGL', 'TSLA', 'AMZN', 'META', 'NVDA', 'NFLX', 'AMD', 'INTC']],
+                default=[current_symbol] if current_symbol else [],
+                key="compare_stocks_select",
+                help="Select 2 or more stocks to compare their sentiment and performance"
+            )
+        
+        with col2:
+            if st.button("🔄 Compare", type="primary", width='stretch'):
+                if len(compare_stocks) < 2:
+                    st.warning("⚠️ Please select at least 2 stocks to compare")
+                else:
+                    st.session_state.comparison_stocks = compare_stocks
+                    st.session_state.comparison_data = {}
+                    st.session_state.comparison_sentiments = {}
+                    st.session_state.comparison_insights = None
+                    
+                    # Collect data for all stocks
+                    progress_bar = st.progress(0)
+                    status_text = st.empty()
+                    
+                    total_stocks = len(compare_stocks)
+                    for idx, sym in enumerate(compare_stocks):
+                        try:
+                            status_text.text(f"📊 Analyzing {sym} ({idx+1}/{total_stocks})...")
+                            progress_bar.progress((idx + 1) / total_stocks)
+                            
+                            comp_data = collector.collect_all_data(sym)
+                            comp_texts = [a.get('summary', a.get('title', '')) for a in comp_data.get('news', [])]
+                            
+                            if comp_texts:
+                                comp_sentiments = analyzer.batch_analyze(comp_texts, symbol=sym)
+                                
+                                # Store articles in RAG for future context
+                                if rag_service and comp_data.get('news'):
+                                    logger.info(f"Storing {len(comp_data['news'])} articles in RAG for {sym}")
+                                    rag_service.store_articles_batch(comp_data['news'], sym)
+                                
+                                # Aggregate sentiment
+                                if comp_sentiments:
+                                    df = pd.DataFrame(comp_sentiments)
+                                    st.session_state.comparison_data[sym] = comp_data
+                                    st.session_state.comparison_sentiments[sym] = {
+                                        'positive': float(df['positive'].mean()),
+                                        'negative': float(df['negative'].mean()),
+                                        'neutral': float(df['neutral'].mean())
+                                    }
+                        except Exception as e:
+                            logger.error(f"Error comparing {sym}: {e}")
+                            st.warning(f"⚠️ Failed to load data for {sym}: {str(e)}")
+                    
+                    progress_bar.empty()
+                    status_text.empty()
+                    
+                    # Generate AI insights
+                    if st.session_state.comparison_data and st.session_state.comparison_sentiments:
+                        status_text.text("🤖 Generating AI comparison insights...")
+                        st.session_state.comparison_insights = generate_comparison_insights(
+                            st.session_state.comparison_data,
+                            st.session_state.comparison_sentiments,
+                            analyzer
+                        )
+                        status_text.empty()
+                        show_toast("✅ Comparison complete!", "success")
+                        st.rerun()
+        
+        # Display comparison if data available
+        if st.session_state.get('comparison_data') and st.session_state.get('comparison_sentiments'):
+            st.markdown("---")
+            
+            # AI Insights Section
+            if st.session_state.comparison_insights:
+                st.subheader("🤖 AI-Powered Comparison Insights")
+                st.markdown(
+                    f"""
+                    <div style='background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+                                padding: 1.5rem; border-radius: 12px; color: white; margin-bottom: 2rem;'>
+                        <div style='white-space: pre-wrap;'>{st.session_state.comparison_insights}</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+                st.markdown("---")
+            
+            # Comparison metrics
+            comp_df = pd.DataFrame([
+                {
+                    'Symbol': sym,
+                    'Price': comp_data.get('price_data', {}).get('price', 0),
+                    'Market Cap': comp_data.get('price_data', {}).get('market_cap', 0) / 1e9,  # In billions
+                    'Positive': sent['positive'],
+                    'Negative': sent['negative'],
+                    'Neutral': sent['neutral'],
+                    'Net Sentiment': sent['positive'] - sent['negative']
+                }
+                for sym, comp_data in st.session_state.comparison_data.items()
+                if sym in st.session_state.comparison_sentiments
+                for sent in [st.session_state.comparison_sentiments[sym]]
+            ])
+            
+            if not comp_df.empty:
+                # Comparison chart
+                st.subheader("📊 Sentiment Comparison Chart")
+                fig_comp = px.bar(
+                    comp_df,
+                    x='Symbol',
+                    y=['Positive', 'Negative', 'Neutral'],
+                    title="Sentiment Comparison Across Stocks",
+                    barmode='group',
+                    color_discrete_map={
+                        'Positive': '#2ecc71',
+                        'Negative': '#e74c3c',
+                        'Neutral': '#95a5a6'
+                    }
+                )
+                fig_comp.update_layout(
+                    height=500,
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    yaxis_title="Sentiment Score",
+                    xaxis_title="Stock Symbol",
+                    hovermode='x unified'
+                )
+                st.plotly_chart(fig_comp, width='stretch', key="comparison_chart")
+                
+                # Net Sentiment Comparison
+                st.subheader("📈 Net Sentiment Comparison")
+                fig_net = px.bar(
+                    comp_df,
+                    x='Symbol',
+                    y='Net Sentiment',
+                    title="Net Sentiment (Positive - Negative)",
+                    color='Net Sentiment',
+                    color_continuous_scale=['#e74c3c', '#95a5a6', '#2ecc71']
+                )
+                fig_net.update_layout(
+                    height=400,
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    yaxis_title="Net Sentiment",
+                    xaxis_title="Stock Symbol",
+                    showlegend=False
+                )
+                fig_net.update_traces(
+                    texttemplate='%{y:+.2%}',
+                    textposition='outside'
+                )
+                st.plotly_chart(fig_net, width='stretch', key="net_sentiment_chart")
+                
+                # Comparison table
+                st.subheader("📋 Detailed Comparison Table")
+                st.dataframe(
+                    comp_df.style.format({
+                        'Price': '${:.2f}',
+                        'Market Cap': '${:.2f}B',
+                        'Positive': '{:.2%}',
+                        'Negative': '{:.2%}',
+                        'Neutral': '{:.2%}',
+                        'Net Sentiment': '{:+.2%}'
+                    }),
+                    width='stretch',
+                    height=400
+                )
+        else:
+            st.info("👆 Select stocks above and click 'Compare' to see the comparison analysis")
