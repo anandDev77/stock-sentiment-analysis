@@ -169,6 +169,37 @@ class AzureAISearchSettings(BaseSettings):
             case_sensitive = False
 
 
+class DataSourceSettings(BaseSettings):
+    """Data source configuration settings."""
+    
+    # Reddit (PRAW) - Free, requires app registration at https://www.reddit.com/prefs/apps
+    reddit_client_id: Optional[str] = Field(default=None, description="Reddit client ID")
+    reddit_client_secret: Optional[str] = Field(default=None, description="Reddit client secret")
+    reddit_user_agent: Optional[str] = Field(default="stock-sentiment-analysis/1.0", description="Reddit user agent")
+    reddit_enabled: bool = Field(default=False, description="Enable Reddit data collection")
+    reddit_limit: int = Field(default=20, description="Number of Reddit posts to fetch")
+    
+    # Alpha Vantage - Free tier: 500 calls/day
+    alpha_vantage_api_key: Optional[str] = Field(default=None, description="Alpha Vantage API key")
+    alpha_vantage_enabled: bool = Field(default=False, description="Enable Alpha Vantage news")
+    
+    # Finnhub - Free tier: 60 calls/minute
+    finnhub_api_key: Optional[str] = Field(default=None, description="Finnhub API key")
+    finnhub_enabled: bool = Field(default=False, description="Enable Finnhub news")
+    
+    if PYDANTIC_V2:
+        model_config = SettingsConfigDict(
+            env_prefix="DATA_SOURCE_",
+            case_sensitive=False,
+            extra="ignore"
+        )
+    else:
+        class Config:
+            """Pydantic v1 configuration."""
+            env_prefix = "DATA_SOURCE_"
+            case_sensitive = False
+
+
 class AppSettings(BaseSettings):
     """Application-wide settings."""
     
@@ -288,7 +319,28 @@ class Settings:
                 self.azure_ai_search = AzureAISearchSettings()
         except Exception as e:
             # Azure AI Search is optional, so we allow it to fail
-            self.azure_ai_search = None
+                self.azure_ai_search = None
+        
+        try:
+            import os
+            if PYDANTIC_V2:
+                self.data_sources = DataSourceSettings(
+                    reddit_client_id=os.getenv("DATA_SOURCE_REDDIT_CLIENT_ID"),
+                    reddit_client_secret=os.getenv("DATA_SOURCE_REDDIT_CLIENT_SECRET"),
+                    reddit_user_agent=os.getenv("DATA_SOURCE_REDDIT_USER_AGENT", "stock-sentiment-analysis/1.0"),
+                    reddit_enabled=os.getenv("DATA_SOURCE_REDDIT_ENABLED", "false").lower() in ("true", "1", "yes"),
+                    reddit_limit=int(os.getenv("DATA_SOURCE_REDDIT_LIMIT", "20")),
+                    alpha_vantage_api_key=os.getenv("DATA_SOURCE_ALPHA_VANTAGE_API_KEY"),
+                    alpha_vantage_enabled=os.getenv("DATA_SOURCE_ALPHA_VANTAGE_ENABLED", "false").lower() in ("true", "1", "yes"),
+                    finnhub_api_key=os.getenv("DATA_SOURCE_FINNHUB_API_KEY"),
+                    finnhub_enabled=os.getenv("DATA_SOURCE_FINNHUB_ENABLED", "false").lower() in ("true", "1", "yes")
+                )
+            else:
+                self.data_sources = DataSourceSettings()
+        except Exception as e:
+            # Data sources are optional
+            # Note: logger not available here, use print or skip logging
+            self.data_sources = DataSourceSettings()
         
         self.app = AppSettings()
     

@@ -7,7 +7,7 @@ This module provides functionality to collect stock market data including:
 """
 
 from typing import List, Dict, Optional
-from datetime import datetime
+from datetime import datetime, timedelta, timezone as tz
 import yfinance as yf
 from dateutil import parser
 
@@ -17,6 +17,29 @@ from ..utils.validators import validate_stock_symbol, sanitize_text
 from .cache import RedisCache
 
 logger = get_logger(__name__)
+
+
+def normalize_datetime(dt: datetime) -> datetime:
+    """
+    Normalize datetime to naive format for consistent comparison and storage.
+    
+    Converts timezone-aware datetimes to UTC and removes timezone info.
+    Leaves naive datetimes unchanged.
+    
+    Args:
+        dt: datetime object (may be timezone-aware or naive)
+        
+    Returns:
+        Naive datetime object
+    """
+    if not isinstance(dt, datetime):
+        return datetime.now()
+    
+    if dt.tzinfo is not None:
+        # Convert timezone-aware to UTC, then make naive
+        return dt.astimezone(tz.utc).replace(tzinfo=None)
+    
+    return dt
 
 
 class StockDataCollector:
@@ -80,24 +103,30 @@ class StockDataCollector:
                 'price': 0.0,
                 'company_name': symbol,
                 'market_cap': 0,
-                'timestamp': datetime.now()
+                'timestamp': normalize_datetime(datetime.now())
             }
         
         # Check cache first
         if self.cache:
             cached_data = self.cache.get_cached_stock_data(symbol)
             if cached_data:
+                logger.info(f"Data Collection: Stock data CACHE HIT for {symbol}")
                 # Convert timestamp string back to datetime if needed
                 if isinstance(cached_data.get('timestamp'), str):
                     try:
-                        cached_data['timestamp'] = datetime.fromisoformat(
-                            cached_data['timestamp']
+                        cached_data['timestamp'] = normalize_datetime(
+                            datetime.fromisoformat(cached_data['timestamp'])
                         )
                     except ValueError:
-                        cached_data['timestamp'] = datetime.now()
+                        cached_data['timestamp'] = normalize_datetime(datetime.now())
+                elif isinstance(cached_data.get('timestamp'), datetime):
+                    cached_data['timestamp'] = normalize_datetime(cached_data['timestamp'])
                 return cached_data
+            else:
+                logger.info(f"Data Collection: Stock data CACHE MISS for {symbol}, fetching from API")
         
         try:
+            logger.info(f"Data Collection: Fetching stock data for {symbol} from yfinance API")
             ticker = yf.Ticker(symbol)
             info = ticker.info
             hist = ticker.history(period="1d")
@@ -109,8 +138,10 @@ class StockDataCollector:
                     'price': current_price,
                     'company_name': info.get('longName', symbol),
                     'market_cap': info.get('marketCap', 0) or 0,
-                    'timestamp': datetime.now()
+                    'timestamp': normalize_datetime(datetime.now())
                 }
+                
+                logger.info(f"Data Collection: Fetched stock data for {symbol} - Price: ${current_price:.2f}, Company: {result['company_name']}")
                 
                 # Cache the result
                 if self.cache:
@@ -119,6 +150,7 @@ class StockDataCollector:
                         result,
                         ttl=self.settings.app.cache_ttl_stock
                     )
+                    logger.info(f"Data Collection: Cached stock data for {symbol} (TTL: {self.settings.app.cache_ttl_stock}s)")
                 
                 return result
         except Exception as e:
@@ -130,7 +162,7 @@ class StockDataCollector:
             'price': 0.0,
             'company_name': symbol,
             'market_cap': 0,
-            'timestamp': datetime.now()
+            'timestamp': normalize_datetime(datetime.now())
         }
     
     def get_news_headlines(self, symbol: str, limit: int = 10) -> List[Dict]:
@@ -157,23 +189,29 @@ class StockDataCollector:
         if self.cache:
             cached_news = self.cache.get_cached_news(symbol)
             if cached_news:
-                # Convert timestamp strings back to datetime
+                logger.info(f"Data Collection: News data CACHE HIT for {symbol} ({len(cached_news)} articles)")
+                # Convert timestamp strings back to datetime and normalize
                 for article in cached_news:
                     if isinstance(article.get('timestamp'), str):
                         try:
-                            article['timestamp'] = datetime.fromisoformat(
-                                article['timestamp']
+                            article['timestamp'] = normalize_datetime(
+                                datetime.fromisoformat(article['timestamp'])
                             )
                         except ValueError:
-                            article['timestamp'] = datetime.now()
+                            article['timestamp'] = normalize_datetime(datetime.now())
+                    elif isinstance(article.get('timestamp'), datetime):
+                        article['timestamp'] = normalize_datetime(article['timestamp'])
                 return cached_news
+            else:
+                logger.info(f"Data Collection: News data CACHE MISS for {symbol}, fetching from API")
         
         try:
+            logger.info(f"Data Collection: Fetching news for {symbol} from yfinance API (limit={limit})")
             ticker = yf.Ticker(symbol)
             news = ticker.news
             
             if not news:
-                logger.info(f"No news found for {symbol}")
+                logger.info(f"Data Collection: No news found for {symbol}")
                 return []
             
             headlines = []
@@ -214,6 +252,7 @@ class StockDataCollector:
                     
                     # Extract timestamp
                     timestamp = self._extract_timestamp(content, article)
+                    timestamp = normalize_datetime(timestamp)
                     
                     headline_data = {
                         'title': title,
@@ -229,6 +268,8 @@ class StockDataCollector:
                     logger.warning(f"Error processing article {i} for {symbol}: {e}")
                     continue
             
+            logger.info(f"Data Collection: Fetched {len(headlines)} news articles for {symbol}")
+            
             # Cache the results
             if self.cache:
                 self.cache.cache_news(
@@ -236,6 +277,7 @@ class StockDataCollector:
                     headlines,
                     ttl=self.settings.app.cache_ttl_news
                 )
+                logger.info(f"Data Collection: Cached news data for {symbol} (TTL: {self.settings.app.cache_ttl_news}s)")
             
             return headlines
             
@@ -314,42 +356,368 @@ class StockDataCollector:
                 pass
         
         # Fallback to current time
-        return datetime.now()
+        return normalize_datetime(datetime.now())
     
     def get_reddit_sentiment_data(self, symbol: str) -> List[Dict]:
         """
-        Get social media sentiment data.
+        Get Reddit posts about a stock symbol.
         
-        Currently returns empty list as we only use free APIs.
-        To add real social media data, integrate with:
-        - Reddit API (PRAW) - requires API credentials
-        - Twitter API - requires API credentials and may have costs
-        - Other free alternatives if available
+        Uses PRAW (Python Reddit API Wrapper) to fetch posts from relevant subreddits.
+        Free to use, just requires Reddit app registration at https://www.reddit.com/prefs/apps
         
         Args:
             symbol: Stock ticker symbol
             
         Returns:
-            Empty list (placeholder for future integration)
+            List of Reddit post dictionaries with title, text, source, url, timestamp
         """
-        return []
+        if not self.settings.data_sources.reddit_enabled:
+            return []
+        
+        if not self.settings.data_sources.reddit_client_id or not self.settings.data_sources.reddit_client_secret:
+            logger.warning("Reddit credentials not configured. Set DATA_SOURCE_REDDIT_CLIENT_ID and DATA_SOURCE_REDDIT_CLIENT_SECRET in .env")
+            return []
+        
+        try:
+            import praw
+            
+            # Initialize Reddit client
+            reddit = praw.Reddit(
+                client_id=self.settings.data_sources.reddit_client_id,
+                client_secret=self.settings.data_sources.reddit_client_secret,
+                user_agent=self.settings.data_sources.reddit_user_agent
+            )
+            
+            logger.info(f"Data Collection: Fetching Reddit posts for {symbol}")
+            
+            posts = []
+            limit = self.settings.data_sources.reddit_limit
+            
+            # Search in relevant subreddits
+            subreddits = ['stocks', 'investing', 'StockMarket', 'SecurityAnalysis', 'wallstreetbets']
+            
+            for subreddit_name in subreddits:
+                try:
+                    subreddit = reddit.subreddit(subreddit_name)
+                    # Search for posts containing the symbol
+                    search_query = f"{symbol} OR ${symbol}"
+                    for post in subreddit.search(search_query, limit=limit // len(subreddits), sort='relevance', time_filter='week'):
+                        # Skip if already collected (by URL)
+                        if any(p.get('url') == post.url for p in posts):
+                            continue
+                        
+                        # Extract post data
+                        post_text = post.selftext if hasattr(post, 'selftext') else ''
+                        post_title = post.title if hasattr(post, 'title') else ''
+                        
+                        # Combine title and text for analysis
+                        full_text = f"{post_title} {post_text}".strip()
+                        
+                        if not full_text or len(full_text) < 20:  # Skip very short posts
+                            continue
+                        
+                        # Convert timestamp
+                        post_timestamp = datetime.fromtimestamp(post.created_utc) if hasattr(post, 'created_utc') else datetime.now()
+                        post_timestamp = normalize_datetime(post_timestamp)
+                        
+                        posts.append({
+                            'title': post_title[:200],  # Limit title length
+                            'summary': post_text[:500] if post_text else post_title[:500],  # Use text or title as summary
+                            'source': f'Reddit r/{subreddit_name}',
+                            'url': post.url if hasattr(post, 'url') else f"https://reddit.com{post.permalink}" if hasattr(post, 'permalink') else '',
+                            'timestamp': post_timestamp,
+                            'platform': 'Reddit',
+                            'subreddit': subreddit_name
+                        })
+                        
+                        if len(posts) >= limit:
+                            break
+                    
+                    if len(posts) >= limit:
+                        break
+                        
+                except Exception as e:
+                    logger.warning(f"Error fetching from r/{subreddit_name}: {e}")
+                    continue
+            
+            logger.info(f"Data Collection: Fetched {len(posts)} Reddit posts for {symbol}")
+            return posts[:limit]
+            
+        except ImportError:
+            logger.warning("PRAW not installed. Install with: pip install praw")
+            return []
+        except Exception as e:
+            logger.error(f"Error fetching Reddit data for {symbol}: {e}")
+            return []
     
-    def collect_all_data(self, symbol: str) -> Dict:
+    def get_alpha_vantage_news(self, symbol: str, limit: int = 10) -> List[Dict]:
         """
-        Collect all available data for a stock symbol.
+        Get news from Alpha Vantage API.
+        
+        Free tier: 500 calls/day
+        Get API key at: https://www.alphavantage.co/support/#api-key
         
         Args:
             symbol: Stock ticker symbol
+            limit: Maximum number of articles to return
+            
+        Returns:
+            List of news article dictionaries
+        """
+        if not self.settings.data_sources.alpha_vantage_enabled:
+            return []
+        
+        if not self.settings.data_sources.alpha_vantage_api_key:
+            logger.warning("Alpha Vantage API key not configured. Set DATA_SOURCE_ALPHA_VANTAGE_API_KEY in .env")
+            return []
+        
+        try:
+            import requests
+            
+            logger.info(f"Data Collection: Fetching Alpha Vantage news for {symbol}")
+            
+            url = "https://www.alphavantage.co/query"
+            params = {
+                'function': 'NEWS_SENTIMENT',
+                'tickers': symbol,
+                'apikey': self.settings.data_sources.alpha_vantage_api_key,
+                'limit': min(limit, 50)  # Alpha Vantage max is 50
+            }
+            
+            response = requests.get(url, params=params, timeout=10)
+            response.raise_for_status()
+            data = response.json()
+            
+            if 'Error Message' in data:
+                logger.error(f"Alpha Vantage API error: {data['Error Message']}")
+                return []
+            
+            if 'Note' in data:
+                logger.warning(f"Alpha Vantage rate limit: {data['Note']}")
+                return []
+            
+            articles = []
+            feed = data.get('feed', [])
+            
+            for item in feed[:limit]:
+                try:
+                    # Extract article data
+                    title = item.get('title', '')
+                    summary = item.get('summary', '')
+                    source = item.get('source', 'Alpha Vantage')
+                    url = item.get('url', '')
+                    
+                    # Parse timestamp
+                    timestamp_str = item.get('time_published', '')
+                    if timestamp_str:
+                        try:
+                            # Format: 20240101T120000
+                            timestamp = datetime.strptime(timestamp_str, '%Y%m%dT%H%M%S')
+                        except ValueError:
+                            timestamp = datetime.now()
+                    else:
+                        timestamp = datetime.now()
+                    
+                    articles.append({
+                        'title': sanitize_text(title),
+                        'summary': sanitize_text(summary),
+                        'source': f'Alpha Vantage - {source}',
+                        'url': url,
+                        'timestamp': normalize_datetime(timestamp)
+                    })
+                except Exception as e:
+                    logger.warning(f"Error processing Alpha Vantage article: {e}")
+                    continue
+            
+            logger.info(f"Data Collection: Fetched {len(articles)} articles from Alpha Vantage for {symbol}")
+            return articles
+            
+        except Exception as e:
+            logger.error(f"Error fetching Alpha Vantage news for {symbol}: {e}")
+            return []
+    
+    def get_finnhub_news(self, symbol: str, limit: int = 10) -> List[Dict]:
+        """
+        Get news from Finnhub API.
+        
+        Free tier: 60 calls/minute
+        Get API key at: https://finnhub.io/register
+        
+        Args:
+            symbol: Stock ticker symbol
+            limit: Maximum number of articles to return
+            
+        Returns:
+            List of news article dictionaries
+        """
+        if not self.settings.data_sources.finnhub_enabled:
+            return []
+        
+        if not self.settings.data_sources.finnhub_api_key:
+            logger.warning("Finnhub API key not configured. Set DATA_SOURCE_FINNHUB_API_KEY in .env")
+            return []
+        
+        try:
+            import requests
+            
+            logger.info(f"Data Collection: Fetching Finnhub news for {symbol}")
+            
+            url = "https://finnhub.io/api/v1/company-news"
+            params = {
+                'symbol': symbol,
+                'token': self.settings.data_sources.finnhub_api_key,
+                'from': (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d'),
+                'to': datetime.now().strftime('%Y-%m-%d')
+            }
+            
+            response = requests.get(url, params=params, timeout=10)
+            response.raise_for_status()
+            data = response.json()
+            
+            if isinstance(data, dict) and 'error' in data:
+                logger.error(f"Finnhub API error: {data['error']}")
+                return []
+            
+            articles = []
+            for item in data[:limit]:
+                try:
+                    title = item.get('headline', item.get('title', ''))
+                    summary = item.get('summary', '')
+                    source = item.get('source', 'Finnhub')
+                    url = item.get('url', '')
+                    
+                    # Parse timestamp
+                    timestamp_val = item.get('datetime')
+                    if timestamp_val:
+                        try:
+                            if isinstance(timestamp_val, (int, float)):
+                                timestamp = datetime.fromtimestamp(timestamp_val)
+                            else:
+                                timestamp = parser.parse(str(timestamp_val))
+                        except (ValueError, TypeError):
+                            timestamp = datetime.now()
+                    else:
+                        timestamp = datetime.now()
+                    
+                    articles.append({
+                        'title': sanitize_text(title),
+                        'summary': sanitize_text(summary),
+                        'source': f'Finnhub - {source}',
+                        'url': url,
+                        'timestamp': normalize_datetime(timestamp)
+                    })
+                except Exception as e:
+                    logger.warning(f"Error processing Finnhub article: {e}")
+                    continue
+            
+            logger.info(f"Data Collection: Fetched {len(articles)} articles from Finnhub for {symbol}")
+            return articles
+            
+        except Exception as e:
+            logger.error(f"Error fetching Finnhub news for {symbol}: {e}")
+            return []
+    
+    def collect_all_data(self, symbol: str, data_source_filters: Optional[Dict[str, bool]] = None) -> Dict:
+        """
+        Collect all available data for a stock symbol from multiple sources.
+        
+        Args:
+            symbol: Stock ticker symbol
+            data_source_filters: Optional dictionary with source enable/disable flags:
+                - yfinance: bool (default: True, always enabled)
+                - alpha_vantage: bool (default: from settings)
+                - finnhub: bool (default: from settings)
+                - reddit: bool (default: from settings)
             
         Returns:
             Dictionary with:
             - price_data: Stock price and company info
-            - news: List of news articles
-            - social_media: List of social media posts (currently empty)
+            - news: List of news articles (from enabled sources)
+            - social_media: List of Reddit posts (if enabled)
         """
+        # Default to settings if filters not provided
+        if data_source_filters is None:
+            data_source_filters = {
+                "yfinance": True,
+                "alpha_vantage": self.settings.data_sources.alpha_vantage_enabled,
+                "finnhub": self.settings.data_sources.finnhub_enabled,
+                "reddit": self.settings.data_sources.reddit_enabled
+            }
+        
+        # Collect news from multiple sources based on filters
+        all_news = []
+        source_counts = {}
+        
+        # Primary source: yfinance (always enabled)
+        if data_source_filters.get("yfinance", True):
+            yf_news = self.get_news_headlines(symbol)
+            all_news.extend(yf_news)
+            source_counts["yfinance"] = len(yf_news)
+            logger.info(f"Data Collection: yfinance enabled - fetched {len(yf_news)} articles")
+        else:
+            source_counts["yfinance"] = 0
+            logger.info("Data Collection: yfinance disabled by filter")
+        
+        # Additional sources if enabled in both settings and filters
+        av_news = []
+        if data_source_filters.get("alpha_vantage", False) and self.settings.data_sources.alpha_vantage_enabled:
+            av_news = self.get_alpha_vantage_news(symbol)
+            all_news.extend(av_news)
+            source_counts["alpha_vantage"] = len(av_news)
+            logger.info(f"Data Collection: Alpha Vantage enabled - fetched {len(av_news)} articles")
+        else:
+            source_counts["alpha_vantage"] = 0
+            if not data_source_filters.get("alpha_vantage", False):
+                logger.info("Data Collection: Alpha Vantage disabled by filter")
+        
+        fh_news = []
+        if data_source_filters.get("finnhub", False) and self.settings.data_sources.finnhub_enabled:
+            fh_news = self.get_finnhub_news(symbol)
+            all_news.extend(fh_news)
+            source_counts["finnhub"] = len(fh_news)
+            logger.info(f"Data Collection: Finnhub enabled - fetched {len(fh_news)} articles")
+        else:
+            source_counts["finnhub"] = 0
+            if not data_source_filters.get("finnhub", False):
+                logger.info("Data Collection: Finnhub disabled by filter")
+        
+        # Remove duplicates by URL
+        seen_urls = set()
+        unique_news = []
+        for article in all_news:
+            url = article.get('url', '')
+            if url and url not in seen_urls:
+                seen_urls.add(url)
+                unique_news.append(article)
+            elif not url:  # Include articles without URLs (like Reddit posts)
+                unique_news.append(article)
+        
+        # Normalize all timestamps to naive format for consistency
+        for article in unique_news:
+            if 'timestamp' in article:
+                article['timestamp'] = normalize_datetime(article['timestamp'])
+        
+        # Sort by timestamp (most recent first)
+        unique_news.sort(key=lambda x: x.get('timestamp', datetime.min), reverse=True)
+        
+        logger.info(
+            f"Data Collection: Collected {len(unique_news)} unique articles from {len(all_news)} total "
+            f"(yfinance: {source_counts['yfinance']}, Alpha Vantage: {source_counts['alpha_vantage']}, "
+            f"Finnhub: {source_counts['finnhub']})"
+        )
+        
+        # Get Reddit data if enabled
+        reddit_posts = []
+        if data_source_filters.get("reddit", False) and self.settings.data_sources.reddit_enabled:
+            reddit_posts = self.get_reddit_sentiment_data(symbol)
+            logger.info(f"Data Collection: Reddit enabled - fetched {len(reddit_posts)} posts")
+        else:
+            if not data_source_filters.get("reddit", False):
+                logger.info("Data Collection: Reddit disabled by filter")
+        
         return {
             'price_data': self.get_stock_price(symbol),
-            'news': self.get_news_headlines(symbol),
-            'social_media': self.get_reddit_sentiment_data(symbol)
+            'news': unique_news,
+            'social_media': reddit_posts
         }
 

@@ -98,6 +98,21 @@ Edit `.env` and fill in your actual values. The `.env.example` file contains det
 - `APP_RAG_SIMILARITY_THRESHOLD` - Minimum similarity for RAG (default: 0.3)
 - Cache TTL settings for performance tuning
 
+**Optional Data Sources (for more diverse sentiment data):**
+- **Reddit** (Free, requires app registration):
+  - `DATA_SOURCE_REDDIT_CLIENT_ID` - Get from https://www.reddit.com/prefs/apps
+  - `DATA_SOURCE_REDDIT_CLIENT_SECRET` - Get from https://www.reddit.com/prefs/apps
+  - `DATA_SOURCE_REDDIT_ENABLED=true` - Enable Reddit data collection
+  - `DATA_SOURCE_REDDIT_LIMIT=20` - Number of posts to fetch
+  
+- **Alpha Vantage** (Free tier: 500 calls/day):
+  - `DATA_SOURCE_ALPHA_VANTAGE_API_KEY` - Get from https://www.alphavantage.co/support/#api-key
+  - `DATA_SOURCE_ALPHA_VANTAGE_ENABLED=true` - Enable Alpha Vantage news
+  
+- **Finnhub** (Free tier: 60 calls/minute):
+  - `DATA_SOURCE_FINNHUB_API_KEY` - Get from https://finnhub.io/register
+  - `DATA_SOURCE_FINNHUB_ENABLED=true` - Enable Finnhub news
+
 See `.env.example` for complete documentation of all available settings.
 
 ## Azure Setup

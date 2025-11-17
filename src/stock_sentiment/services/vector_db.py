@@ -154,12 +154,12 @@ class AzureAISearchVectorDB(VectorDatabase):
                 SearchIndex,
                 SimpleField,
                 SearchableField,
+                SearchField,
                 VectorSearch,
                 HnswAlgorithmConfiguration,
                 VectorSearchAlgorithmKind,
                 VectorSearchAlgorithmMetric,
                 VectorSearchProfile,
-                VectorField,
                 SearchFieldDataType
             )
             
@@ -169,22 +169,23 @@ class AzureAISearchVectorDB(VectorDatabase):
             # Check if index exists
             try:
                 existing_index = self._index_client.get_index(index_name)
-                logger.info(f"Azure AI Search index '{index_name}' already exists")
+                logger.info(f"Azure AI Search: Index '{index_name}' already exists")
                 self._index_created = True
                 return True
             except Exception:
                 # Index doesn't exist, create it
+                logger.info(f"Azure AI Search: Index '{index_name}' not found, creating new index...")
                 pass
             
             # Define index schema
             fields = [
                 SimpleField(name="id", type=SearchFieldDataType.String, key=True),
                 SearchableField(name="content", type=SearchFieldDataType.String, retrievable=True),
-                VectorField(
+                SearchField(
                     name="contentVector",
                     type=SearchFieldDataType.Collection(SearchFieldDataType.Single),
-                    dimensions=search_config.vector_dimension,
-                    vector_search_profile="default-vector-profile"
+                    vector_search_dimensions=search_config.vector_dimension,
+                    vector_search_profile_name="default-vector-profile"
                 ),
                 SimpleField(name="symbol", type=SearchFieldDataType.String, filterable=True, facetable=True, retrievable=True),
                 SearchableField(name="title", type=SearchFieldDataType.String, retrievable=True),
@@ -212,7 +213,7 @@ class AzureAISearchVectorDB(VectorDatabase):
                 profiles=[
                     VectorSearchProfile(
                         name="default-vector-profile",
-                        algorithm="default-algorithm"
+                        algorithm_configuration_name="default-algorithm"
                     )
                 ]
             )
@@ -225,7 +226,7 @@ class AzureAISearchVectorDB(VectorDatabase):
             )
             
             self._index_client.create_index(index)
-            logger.info(f"Created Azure AI Search index '{index_name}'")
+            logger.info(f"Azure AI Search: Successfully created index '{index_name}' with {len(fields)} fields (vector dimension: {search_config.vector_dimension})")
             self._index_created = True
             return True
             
@@ -330,10 +331,22 @@ class AzureAISearchVectorDB(VectorDatabase):
                 documents.append(document)
             
             # Upload in batch
+            logger.info(f"Azure AI Search: Uploading {len(documents)} documents to index")
             result = self._client.upload_documents(documents=documents)
             
             # Count successful uploads
             success_count = sum(1 for r in result if r.succeeded)
+            failed_count = len(documents) - success_count
+            
+            if success_count > 0:
+                logger.info(f"Azure AI Search: Successfully stored {success_count} vectors")
+            if failed_count > 0:
+                logger.warning(f"Azure AI Search: Failed to store {failed_count} vectors")
+                # Log first few failures for debugging
+                for i, r in enumerate(result):
+                    if not r.succeeded and i < 3:
+                        logger.warning(f"Azure AI Search: Upload failed for document {r.key} - {r.error_message}")
+            
             return success_count
             
         except Exception as e:
@@ -363,6 +376,8 @@ class AzureAISearchVectorDB(VectorDatabase):
         try:
             from azure.search.documents.models import VectorizedQuery
             
+            logger.info(f"Azure AI Search: Performing vector search (top_k={top_k}, filter={'applied' if filter else 'none'})")
+            
             # Create vectorized query
             vector_query = VectorizedQuery(
                 vector=query_vector,
@@ -379,6 +394,7 @@ class AzureAISearchVectorDB(VectorDatabase):
             
             if filter:
                 search_options["filter"] = filter
+                logger.info(f"Azure AI Search: Filter applied - {filter[:100]}...")
             
             # Perform search
             results = self._client.search(
@@ -399,6 +415,11 @@ class AzureAISearchVectorDB(VectorDatabase):
                     "timestamp": result.get("timestamp", ""),
                     "similarity": result.get("@search.score", 0.0)  # Azure AI Search relevance score
                 })
+            
+            logger.info(f"Azure AI Search: Vector search returned {len(formatted_results)} results")
+            if formatted_results:
+                top_score = formatted_results[0].get('similarity', 0)
+                logger.info(f"Azure AI Search: Top result score: {top_score:.3f} - '{formatted_results[0].get('title', 'N/A')[:50]}...'")
             
             return formatted_results
             
@@ -431,6 +452,8 @@ class AzureAISearchVectorDB(VectorDatabase):
         try:
             from azure.search.documents.models import VectorizedQuery
             
+            logger.info(f"Azure AI Search: Performing hybrid search (vector + keyword, top_k={top_k}, query='{query_text[:50]}...', filter={'applied' if filter else 'none'})")
+            
             # Create vectorized query
             vector_query = VectorizedQuery(
                 vector=query_vector,
@@ -448,6 +471,7 @@ class AzureAISearchVectorDB(VectorDatabase):
             
             if filter:
                 search_options["filter"] = filter
+                logger.info(f"Azure AI Search: Filter applied - {filter[:100]}...")
             
             # Perform hybrid search (Azure AI Search handles RRF internally)
             results = self._client.search(**search_options)
@@ -466,6 +490,11 @@ class AzureAISearchVectorDB(VectorDatabase):
                     "similarity": result.get("@search.score", 0.0),
                     "rrf_score": result.get("@search.reranker_score", result.get("@search.score", 0.0))
                 })
+            
+            logger.info(f"Azure AI Search: Hybrid search returned {len(formatted_results)} results")
+            if formatted_results:
+                top_score = formatted_results[0].get('rrf_score', formatted_results[0].get('similarity', 0))
+                logger.info(f"Azure AI Search: Top result RRF score: {top_score:.3f} - '{formatted_results[0].get('title', 'N/A')[:50]}...'")
             
             return formatted_results
             

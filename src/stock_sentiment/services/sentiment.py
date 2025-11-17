@@ -143,9 +143,11 @@ class SentimentAnalyzer:
             cached_result = self.cache.get_cached_sentiment(text)
             if cached_result:
                 self.cache_hits += 1
+                logger.info(f"Sentiment Analysis: Cache HIT for text '{text[:50]}...' (skipping RAG and API call)")
                 return cached_result
             else:
                 self.cache_misses += 1
+                logger.info(f"Sentiment Analysis: Cache MISS for text '{text[:50]}...' (proceeding with analysis)")
         
         # Retrieve relevant context using RAG if available
         rag_context = ""
@@ -156,6 +158,24 @@ class SentimentAnalyzer:
             
             # Get filter parameters if provided (from UI)
             filter_params = getattr(self, '_rag_filters', {})
+            
+            # Log filter application
+            if filter_params:
+                filter_info = []
+                if filter_params.get('date_range'):
+                    start, end = filter_params.get('date_range', (None, None))
+                    filter_info.append(f"date_range={start.strftime('%Y-%m-%d') if start else 'any'} to {end.strftime('%Y-%m-%d') if end else 'any'}")
+                if filter_params.get('days_back'):
+                    filter_info.append(f"days_back={filter_params.get('days_back')}")
+                if filter_params.get('sources'):
+                    filter_info.append(f"sources={', '.join(filter_params.get('sources', []))}")
+                if filter_params.get('exclude_sources'):
+                    filter_info.append(f"exclude={', '.join(filter_params.get('exclude_sources', []))}")
+                
+                if filter_info:
+                    logger.info(f"Sentiment Analysis: Applying RAG filters - {', '.join(filter_info)}")
+            
+            logger.info(f"Sentiment Analysis: Retrieving RAG context for '{text[:50]}...' (symbol={symbol})")
             
             relevant_articles = self.rag_service.retrieve_relevant_context(
                 query=text,
@@ -170,8 +190,9 @@ class SentimentAnalyzer:
             if relevant_articles:
                 rag_used = True
                 self.rag_uses += 1
+                logger.info(f"Sentiment Analysis: RAG provided {len(relevant_articles)} context articles for analysis")
             else:
-                logger.warning(f"RAG found 0 articles for {symbol}")
+                logger.warning(f"Sentiment Analysis: RAG found 0 articles for {symbol} - proceeding without context")
         
         # Format RAG context with better structure and metadata
         if rag_used and relevant_articles:
@@ -333,11 +354,13 @@ Respond ONLY with valid JSON. No explanations, no markdown, just the JSON object
                         sentiment_scores.to_dict(),
                         ttl=self.settings.app.cache_ttl_sentiment
                     )
+                    logger.info(f"Sentiment Analysis: Cached result (TTL: {self.settings.app.cache_ttl_sentiment}s)")
                 
                 logger.info(
-                    f"Sentiment analyzed - Positive: {sentiment_scores.positive:.2f}, "
+                    f"Sentiment Analysis: Result - Positive: {sentiment_scores.positive:.2f}, "
                     f"Negative: {sentiment_scores.negative:.2f}, "
-                    f"Neutral: {sentiment_scores.neutral:.2f}"
+                    f"Neutral: {sentiment_scores.neutral:.2f}, "
+                    f"RAG used: {rag_used}, Dominant: {sentiment_scores.dominant_sentiment}"
                 )
                 return sentiment_scores.to_dict()
             else:

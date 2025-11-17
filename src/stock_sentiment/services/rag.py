@@ -372,6 +372,8 @@ class RAGService:
         
         # Use Azure AI Search if available, otherwise fallback to Redis
         if self.vector_db and self.vector_db.is_available():
+            logger.info(f"RAG Storage: Using Azure AI Search for {len(article_texts)} articles (symbol={symbol})")
+            
             # Store in Azure AI Search
             vectors_to_store = []
             for metadata, embedding in zip(article_metadata, embeddings):
@@ -402,7 +404,9 @@ class RAGService:
                 })
             
             # Batch store in Azure AI Search
+            logger.info(f"RAG Storage: Batch storing {len(vectors_to_store)} vectors in Azure AI Search")
             stored_count = self.vector_db.batch_store_vectors(vectors_to_store)
+            logger.info(f"RAG Storage: Successfully stored {stored_count}/{len(vectors_to_store)} articles in Azure AI Search")
             
             # Also mark as stored in Redis for duplicate checking (if Redis available)
             if self.cache and self.cache.client:
@@ -414,6 +418,7 @@ class RAGService:
                         pass  # Non-critical
         else:
             # Fallback to Redis storage (original implementation)
+            logger.info(f"RAG Storage: Using Redis fallback for {len(article_texts)} articles (symbol={symbol}, Azure AI Search not available)")
             ttl = 86400 * 7  # 7 days
             
             for metadata, embedding in zip(article_metadata, embeddings):
@@ -452,6 +457,8 @@ class RAGService:
                 except Exception as e:
                     logger.error(f"Error storing article in batch: {e}")
                     continue
+            
+            logger.info(f"RAG Storage: Stored {stored_count}/{len(article_texts)} articles in Redis")
         
         if stored_count == 0:
             logger.error(
@@ -698,9 +705,11 @@ class RAGService:
             return None
         
         filters = []
+        filter_details = []
         
         # Always filter by symbol
         filters.append(f"symbol eq '{symbol}'")
+        filter_details.append(f"symbol={symbol}")
         
         # Date range filter
         if days_back:
@@ -709,23 +718,37 @@ class RAGService:
             start_date = end_date - timedelta(days=days_back)
             filters.append(f"timestamp ge {start_date.isoformat()}Z")
             filters.append(f"timestamp le {end_date.isoformat()}Z")
+            filter_details.append(f"date_range=last_{days_back}_days")
+            logger.info(f"RAG Filter: Applying date filter - last {days_back} days")
         elif date_range:
             start_date, end_date = date_range
             if start_date:
                 filters.append(f"timestamp ge {start_date.isoformat()}Z")
+                filter_details.append(f"start_date={start_date.strftime('%Y-%m-%d')}")
             if end_date:
                 filters.append(f"timestamp le {end_date.isoformat()}Z")
+                filter_details.append(f"end_date={end_date.strftime('%Y-%m-%d')}")
+            if start_date or end_date:
+                logger.info(f"RAG Filter: Applying custom date range - {start_date.strftime('%Y-%m-%d') if start_date else 'any'} to {end_date.strftime('%Y-%m-%d') if end_date else 'any'}")
         
         # Source filters
         if sources:
             source_filters = [f"source eq '{s}'" for s in sources]
             filters.append(f"({' or '.join(source_filters)})")
+            filter_details.append(f"sources={', '.join(sources)}")
+            logger.info(f"RAG Filter: Including sources - {', '.join(sources)}")
         
         if exclude_sources:
             exclude_filters = [f"source ne '{s}'" for s in exclude_sources]
             filters.extend(exclude_filters)
+            filter_details.append(f"exclude_sources={', '.join(exclude_sources)}")
+            logger.info(f"RAG Filter: Excluding sources - {', '.join(exclude_sources)}")
         
-        return " and ".join(filters) if filters else None
+        filter_string = " and ".join(filters) if filters else None
+        if filter_string:
+            logger.info(f"RAG Filter: Built OData filter for {symbol} - {', '.join(filter_details)}")
+        
+        return filter_string
     
     def retrieve_relevant_context(
         self,
@@ -798,6 +821,8 @@ class RAGService:
         try:
             # Use Azure AI Search if available
             if self.vector_db and self.vector_db.is_available():
+                logger.info(f"RAG: Using Azure AI Search for retrieval (symbol={symbol}, top_k={top_k}, hybrid={use_hybrid})")
+                
                 # Get query embedding
                 query_embedding = self.get_embedding(expanded_query)
                 if not query_embedding:
@@ -806,18 +831,22 @@ class RAGService:
                 
                 # Use hybrid search if enabled, otherwise pure vector search
                 if use_hybrid:
+                    logger.info(f"RAG: Performing hybrid search (vector + keyword) for query: '{query[:50]}...'")
                     results = self.vector_db.hybrid_search(
                         query_text=query,
                         query_vector=query_embedding,
                         top_k=top_k * 2,  # Get more for filtering
                         filter=filter_string
                     )
+                    logger.info(f"RAG: Hybrid search returned {len(results)} results")
                 else:
+                    logger.info(f"RAG: Performing vector search for query: '{query[:50]}...'")
                     results = self.vector_db.search_vectors(
                         query_vector=query_embedding,
                         top_k=top_k * 2,
                         filter=filter_string
                     )
+                    logger.info(f"RAG: Vector search returned {len(results)} results")
                 
                 # Apply similarity threshold
                 similarity_threshold = self.settings.app.rag_similarity_threshold
@@ -826,14 +855,25 @@ class RAGService:
                     if r.get('similarity', r.get('rrf_score', 0)) >= similarity_threshold
                 ]
                 
+                if len(results) > len(filtered_results):
+                    logger.info(f"RAG: Similarity threshold ({similarity_threshold}) filtered {len(results) - len(filtered_results)} results, {len(filtered_results)} remaining")
+                
                 # Apply temporal decay if enabled (for Redis fallback compatibility)
                 if apply_temporal_decay and filtered_results:
+                    logger.info(f"RAG: Applying temporal decay to {len(filtered_results)} results")
                     filtered_results = self._apply_temporal_decay(filtered_results)
                 
                 # Return top_k
-                return filtered_results[:top_k]
+                final_results = filtered_results[:top_k]
+                logger.info(f"RAG: Returning {len(final_results)} articles for context (requested: {top_k})")
+                if final_results:
+                    logger.info(f"RAG: Top article - '{final_results[0].get('title', 'N/A')[:60]}...' (similarity: {final_results[0].get('similarity', final_results[0].get('rrf_score', 0)):.3f})")
+                
+                return final_results
             
             # Fallback to Redis SCAN-based search (original implementation)
+            logger.info(f"RAG: Using Redis SCAN fallback for retrieval (symbol={symbol}, top_k={top_k}, Azure AI Search not available)")
+            
             # Hybrid search: combine semantic and keyword search
             if use_hybrid and self.embeddings_enabled:
                 # Perform both semantic and keyword search

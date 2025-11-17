@@ -375,7 +375,23 @@ with st.sidebar:
             "date_range": None,
             "sources": None,
             "exclude_unknown": True,
-            "days_back": None
+            "days_back": None,
+            "data_sources": {
+                "yfinance": True,  # Always enabled (primary source)
+                "alpha_vantage": True,  # Default to enabled if configured
+                "finnhub": True,  # Default to enabled if configured
+                "reddit": False  # Default to disabled
+            }
+        }
+    
+    # Initialize data source filters based on settings
+    settings = get_settings()
+    if 'data_sources' not in st.session_state.search_filters:
+        st.session_state.search_filters["data_sources"] = {
+            "yfinance": True,  # Always enabled
+            "alpha_vantage": settings.data_sources.alpha_vantage_enabled,
+            "finnhub": settings.data_sources.finnhub_enabled,
+            "reddit": settings.data_sources.reddit_enabled
         }
     
     # Search Filters Section
@@ -454,12 +470,64 @@ with st.sidebar:
                     key="selected_sources"
                 )
         
+        # Data Source Filter
+        st.subheader("📡 Data Sources")
+        st.markdown("Enable/disable data sources to see how sentiment varies by source type")
+        
+        data_source_filters = st.session_state.search_filters.get("data_sources", {
+            "yfinance": True,
+            "alpha_vantage": settings.data_sources.alpha_vantage_enabled,
+            "finnhub": settings.data_sources.finnhub_enabled,
+            "reddit": settings.data_sources.reddit_enabled
+        })
+        
+        # Show available sources based on configuration
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # yfinance is always enabled (primary source)
+            st.checkbox(
+                "Yahoo Finance (yfinance)",
+                value=True,
+                disabled=True,
+                help="Primary data source - always enabled"
+            )
+            
+            alpha_vantage_available = settings.data_sources.alpha_vantage_enabled and settings.data_sources.alpha_vantage_api_key
+            data_source_filters["alpha_vantage"] = st.checkbox(
+                "Alpha Vantage",
+                value=data_source_filters.get("alpha_vantage", alpha_vantage_available),
+                disabled=not alpha_vantage_available,
+                help="Financial news API (500 calls/day free tier)" if alpha_vantage_available else "Not configured - set DATA_SOURCE_ALPHA_VANTAGE_API_KEY in .env",
+                key="filter_alpha_vantage"
+            )
+        
+        with col2:
+            finnhub_available = settings.data_sources.finnhub_enabled and settings.data_sources.finnhub_api_key
+            data_source_filters["finnhub"] = st.checkbox(
+                "Finnhub",
+                value=data_source_filters.get("finnhub", finnhub_available),
+                disabled=not finnhub_available,
+                help="Company news API (60 calls/minute free tier)" if finnhub_available else "Not configured - set DATA_SOURCE_FINNHUB_API_KEY in .env",
+                key="filter_finnhub"
+            )
+            
+            reddit_available = settings.data_sources.reddit_enabled and settings.data_sources.reddit_client_id
+            data_source_filters["reddit"] = st.checkbox(
+                "Reddit",
+                value=data_source_filters.get("reddit", reddit_available),
+                disabled=not reddit_available,
+                help="Social media sentiment from Reddit posts" if reddit_available else "Not configured - set DATA_SOURCE_REDDIT_CLIENT_ID in .env",
+                key="filter_reddit"
+            )
+        
         # Store filters in session state
         st.session_state.search_filters = {
             "date_range": date_range if use_date_filter else None,
             "sources": selected_sources if use_source_filter else None,
             "exclude_unknown": exclude_unknown,
-            "days_back": days_back if use_date_filter and date_option and date_option != "Custom range" else None
+            "days_back": days_back if use_date_filter and date_option and date_option != "Custom range" else None,
+            "data_sources": data_source_filters
         }
     
     # Enhanced load button
@@ -752,41 +820,84 @@ if st.session_state.load_data and symbol:
         # Collect stock data and track cache status in real-time
         if redis_cache:
             redis_cache.last_tier_used = None  # Reset before call
-        stock_data = collector.get_stock_price(symbol)
+        # Get data source filters from UI
+        data_source_filters = None
+        if 'search_filters' in st.session_state and 'data_sources' in st.session_state.search_filters:
+            data_source_filters = st.session_state.search_filters.get('data_sources')
+            enabled_sources = [k for k, v in data_source_filters.items() if v]
+            logger.info(f"App: Data source filters applied - Enabled: {', '.join(enabled_sources)}")
+        
+        # Collect data with source filters using collect_all_data
+        # This method handles all sources and respects the filters
+        data = collector.collect_all_data(symbol, data_source_filters=data_source_filters)
+        
+        # Track cache status for stock data
         if redis_cache:
+            redis_cache.last_tier_used = None
+            cached_stock = redis_cache.get_cached_stock_data(symbol)
             if redis_cache.last_tier_used == "Redis":
                 cache_status['stock']['hit'] = True
-            elif redis_cache.last_tier_used == "MISS" or redis_cache.last_tier_used is None:
+                cache_status['stock']['miss'] = False
+            else:
+                cache_status['stock']['hit'] = False
                 cache_status['stock']['miss'] = True
-        # Update immediately after stock collection
-        st.session_state.cache_status = cache_status
         
-        # Collect news data and track cache status in real-time
+        # Track cache status for news data
         if redis_cache:
-            redis_cache.last_tier_used = None  # Reset before call
-        news_data = collector.get_news_headlines(symbol)
-        if redis_cache:
+            redis_cache.last_tier_used = None
+            cached_news = redis_cache.get_cached_news(symbol)
             if redis_cache.last_tier_used == "Redis":
                 cache_status['news']['hit'] = True
-            elif redis_cache.last_tier_used == "MISS" or redis_cache.last_tier_used is None:
+                cache_status['news']['miss'] = False
+            else:
+                cache_status['news']['hit'] = False
                 cache_status['news']['miss'] = True
-        # Update immediately after news collection
-        st.session_state.cache_status = cache_status
         
-        # Combine data
-        data = {
-            'price_data': stock_data,
-            'news': news_data,
-            'social_media': collector.get_reddit_sentiment_data(symbol)
-        }
+        # Update cache status
+        st.session_state.cache_status = cache_status
         
         st.session_state.data = data
         st.session_state.symbol = symbol
         
+        # Show data source breakdown
+        if data.get('news'):
+            source_breakdown = {}
+            for article in data['news']:
+                source = article.get('source', 'Unknown')
+                # Categorize by data source
+                if 'Alpha Vantage' in source:
+                    source_breakdown['Alpha Vantage'] = source_breakdown.get('Alpha Vantage', 0) + 1
+                elif 'Finnhub' in source:
+                    source_breakdown['Finnhub'] = source_breakdown.get('Finnhub', 0) + 1
+                elif 'Reddit' in source or 'r/' in source:
+                    source_breakdown['Reddit'] = source_breakdown.get('Reddit', 0) + 1
+                else:
+                    source_breakdown['Yahoo Finance'] = source_breakdown.get('Yahoo Finance', 0) + 1
+            
+            if source_breakdown:
+                breakdown_text = " | ".join([f"{k}: {v}" for k, v in source_breakdown.items()])
+                logger.info(f"App: Data source breakdown - {breakdown_text}")
+        
         # Store articles in RAG using batch processing (industry best practice)
         # Batch processing is 10-100x faster than individual API calls
         if rag_service and data['news']:
+            logger.info(f"App: Storing {len(data['news'])} articles in RAG from multiple sources")
             rag_service.store_articles_batch(data['news'], symbol, batch_size=100)
+        
+        # Also store Reddit posts in RAG if available
+        if rag_service and data.get('social_media'):
+            logger.info(f"App: Storing {len(data['social_media'])} Reddit posts in RAG")
+            # Convert Reddit posts to article format for RAG
+            reddit_articles = []
+            for post in data['social_media']:
+                reddit_articles.append({
+                    'title': post.get('title', ''),
+                    'summary': post.get('summary', ''),
+                    'source': post.get('source', 'Reddit'),
+                    'url': post.get('url', ''),
+                    'timestamp': post.get('timestamp', datetime.now())
+                })
+            rag_service.store_articles_batch(reddit_articles, symbol, batch_size=100)
         
         # Analyze sentiment with RAG context using parallel processing (industry best practice)
         # Parallel processing provides 5-10x performance improvement
@@ -813,6 +924,22 @@ if st.session_state.load_data and symbol:
         if 'search_filters' in st.session_state:
             filters = st.session_state.search_filters
             exclude_sources = ["Unknown"] if filters.get("exclude_unknown", True) else None
+            
+            # Log filter application
+            filter_log = []
+            if filters.get("date_range"):
+                start, end = filters.get("date_range", (None, None))
+                filter_log.append(f"date_range={start.strftime('%Y-%m-%d') if start else 'any'} to {end.strftime('%Y-%m-%d') if end else 'any'}")
+            if filters.get("days_back"):
+                filter_log.append(f"days_back={filters.get('days_back')}")
+            if filters.get("sources"):
+                filter_log.append(f"sources={', '.join(filters.get('sources', []))}")
+            if exclude_sources:
+                filter_log.append(f"exclude_sources={', '.join(exclude_sources)}")
+            
+            if filter_log:
+                logger.info(f"App: Applying RAG filters from UI - {', '.join(filter_log)}")
+            
             analyzer.set_rag_filters(
                 date_range=filters.get("date_range"),
                 sources=filters.get("sources"),
@@ -868,6 +995,36 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
 data = st.session_state.data
 news_sentiments = st.session_state.news_sentiments
 social_sentiments = st.session_state.social_sentiments
+
+# Show active data sources and breakdown if data is available
+if data is not None:
+    # Show active data sources indicator
+    if 'search_filters' in st.session_state and 'data_sources' in st.session_state.search_filters:
+        active_sources = [k.replace('_', ' ').title() for k, v in st.session_state.search_filters['data_sources'].items() if v]
+        if active_sources:
+            st.info(f"📡 **Active Data Sources:** {', '.join(active_sources)}")
+    
+    # Show data source breakdown if available
+    if data.get('news'):
+        source_counts = {}
+        for article in data['news']:
+            source = article.get('source', 'Unknown')
+            if 'Alpha Vantage' in source:
+                source_counts['Alpha Vantage'] = source_counts.get('Alpha Vantage', 0) + 1
+            elif 'Finnhub' in source:
+                source_counts['Finnhub'] = source_counts.get('Finnhub', 0) + 1
+            elif 'Reddit' in source or 'r/' in source:
+                source_counts['Reddit'] = source_counts.get('Reddit', 0) + 1
+            else:
+                source_counts['Yahoo Finance'] = source_counts.get('Yahoo Finance', 0) + 1
+        
+        if len(source_counts) > 1:  # Only show if multiple sources
+            st.markdown("#### 📊 Articles by Source")
+            breakdown_cols = st.columns(len(source_counts))
+            for idx, (source, count) in enumerate(source_counts.items()):
+                with breakdown_cols[idx]:
+                    st.metric(f"{source}", count)
+            st.markdown("---")
 
 if data is None:
     # Enhanced empty state
@@ -1183,6 +1340,20 @@ else:
             st.subheader("📅 Sentiment Trend Over Time")
             news_df = pd.DataFrame(data['news'])
             news_df['sentiment'] = [s['positive'] - s['negative'] for s in news_sentiments]
+            
+            # Normalize timestamps to handle both timezone-aware and naive datetimes
+            def normalize_timestamp(ts):
+                """Normalize timestamp to naive datetime for pandas compatibility."""
+                if isinstance(ts, datetime):
+                    if ts.tzinfo is not None:
+                        # Convert timezone-aware to UTC, then make naive
+                        from datetime import timezone as tz
+                        return ts.astimezone(tz.utc).replace(tzinfo=None)
+                    return ts
+                return ts
+            
+            # Normalize all timestamps before pandas conversion
+            news_df['timestamp'] = news_df['timestamp'].apply(normalize_timestamp)
             news_df['timestamp'] = pd.to_datetime(news_df['timestamp'])
             news_df = news_df.sort_values('timestamp')
             
