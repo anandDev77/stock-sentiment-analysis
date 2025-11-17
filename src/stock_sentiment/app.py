@@ -24,6 +24,7 @@ from stock_sentiment.services.sentiment import SentimentAnalyzer
 from stock_sentiment.services.collector import StockDataCollector
 from stock_sentiment.services.cache import RedisCache
 from stock_sentiment.services.rag import RAGService
+from stock_sentiment.services.cost_tracker import CostTracker
 from stock_sentiment.utils.logger import get_logger, setup_logger
 
 # Initialize root logger at app startup
@@ -200,13 +201,21 @@ def get_collector(_settings, _cache):
     return StockDataCollector(settings=_settings, redis_cache=_cache)
 
 @st.cache_resource
-def get_analyzer(_settings, _cache, _rag_service):
+def get_cost_tracker(_settings, _cache):
+    """Get or create cost tracker instance."""
+    if _cache and _cache.client:
+        return CostTracker(cache=_cache, settings=_settings)
+    return None
+
+@st.cache_resource
+def get_analyzer(_settings, _cache, _rag_service, _cost_tracker):
     """Get sentiment analyzer instance."""
     try:
         return SentimentAnalyzer(
             settings=_settings,
             redis_cache=_cache,
-            rag_service=_rag_service
+            rag_service=_rag_service,
+            cost_tracker=_cost_tracker
         )
     except ValueError as e:
         logger.error(f"Configuration Error: {e}")
@@ -219,7 +228,8 @@ def get_analyzer(_settings, _cache, _rag_service):
 redis_cache = get_redis_cache(settings)
 rag_service = get_rag_service(settings, redis_cache)
 collector = get_collector(settings, redis_cache)
-analyzer = get_analyzer(settings, redis_cache, rag_service)
+cost_tracker = get_cost_tracker(settings, redis_cache)
+analyzer = get_analyzer(settings, redis_cache, rag_service, cost_tracker)
 
 if analyzer is None:
     st.error("Failed to initialize sentiment analyzer. Please check your configuration.")
@@ -282,7 +292,23 @@ with st.sidebar:
     status_col1, status_col2 = st.columns(2)
     
     with status_col1:
-        if redis_cache and redis_cache.client:
+        # Check Redis connection with actual ping test
+        redis_connected = False
+        redis_error = None
+        if redis_cache:
+            if redis_cache.client:
+                try:
+                    redis_cache.client.ping()
+                    redis_connected = True
+                except Exception as e:
+                    redis_error = str(e)
+                    logger.warning(f"Redis ping failed: {e}")
+            else:
+                redis_error = "Redis client not initialized"
+        else:
+            redis_error = "Redis cache not available"
+        
+        if redis_connected:
             st.markdown(
                 """
                 <div style='background: #d4edda; color: #155724; padding: 0.75rem; 
@@ -294,9 +320,10 @@ with st.sidebar:
             )
         else:
             st.markdown(
-                """
+                f"""
                 <div style='background: #f8d7da; color: #721c24; padding: 0.75rem; 
-                            border-radius: 8px; text-align: center; font-weight: 600;'>
+                            border-radius: 8px; text-align: center; font-weight: 600;'
+                            title='{redis_error or "Redis not configured"}'>
                     ⚠️ Redis
                 </div>
                 """,
@@ -304,7 +331,21 @@ with st.sidebar:
             )
     
     with status_col2:
-        if rag_service and rag_service.embeddings_enabled:
+        # Check RAG service with detailed status
+        rag_enabled = False
+        rag_error = None
+        if rag_service:
+            try:
+                rag_enabled = rag_service.embeddings_enabled
+                if not rag_enabled:
+                    rag_error = "Embeddings not enabled (check embedding deployment)"
+            except Exception as e:
+                rag_error = str(e)
+                logger.warning(f"RAG check failed: {e}")
+        else:
+            rag_error = "RAG service not initialized"
+        
+        if rag_enabled:
             st.markdown(
                 """
                 <div style='background: #d4edda; color: #155724; padding: 0.75rem; 
@@ -316,9 +357,10 @@ with st.sidebar:
             )
         else:
             st.markdown(
-                """
+                f"""
                 <div style='background: #fff3cd; color: #856404; padding: 0.75rem; 
-                            border-radius: 8px; text-align: center; font-weight: 600;'>
+                            border-radius: 8px; text-align: center; font-weight: 600;'
+                            title='{rag_error or "RAG not configured"}'>
                     ⚠️ RAG
                 </div>
                 """,
@@ -342,15 +384,17 @@ with st.sidebar:
         
         cache_col1, cache_col2 = st.columns(2)
         with cache_col1:
+            # Stock data cache status
             if cache_status['stock']['hit']:
-                st.success("✅ Stock Data: **CACHED** (from Redis)")
+                st.success("✅ Stock Data: **CACHED**")
             elif cache_status['stock']['miss']:
                 st.info("🔄 Stock Data: **FRESH** (from API)")
             else:
                 st.warning("⚠️ Stock Data: Unknown status")
             
+            # News cache status
             if cache_status['news']['hit']:
-                st.success("✅ News: **CACHED** (from Redis)")
+                st.success("✅ News: **CACHED**")
             elif cache_status['news']['miss']:
                 st.info("🔄 News: **FRESH** (from API)")
             else:
@@ -367,6 +411,72 @@ with st.sidebar:
                 )
             else:
                 st.info("No sentiment analysis yet")
+            
+            # Show last cache tier used (for all cache operations)
+            if redis_cache and redis_cache.last_tier_used:
+                tier_display = redis_cache.last_tier_used
+                if tier_display == "Redis":
+                    tier_emoji = "🔴"
+                    tier_desc = "Redis Cache"
+                    tier_color = "success"
+                elif tier_display == "MISS":
+                    tier_emoji = "⚪"
+                    tier_desc = "Cache Miss"
+                    tier_color = "info"
+                else:
+                    tier_emoji = "🔴"
+                    tier_desc = tier_display
+                    tier_color = "success"
+                
+                if tier_color == "success":
+                    st.success(f"{tier_emoji} Last Cache: **{tier_desc}**")
+                else:
+                    st.info(f"{tier_emoji} Last Cache: **{tier_desc}**")
+    
+    st.markdown("---")
+    
+    # Connection details for troubleshooting
+    with st.expander("🔍 Connection Details", expanded=False):
+        st.markdown("### Redis Connection")
+        if redis_cache:
+            if redis_cache.client:
+                try:
+                    redis_cache.client.ping()
+                    st.success("✅ Redis: Connected and responding")
+                    # Show Redis info
+                    try:
+                        info = redis_cache.client.info('server')
+                        st.code(f"Redis Version: {info.get('redis_version', 'Unknown')}")
+                    except:
+                        pass
+                except Exception as e:
+                    st.error(f"❌ Redis: Connection failed - {e}")
+            else:
+                st.warning("⚠️ Redis: Client not initialized")
+                if settings.is_redis_available():
+                    st.info("Redis config exists but connection failed. Check your .env file.")
+                else:
+                    st.info("Redis not configured in .env file")
+        else:
+            st.warning("⚠️ Redis: Cache instance not created")
+        
+        st.markdown("### RAG Service")
+        if rag_service:
+            st.success(f"✅ RAG Service: Initialized")
+            st.code(f"Embeddings Enabled: {rag_service.embeddings_enabled}")
+            if hasattr(rag_service, 'embedding_deployment'):
+                st.code(f"Embedding Model: {rag_service.embedding_deployment or 'Not configured'}")
+        else:
+            st.warning("⚠️ RAG Service: Not initialized")
+            if settings.is_rag_available():
+                st.info("RAG config exists but service failed to initialize. Check embedding deployment.")
+            else:
+                st.info("RAG not configured (missing embedding deployment in .env)")
+        
+        st.markdown("### Configuration Check")
+        st.code(f"Redis Available: {settings.is_redis_available()}")
+        st.code(f"RAG Available: {settings.is_rag_available()}")
+        st.code(f"Azure OpenAI Available: {settings.is_azure_openai_available()}")
     
     st.markdown("---")
     
@@ -374,18 +484,34 @@ with st.sidebar:
     st.markdown("### 📊 Performance Metrics")
     
     # Get cache stats from Redis (persistent across reloads)
-    cache_stats = {}
+    cache_stats = {'cache_hits': 0, 'cache_misses': 0, 'cache_sets': 0}
     if redis_cache and redis_cache.client:
-        cache_stats = redis_cache.get_cache_stats()
-    else:
-        cache_stats = {'cache_hits': 0, 'cache_misses': 0, 'cache_sets': 0}
+        try:
+            # Test connection first
+            redis_cache.client.ping()
+            cache_stats = redis_cache.get_cache_stats()
+        except Exception as e:
+            logger.warning(f"Error getting cache stats: {e}")
+            cache_stats = {'cache_hits': 0, 'cache_misses': 0, 'cache_sets': 0}
     
     # Get analyzer stats (sentiment analysis specific)
-    analyzer_stats = {}
-    try:
-        analyzer_stats = analyzer.get_stats()
-    except Exception:
-        analyzer_stats = {'rag_uses': 0, 'total_requests': 0}
+    analyzer_stats = {'rag_uses': 0, 'rag_attempts': 0, 'total_requests': 0}
+    if analyzer:
+        try:
+            # Check if analyzer has get_stats method
+            if hasattr(analyzer, 'get_stats'):
+                analyzer_stats = analyzer.get_stats()
+            else:
+                # Fallback to direct attribute access
+                analyzer_stats = {
+                    'rag_uses': getattr(analyzer, 'rag_uses', 0),
+                    'rag_attempts': getattr(analyzer, 'rag_attempts', 0),
+                    'cache_hits': getattr(analyzer, 'cache_hits', 0),
+                    'cache_misses': getattr(analyzer, 'cache_misses', 0)
+                }
+        except Exception as e:
+            logger.warning(f"Error getting analyzer stats: {e}")
+            analyzer_stats = {'rag_uses': 0, 'rag_attempts': 0, 'total_requests': 0}
     
     # Cache metrics from Redis (persistent)
     cache_col1, cache_col2 = st.columns(2)
@@ -419,20 +545,93 @@ with st.sidebar:
         )
     
     # RAG uses (from analyzer)
+    rag_uses = analyzer_stats.get('rag_uses', 0)
+    rag_attempts = analyzer_stats.get('rag_attempts', 0)
+    rag_success_rate = (rag_uses / rag_attempts * 100) if rag_attempts > 0 else 0.0
+    
     st.metric(
         "RAG Uses",
-        analyzer_stats.get('rag_uses', 0),
-        delta=None,
+        rag_uses,
+        delta=f"{rag_attempts} attempts ({rag_success_rate:.1f}% success)" if rag_attempts > 0 else "No attempts",
         delta_color="normal",
-        help="Number of times RAG context was used for sentiment analysis"
+        help=f"RAG successfully used {rag_uses} times out of {rag_attempts} attempts. "
+             f"RAG is used when relevant articles are found for context. "
+             f"If this is 0, it may mean: 1) No articles stored yet, 2) Articles don't match queries, "
+             f"3) Similarity threshold too high, or 4) RAG service not initialized."
     )
     
-    # Reset button for cache stats
-    if st.button("🔄 Reset Cache Stats", use_container_width=True, help="Reset cache statistics in Redis"):
-        if redis_cache:
-            redis_cache.reset_cache_stats()
-            st.success("Cache statistics reset!")
-            st.rerun()
+    # Cost tracking (if available)
+    if cost_tracker:
+        try:
+            cost_summary = cost_tracker.get_cost_summary(days=7)
+            st.markdown("### 💰 Cost Tracking (Last 7 Days)")
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric(
+                    "Total Cost",
+                    f"${cost_summary.get('total_cost', 0):.4f}",
+                    help="Total API costs in USD"
+                )
+            with col2:
+                st.metric(
+                    "Avg Daily",
+                    f"${cost_summary.get('average_daily_cost', 0):.4f}",
+                    help="Average daily cost"
+                )
+            with col3:
+                st.metric(
+                    "API Calls",
+                    f"{cost_summary.get('total_calls', 0):,}",
+                    help="Total API calls made"
+                )
+        except Exception as e:
+            logger.warning(f"Error displaying cost tracking: {e}")
+    
+    # Cache management buttons
+    cache_col1, cache_col2 = st.columns(2)
+    with cache_col1:
+        if st.button("🔄 Reset Cache Stats", use_container_width=True, help="Reset cache statistics counters (hits/misses)"):
+            if redis_cache:
+                redis_cache.reset_cache_stats()
+                st.success("Cache statistics reset!")
+                st.rerun()
+    
+    with cache_col2:
+        # Initialize confirmation state
+        if 'confirm_clear_cache' not in st.session_state:
+            st.session_state.confirm_clear_cache = False
+        
+        if st.session_state.confirm_clear_cache:
+            # Show confirmation buttons
+            confirm_col1, confirm_col2 = st.columns(2)
+            with confirm_col1:
+                if st.button("✅ Confirm", use_container_width=True, type="primary"):
+                    if redis_cache and redis_cache.client:
+                        if redis_cache.clear_all_cache():
+                            st.success("All cache data cleared!")
+                            st.session_state.confirm_clear_cache = False
+                            # Clear session state cache status
+                            if 'cache_status' in st.session_state:
+                                del st.session_state.cache_status
+                            st.rerun()
+                        else:
+                            st.error("Failed to clear cache. Check logs for details.")
+                            st.session_state.confirm_clear_cache = False
+                    else:
+                        st.warning("Redis cache not available")
+                        st.session_state.confirm_clear_cache = False
+            with confirm_col2:
+                if st.button("❌ Cancel", use_container_width=True):
+                    st.session_state.confirm_clear_cache = False
+                    st.rerun()
+        else:
+            if st.button("🗑️ Clear All Cache", use_container_width=True, help="Clear all cached data from Redis (stock, news, sentiment, RAG)"):
+                if redis_cache and redis_cache.client:
+                    st.session_state.confirm_clear_cache = True
+                    st.warning("⚠️ This will delete ALL cached data. Please confirm.")
+                    st.rerun()
+                else:
+                    st.warning("Redis cache not available")
     
     st.markdown("---")
     st.markdown(
@@ -447,72 +646,111 @@ with st.sidebar:
 
 # Load data if button clicked
 if st.session_state.load_data and symbol:
-    # Track cache status for UI display
+    # Initialize cache status for current request
     cache_status = {
         'stock': {'hit': False, 'miss': False},
         'news': {'hit': False, 'miss': False},
         'sentiment': {'hits': 0, 'misses': 0}
     }
+    # Update session state immediately so UI can show it
+    st.session_state.cache_status = cache_status
     
     with st.spinner("🔄 Collecting data and analyzing sentiment..."):
-        # Check cache BEFORE collecting to track status accurately
-        if redis_cache and redis_cache.client:
-            # Check stock cache
-            cached_stock_key = redis_cache._generate_key("stock", symbol)
-            cached_stock_exists = redis_cache.client.exists(cached_stock_key)
-            if cached_stock_exists:
+        # Collect stock data and track cache status in real-time
+        if redis_cache:
+            redis_cache.last_tier_used = None  # Reset before call
+        stock_data = collector.get_stock_price(symbol)
+        if redis_cache:
+            if redis_cache.last_tier_used == "Redis":
                 cache_status['stock']['hit'] = True
-            else:
+            elif redis_cache.last_tier_used == "MISS" or redis_cache.last_tier_used is None:
                 cache_status['stock']['miss'] = True
-            
-            # Check news cache
-            cached_news_key = redis_cache._generate_key("news", symbol)
-            cached_news_exists = redis_cache.client.exists(cached_news_key)
-            if cached_news_exists:
-                cache_status['news']['hit'] = True
-            else:
-                cache_status['news']['miss'] = True
-        
-        # Collect data (this will use cache if available)
-        data = collector.collect_all_data(symbol)
-        st.session_state.data = data
-        st.session_state.symbol = symbol
+        # Update immediately after stock collection
         st.session_state.cache_status = cache_status
         
-        # Store articles in RAG for future retrieval
-        if rag_service and data['news']:
-            for article in data['news']:
-                rag_service.store_article(article, symbol)
+        # Collect news data and track cache status in real-time
+        if redis_cache:
+            redis_cache.last_tier_used = None  # Reset before call
+        news_data = collector.get_news_headlines(symbol)
+        if redis_cache:
+            if redis_cache.last_tier_used == "Redis":
+                cache_status['news']['hit'] = True
+            elif redis_cache.last_tier_used == "MISS" or redis_cache.last_tier_used is None:
+                cache_status['news']['miss'] = True
+        # Update immediately after news collection
+        st.session_state.cache_status = cache_status
         
-        # Analyze sentiment with RAG context
-        news_sentiments = []
-        for article in data['news']:
-            text_to_analyze = article.get('summary', article.get('title', ''))
-            if text_to_analyze:
-                # Check if sentiment is cached
-                if redis_cache:
-                    cached_sentiment = redis_cache.get_cached_sentiment(text_to_analyze)
-                    if cached_sentiment:
+        # Combine data
+        data = {
+            'price_data': stock_data,
+            'news': news_data,
+            'social_media': collector.get_reddit_sentiment_data(symbol)
+        }
+        
+        st.session_state.data = data
+        st.session_state.symbol = symbol
+        
+        # Store articles in RAG using batch processing (industry best practice)
+        # Batch processing is 10-100x faster than individual API calls
+        if rag_service and data['news']:
+            rag_service.store_articles_batch(data['news'], symbol, batch_size=100)
+        
+        # Analyze sentiment with RAG context using parallel processing (industry best practice)
+        # Parallel processing provides 5-10x performance improvement
+        news_texts = [
+            article.get('summary', article.get('title', ''))
+            for article in data['news']
+        ]
+        
+        # Track sentiment cache status during batch processing
+        if redis_cache:
+            for text in news_texts:
+                if text:
+                    # Reset before each check to track individual cache status
+                    redis_cache.last_tier_used = None
+                    cached_sentiment = redis_cache.get_cached_sentiment(text)
+                    if redis_cache.last_tier_used == "Redis":
                         cache_status['sentiment']['hits'] += 1
                     else:
                         cache_status['sentiment']['misses'] += 1
-                sentiment_result = analyzer.analyze_sentiment(text_to_analyze, symbol=symbol)
-                news_sentiments.append(sentiment_result)
-            else:
-                news_sentiments.append({'positive': 0, 'negative': 0, 'neutral': 1})
+            # Update cache status after sentiment tracking
+            st.session_state.cache_status = cache_status
+        
+        # Batch analyze with parallel processing
+        news_sentiments = analyzer.batch_analyze(
+            texts=news_texts,
+            symbol=symbol,
+            max_workers=5  # Process up to 5 articles concurrently
+        )
+        
+        # Handle empty texts (fallback to neutral)
+        for i, text in enumerate(news_texts):
+            if not text:
+                news_sentiments[i] = {'positive': 0, 'negative': 0, 'neutral': 1}
 
-        social_sentiments = []
-        for post in data['social_media']:
-            text_to_analyze = post.get('text', '')
-            if text_to_analyze:
-                social_sentiments.append(analyzer.analyze_sentiment(text_to_analyze, symbol=symbol))
-            else:
-                social_sentiments.append({'positive': 0, 'negative': 0, 'neutral': 1})
+        # Analyze social media posts in parallel
+        social_texts = [post.get('text', '') for post in data['social_media']]
+        social_sentiments = analyzer.batch_analyze(
+            texts=social_texts,
+            symbol=symbol,
+            max_workers=5
+        )
+        
+        # Handle empty texts (fallback to neutral)
+        for i, text in enumerate(social_texts):
+            if not text:
+                social_sentiments[i] = {'positive': 0, 'negative': 0, 'neutral': 1}
         
         st.session_state.news_sentiments = news_sentiments
         st.session_state.social_sentiments = social_sentiments
+        
+        # Final update of cache status (already updated incrementally above)
+        st.session_state.cache_status = cache_status
+        
         st.session_state.load_data = False
         st.session_state.title_shown = False  # Show title again after loading
+        # Force rerun to update UI with new cache status
+        st.rerun()
 
 # Create tabs with better styling
 tab1, tab2, tab3, tab4, tab5 = st.tabs([

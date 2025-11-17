@@ -87,10 +87,8 @@ class StockDataCollector:
         
         # Check cache first
         if self.cache:
-            logger.debug(f"Checking cache for stock data: {symbol}")
             cached_data = self.cache.get_cached_stock_data(symbol)
             if cached_data:
-                logger.info(f"Using cached stock data for {symbol}")
                 # Convert timestamp string back to datetime if needed
                 if isinstance(cached_data.get('timestamp'), str):
                     try:
@@ -100,7 +98,6 @@ class StockDataCollector:
                     except ValueError:
                         cached_data['timestamp'] = datetime.now()
                 return cached_data
-            logger.debug(f"Cache miss for {symbol}, fetching fresh data from API")
         
         try:
             ticker = yf.Ticker(symbol)
@@ -125,7 +122,6 @@ class StockDataCollector:
                         ttl=self.settings.app.cache_ttl_stock
                     )
                 
-                logger.info(f"Fetched stock data for {symbol}: ${current_price:.2f}")
                 return result
         except Exception as e:
             logger.error(f"Error fetching stock price for {symbol}: {e}")
@@ -161,10 +157,8 @@ class StockDataCollector:
         
         # Check cache first
         if self.cache:
-            logger.debug(f"Checking cache for news: {symbol}")
             cached_news = self.cache.get_cached_news(symbol)
             if cached_news:
-                logger.info(f"Using cached news for {symbol} ({len(cached_news)} articles)")
                 # Convert timestamp strings back to datetime
                 for article in cached_news:
                     if isinstance(article.get('timestamp'), str):
@@ -175,7 +169,6 @@ class StockDataCollector:
                         except ValueError:
                             article['timestamp'] = datetime.now()
                 return cached_news
-            logger.debug(f"Cache miss for news {symbol}, fetching fresh data from API")
         
         try:
             ticker = yf.Ticker(symbol)
@@ -246,7 +239,6 @@ class StockDataCollector:
                     ttl=self.settings.app.cache_ttl_news
                 )
             
-            logger.info(f"Fetched {len(headlines)} news articles for {symbol}")
             return headlines
             
         except Exception as e:
@@ -342,7 +334,6 @@ class StockDataCollector:
         Returns:
             Empty list (placeholder for future integration)
         """
-        logger.debug(f"Social media data not available for {symbol} (requires API integration)")
         return []
     
     def collect_all_data(self, symbol: str) -> Dict:
@@ -358,7 +349,6 @@ class StockDataCollector:
             - news: List of news articles
             - social_media: List of social media posts (currently empty)
         """
-        logger.info(f"Collecting all data for {symbol}")
         return {
             'price_data': self.get_stock_price(symbol),
             'news': self.get_news_headlines(symbol),

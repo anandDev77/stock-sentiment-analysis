@@ -69,3 +69,14 @@ dmypy.json
 *.sqlite
 cache/
 temp/
+
+# Documentation temporary files
+docs/*.backup
+docs/~$*
+docs/*.docx
+docs/__pycache__/
+
+# Test and debug files
+scripts/test_*.py
+*.test.py
+*_test.py
