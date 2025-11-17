@@ -39,11 +39,11 @@ apply_custom_styles()
 
 # Initialize settings and services
 settings = initialize_settings()
-redis_cache, rag_service, collector, cost_tracker, analyzer = initialize_services(settings)
+redis_cache, rag_service, collector, analyzer = initialize_services(settings)
 initialize_session_state()
 
 # Render sidebar and get selected symbol
-symbol = render_sidebar(redis_cache, rag_service, analyzer, cost_tracker, settings)
+symbol = render_sidebar(redis_cache, rag_service, analyzer, settings)
 
 # Load data if button clicked
 if st.session_state.load_data and symbol:

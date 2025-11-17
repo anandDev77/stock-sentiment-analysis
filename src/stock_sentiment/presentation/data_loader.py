@@ -5,7 +5,7 @@ Data loading and processing logic.
 import streamlit as st
 import time
 from datetime import datetime
-from typing import Dict, List, Optional, Any
+from typing import Optional, Any
 
 from ..utils.logger import get_logger
 from ..utils.ui_helpers import show_toast, get_error_recovery_ui
@@ -35,14 +35,22 @@ def load_stock_data(
     Returns:
         True if successful, False otherwise
     """
-    # Initialize cache status for current request
-    cache_status = {
-        'stock': {'hit': False, 'miss': False},
-        'news': {'hit': False, 'miss': False},
-        'sentiment': {'hits': 0, 'misses': 0}
+    # Initialize operation summary for logging
+    operation_summary = {
+        'redis_used': False,
+        'stock_cached': False,
+        'news_cached': False,
+        'sentiment_cache_hits': 0,
+        'sentiment_cache_misses': 0,
+        'rag_used': False,
+        'rag_queries': 0,
+        'rag_articles_found': 0,
+        'articles_stored': 0
     }
-    # Update session state immediately so UI can show it
-    st.session_state.cache_status = cache_status
+    
+    logger.info(f"=== Starting data load for {symbol} ===")
+    logger.info(f"Sentiment cache enabled: {settings.app.cache_sentiment_enabled}")
+    logger.info(f"Sentiment cache TTL: {settings.app.cache_ttl_sentiment}s ({settings.app.cache_ttl_sentiment/3600:.1f} hours)")
     
     # Multi-step progress bar for better UX
     progress_bar = st.progress(0)
@@ -53,22 +61,29 @@ def load_stock_data(
         status_text.text("📊 Fetching stock data...")
         progress_bar.progress(0.2)
         
+        logger.info(f"[{symbol}] Step 1: Fetching stock data...")
+        
         if redis_cache:
             redis_cache.last_tier_used = None  # Reset before call
+            logger.info(f"[{symbol}] Checking Redis for stock data...")
         
         # Get data source filters from UI
         data_source_filters = None
         if 'search_filters' in st.session_state and 'data_sources' in st.session_state.search_filters:
             data_source_filters = st.session_state.search_filters.get('data_sources')
             enabled_sources = [k for k, v in data_source_filters.items() if v]
-            logger.info(f"App: Data source filters applied - Enabled: {', '.join(enabled_sources)}")
+            logger.info(f"[{symbol}] Data source filters applied - Enabled: {', '.join(enabled_sources)}")
         
         # Step 2: Collecting news articles (40%)
         status_text.text("📰 Collecting news articles from multiple sources...")
         progress_bar.progress(0.4)
         
+        logger.info(f"[{symbol}] Step 2: Collecting news articles from multiple sources...")
+        
         # Collect data with source filters using collect_all_data
         data = collector.collect_all_data(symbol, data_source_filters=data_source_filters)
+        
+        logger.info(f"[{symbol}] Collected {len(data.get('news', []))} news articles")
         
         # Clear any previous errors
         if symbol in st.session_state.data_errors:
@@ -100,25 +115,24 @@ def load_stock_data(
             redis_cache.last_tier_used = None
             cached_stock = redis_cache.get_cached_stock_data(symbol)
             if redis_cache.last_tier_used == "Redis":
-                cache_status['stock']['hit'] = True
-                cache_status['stock']['miss'] = False
+                operation_summary['redis_used'] = True
+                operation_summary['stock_cached'] = True
+                logger.info(f"[{symbol}] ✅ Stock data retrieved from Redis cache")
             else:
-                cache_status['stock']['hit'] = False
-                cache_status['stock']['miss'] = True
+                operation_summary['redis_used'] = True  # Redis was checked
+                operation_summary['stock_cached'] = False
+                logger.info(f"[{symbol}] 🔄 Stock data fetched fresh (cache miss)")
         
         # Track cache status for news data
         if redis_cache:
             redis_cache.last_tier_used = None
             cached_news = redis_cache.get_cached_news(symbol)
             if redis_cache.last_tier_used == "Redis":
-                cache_status['news']['hit'] = True
-                cache_status['news']['miss'] = False
+                operation_summary['news_cached'] = True
+                logger.info(f"[{symbol}] ✅ News data retrieved from Redis cache")
             else:
-                cache_status['news']['hit'] = False
-                cache_status['news']['miss'] = True
-        
-        # Update cache status
-        st.session_state.cache_status = cache_status
+                operation_summary['news_cached'] = False
+                logger.info(f"[{symbol}] 🔄 News data fetched fresh (cache miss)")
         
         st.session_state.data = data
         st.session_state.symbol = symbol
@@ -148,12 +162,16 @@ def load_stock_data(
         
         # Store articles in RAG using batch processing
         if rag_service and data['news']:
-            logger.info(f"App: Storing {len(data['news'])} articles in RAG from multiple sources")
+            article_count = len(data['news'])
+            logger.info(f"[{symbol}] Step 3: Storing {article_count} articles in RAG...")
             rag_service.store_articles_batch(data['news'], symbol)
+            operation_summary['articles_stored'] += article_count
+            logger.info(f"[{symbol}] ✅ Stored {article_count} articles in RAG")
         
         # Also store Reddit posts in RAG if available
         if rag_service and data.get('social_media'):
-            logger.info(f"App: Storing {len(data['social_media'])} Reddit posts in RAG")
+            reddit_count = len(data['social_media'])
+            logger.info(f"[{symbol}] Storing {reddit_count} Reddit posts in RAG...")
             # Convert Reddit posts to article format for RAG
             reddit_articles = []
             for post in data['social_media']:
@@ -165,6 +183,8 @@ def load_stock_data(
                     'timestamp': post.get('timestamp', datetime.now())
                 })
             rag_service.store_articles_batch(reddit_articles, symbol)
+            operation_summary['articles_stored'] += reddit_count
+            logger.info(f"[{symbol}] ✅ Stored {reddit_count} Reddit posts in RAG")
         
         # Analyze sentiment with RAG context using parallel processing
         news_texts = [
@@ -172,19 +192,25 @@ def load_stock_data(
             for article in data['news']
         ]
         
+        logger.info(f"[{symbol}] Step 4: Analyzing sentiment for {len(news_texts)} articles...")
+        
         # Track sentiment cache status during batch processing
-        if redis_cache:
-            for text in news_texts:
+        if redis_cache and settings.app.cache_sentiment_enabled:
+            logger.info(f"[{symbol}] Checking sentiment cache for {len(news_texts)} articles...")
+            for i, text in enumerate(news_texts):
                 if text:
                     # Reset before each check to track individual cache status
                     redis_cache.last_tier_used = None
                     cached_sentiment = redis_cache.get_cached_sentiment(text)
                     if redis_cache.last_tier_used == "Redis":
-                        cache_status['sentiment']['hits'] += 1
+                        operation_summary['sentiment_cache_hits'] += 1
                     else:
-                        cache_status['sentiment']['misses'] += 1
-            # Update cache status after sentiment tracking
-            st.session_state.cache_status = cache_status
+                        operation_summary['sentiment_cache_misses'] += 1
+            logger.info(f"[{symbol}] Sentiment cache: {operation_summary['sentiment_cache_hits']} hits, {operation_summary['sentiment_cache_misses']} misses")
+        else:
+            if not settings.app.cache_sentiment_enabled:
+                logger.info(f"[{symbol}] Sentiment cache is disabled - all analyses will use RAG")
+            operation_summary['sentiment_cache_misses'] = len(news_texts)
         
         # Set RAG filters from UI if available
         if 'search_filters' in st.session_state:
@@ -217,12 +243,32 @@ def load_stock_data(
         status_text.text("🤖 Analyzing sentiment with AI...")
         progress_bar.progress(0.8)
         
+        # Track RAG usage before analysis
+        initial_rag_uses = getattr(analyzer, 'rag_uses', 0) if hasattr(analyzer, 'rag_uses') else 0
+        initial_rag_attempts = getattr(analyzer, 'rag_attempts', 0) if hasattr(analyzer, 'rag_attempts') else 0
+        
         # Batch analyze with parallel processing
+        logger.info(f"[{symbol}] Starting batch sentiment analysis (max_workers=5)...")
         news_sentiments = analyzer.batch_analyze(
             texts=news_texts,
             symbol=symbol,
             max_workers=5  # Process up to 5 articles concurrently
         )
+        
+        # Track RAG usage after analysis
+        final_rag_uses = getattr(analyzer, 'rag_uses', 0) if hasattr(analyzer, 'rag_uses') else 0
+        final_rag_attempts = getattr(analyzer, 'rag_attempts', 0) if hasattr(analyzer, 'rag_attempts') else 0
+        
+        rag_queries_made = final_rag_attempts - initial_rag_attempts
+        rag_successful = final_rag_uses - initial_rag_uses
+        
+        if rag_queries_made > 0:
+            operation_summary['rag_used'] = True
+            operation_summary['rag_queries'] = rag_queries_made
+            operation_summary['rag_articles_found'] = rag_successful  # Approximate
+            logger.info(f"[{symbol}] ✅ RAG was used: {rag_queries_made} queries made, {rag_successful} successful")
+        else:
+            logger.info(f"[{symbol}] ℹ️ RAG was not used (sentiment was cached or cache enabled)")
         
         # Handle empty texts (fallback to neutral)
         for i, text in enumerate(news_texts):
@@ -249,8 +295,21 @@ def load_stock_data(
         st.session_state.news_sentiments = news_sentiments
         st.session_state.social_sentiments = social_sentiments
         
-        # Final update of cache status
-        st.session_state.cache_status = cache_status
+        # Store operation summary
+        st.session_state.operation_summary = operation_summary
+        
+        # Log final summary
+        logger.info(f"[{symbol}] === Operation Summary ===")
+        logger.info(f"[{symbol}] Redis used: {operation_summary['redis_used']}")
+        logger.info(f"[{symbol}]   - Stock cached: {operation_summary['stock_cached']}")
+        logger.info(f"[{symbol}]   - News cached: {operation_summary['news_cached']}")
+        logger.info(f"[{symbol}]   - Sentiment: {operation_summary['sentiment_cache_hits']} hits, {operation_summary['sentiment_cache_misses']} misses")
+        logger.info(f"[{symbol}] RAG used: {operation_summary['rag_used']}")
+        if operation_summary['rag_used']:
+            logger.info(f"[{symbol}]   - RAG queries: {operation_summary['rag_queries']}")
+            logger.info(f"[{symbol}]   - Articles found: {operation_summary['rag_articles_found']}")
+        logger.info(f"[{symbol}] Articles stored in RAG: {operation_summary['articles_stored']}")
+        logger.info(f"[{symbol}] === End Summary ===")
         
         # Show success toast
         time.sleep(0.3)  # Brief pause to show completion

@@ -310,33 +310,48 @@ class AzureAISearchVectorDB(VectorDatabase):
                 vector = item.get("vector", [])
                 metadata = item.get("metadata", {})
                 
+                # Safely get metadata values, ensuring no None values
+                title = metadata.get("title") or ""
+                summary = metadata.get("summary") or ""
+                symbol_val = metadata.get("symbol") or ""
+                source = metadata.get("source") or ""
+                url = metadata.get("url") or ""
+                article_id_val = metadata.get("article_id") or vector_id
+                
                 document = {
                     "id": vector_id,
-                    "content": f"{metadata.get('title', '')} {metadata.get('summary', '')}",
+                    "content": f"{title} {summary}".strip() or "No content",
                     "contentVector": vector,
-                    "symbol": metadata.get("symbol", ""),
-                    "title": metadata.get("title", ""),
-                    "summary": metadata.get("summary", ""),
-                    "source": metadata.get("source", ""),
-                    "url": metadata.get("url", ""),
-                    "article_id": metadata.get("article_id", vector_id)
+                    "symbol": symbol_val,
+                    "title": title,
+                    "summary": summary,
+                    "source": source,
+                    "url": url,
+                    "article_id": article_id_val
                 }
                 
+                # Handle timestamp safely
                 timestamp = metadata.get("timestamp")
                 if timestamp:
-                    if isinstance(timestamp, str):
-                        try:
+                    try:
+                        if isinstance(timestamp, str):
                             from dateutil import parser
                             timestamp = parser.parse(timestamp)
-                        except Exception:
-                            timestamp = None
-                    if timestamp:
-                        document["timestamp"] = timestamp
+                        # Ensure it's a datetime object
+                        if hasattr(timestamp, 'isoformat'):
+                            document["timestamp"] = timestamp
+                        else:
+                            logger.warning(f"Invalid timestamp format for document {vector_id[:8]}: {type(timestamp)}")
+                    except Exception as e:
+                        logger.warning(f"Error parsing timestamp for document {vector_id[:8]}: {e}")
                 
                 documents.append(document)
+                
+                # Log document being prepared
+                logger.debug(f"Azure AI Search: Prepared document [{vector_id[:8]}] - '{title[:40]}...' (symbol: {symbol_val}, source: {source})")
             
             # Upload in batch
-            logger.info(f"Azure AI Search: Uploading {len(documents)} documents to index")
+            logger.info(f"Azure AI Search: Uploading {len(documents)} documents to index '{self._index_name}'")
             result = self._client.upload_documents(documents=documents)
             
             # Count successful uploads
@@ -344,13 +359,15 @@ class AzureAISearchVectorDB(VectorDatabase):
             failed_count = len(documents) - success_count
             
             if success_count > 0:
-                logger.info(f"Azure AI Search: Successfully stored {success_count} vectors")
+                logger.info(f"Azure AI Search: ✅ Successfully stored {success_count}/{len(documents)} vectors in index '{self._index_name}'")
             if failed_count > 0:
-                logger.warning(f"Azure AI Search: Failed to store {failed_count} vectors")
+                logger.warning(f"Azure AI Search: ⚠️ Failed to store {failed_count}/{len(documents)} vectors")
                 # Log first few failures for debugging
                 for i, r in enumerate(result):
-                    if not r.succeeded and i < 3:
-                        logger.warning(f"Azure AI Search: Upload failed for document {r.key} - {r.error_message}")
+                    if not r.succeeded and i < 5:  # Log first 5 failures
+                        doc_id = r.key if hasattr(r, 'key') else f"document_{i}"
+                        error_msg = r.error_message if hasattr(r, 'error_message') else str(r)
+                        logger.warning(f"Azure AI Search: Upload failed for document {doc_id} - {error_msg}")
             
             return success_count
             
@@ -407,24 +424,43 @@ class AzureAISearchVectorDB(VectorDatabase):
                 **search_options
             )
             
-            # Format results
+            # Format results safely (handle None values)
             formatted_results = []
             for result in results:
-                formatted_results.append({
-                    "article_id": result.get("article_id", result.get("id", "")),
-                    "symbol": result.get("symbol", ""),
-                    "title": result.get("title", ""),
-                    "summary": result.get("summary", ""),
-                    "source": result.get("source", ""),
-                    "url": result.get("url", ""),
-                    "timestamp": result.get("timestamp", ""),
-                    "similarity": result.get("@search.score", 0.0)  # Azure AI Search relevance score
-                })
+                try:
+                    # Safely extract all fields
+                    article_id = result.get("article_id") or result.get("id") or ""
+                    symbol = result.get("symbol") or ""
+                    title = result.get("title") or ""
+                    summary = result.get("summary") or ""
+                    source = result.get("source") or ""
+                    url = result.get("url") or ""
+                    timestamp = result.get("timestamp") or ""
+                    
+                    # Safely get score
+                    search_score = result.get("@search.score")
+                    similarity = float(search_score) if search_score is not None else 0.0
+                    
+                    formatted_results.append({
+                        "article_id": article_id,
+                        "symbol": symbol,
+                        "title": title,
+                        "summary": summary,
+                        "source": source,
+                        "url": url,
+                        "timestamp": timestamp,
+                        "similarity": similarity
+                    })
+                except Exception as e:
+                    logger.error(f"Error formatting vector search result: {e} - result: {result}")
+                    continue
             
             logger.info(f"Azure AI Search: Vector search returned {len(formatted_results)} results")
             if formatted_results:
-                top_score = formatted_results[0].get('similarity', 0)
-                logger.info(f"Azure AI Search: Top result score: {top_score:.3f} - '{formatted_results[0].get('title', 'N/A')[:50]}...'")
+                top_score = formatted_results[0].get('similarity') or 0.0
+                top_title = formatted_results[0].get('title') or 'N/A'
+                top_title_display = top_title[:50] if top_title and len(top_title) > 50 else top_title
+                logger.info(f"Azure AI Search: Top result score: {top_score:.3f} - '{top_title_display}...'")
             
             return formatted_results
             
@@ -457,7 +493,9 @@ class AzureAISearchVectorDB(VectorDatabase):
         try:
             from azure.search.documents.models import VectorizedQuery
             
-            logger.info(f"Azure AI Search: Performing hybrid search (vector + keyword, top_k={top_k}, query='{query_text[:50]}...', filter={'applied' if filter else 'none'})")
+            query_preview = (query_text[:50] + '...') if query_text and len(query_text) > 50 else (query_text or '')
+            filter_status = 'applied' if filter else 'none'
+            logger.info(f"Azure AI Search: Performing hybrid search (vector + keyword, top_k={top_k}, query='{query_preview}', filter={filter_status})")
             
             # Create vectorized query
             vector_query = VectorizedQuery(
@@ -481,25 +519,56 @@ class AzureAISearchVectorDB(VectorDatabase):
             # Perform hybrid search (Azure AI Search handles RRF internally)
             results = self._client.search(**search_options)
             
-            # Format results
+            # Format results safely (handle None values)
             formatted_results = []
             for result in results:
-                formatted_results.append({
-                    "article_id": result.get("article_id", result.get("id", "")),
-                    "symbol": result.get("symbol", ""),
-                    "title": result.get("title", ""),
-                    "summary": result.get("summary", ""),
-                    "source": result.get("source", ""),
-                    "url": result.get("url", ""),
-                    "timestamp": result.get("timestamp", ""),
-                    "similarity": result.get("@search.score", 0.0),
-                    "rrf_score": result.get("@search.reranker_score", result.get("@search.score", 0.0))
-                })
+                try:
+                    # Safely extract all fields, ensuring no None values
+                    article_id = result.get("article_id") or result.get("id") or ""
+                    symbol = result.get("symbol") or ""
+                    title = result.get("title") or ""
+                    summary = result.get("summary") or ""
+                    source = result.get("source") or ""
+                    url = result.get("url") or ""
+                    timestamp = result.get("timestamp") or ""
+                    
+                    # Safely get scores
+                    search_score = result.get("@search.score")
+                    similarity = float(search_score) if search_score is not None else 0.0
+                    
+                    reranker_score = result.get("@search.reranker_score")
+                    rrf_score = float(reranker_score) if reranker_score is not None else similarity
+                    
+                    formatted_results.append({
+                        "article_id": article_id,
+                        "symbol": symbol,
+                        "title": title,
+                        "summary": summary,
+                        "source": source,
+                        "url": url,
+                        "timestamp": timestamp,
+                        "similarity": similarity,
+                        "rrf_score": rrf_score
+                    })
+                except Exception as e:
+                    logger.error(f"Error formatting search result: {e} - result: {result}")
+                    continue
             
             logger.info(f"Azure AI Search: Hybrid search returned {len(formatted_results)} results")
             if formatted_results:
-                top_score = formatted_results[0].get('rrf_score', formatted_results[0].get('similarity', 0))
-                logger.info(f"Azure AI Search: Top result RRF score: {top_score:.3f} - '{formatted_results[0].get('title', 'N/A')[:50]}...'")
+                top_score = formatted_results[0].get('rrf_score') or formatted_results[0].get('similarity') or 0.0
+                top_title = formatted_results[0].get('title') or 'N/A'
+                top_title_display = top_title[:50] if top_title and len(top_title) > 50 else top_title
+                logger.info(f"Azure AI Search: Top result RRF score: {top_score:.3f} - '{top_title_display}...'")
+                
+                # Log details of all results for debugging
+                logger.info(f"Azure AI Search: Result details:")
+                for i, result in enumerate(formatted_results[:3], 1):  # Log top 3
+                    score = result.get('rrf_score') or result.get('similarity') or 0.0
+                    title = result.get('title') or 'No title'
+                    symbol = result.get('symbol') or 'Unknown'
+                    source = result.get('source') or 'Unknown'
+                    logger.info(f"  [{i}] Score: {score:.3f} | Symbol: {symbol} | Source: {source} | Title: {title[:60]}")
             
             return formatted_results
             

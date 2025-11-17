@@ -386,7 +386,12 @@ class RAGService:
             return 0
         
         # Generate embeddings in batches
+        logger.info(f"RAG Storage: Generating embeddings for {len(article_texts)} articles (symbol={symbol}, batch_size={batch_size})")
         embeddings = self.get_embeddings_batch(article_texts, batch_size=batch_size, use_cache=False)
+        
+        # Count successful embeddings
+        valid_embeddings = sum(1 for e in embeddings if e is not None)
+        logger.info(f"RAG Storage: Generated {valid_embeddings}/{len(article_texts)} embeddings successfully")
         
         # Use Azure AI Search if available, otherwise fallback to Redis
         if self.vector_db and self.vector_db.is_available():
@@ -396,6 +401,7 @@ class RAGService:
             vectors_to_store = []
             for metadata, embedding in zip(article_metadata, embeddings):
                 if embedding is None:
+                    logger.warning(f"RAG Storage: Skipping article (no embedding): {metadata['article_id'][:8]}")
                     continue
                 
                 article = metadata['article']
@@ -404,16 +410,36 @@ class RAGService:
                 # Create vector ID (must be unique across all symbols)
                 vector_id = f"{symbol}:{article_id}"
                 
+                # Prepare metadata with proper timestamp handling
+                timestamp = article.get('timestamp', '')
+                if timestamp:
+                    # Convert datetime to ISO format string if needed
+                    if hasattr(timestamp, 'isoformat'):
+                        timestamp_str = timestamp.isoformat()
+                    else:
+                        timestamp_str = str(timestamp)
+                else:
+                    timestamp_str = ''
+                
                 # Prepare metadata
                 article_meta = {
                     'article_id': article_id,
                     'symbol': symbol,
-                    'title': article.get('title', ''),
-                    'summary': article.get('summary', ''),
-                    'source': article.get('source', ''),
-                    'url': article.get('url', ''),
-                    'timestamp': str(article.get('timestamp', ''))
+                    'title': article.get('title', '') or '',
+                    'summary': article.get('summary', '') or '',
+                    'source': article.get('source', '') or 'Unknown',
+                    'url': article.get('url', '') or '',
+                    'timestamp': timestamp_str
                 }
+                
+                # Log article being stored with full details
+                title_preview = article_meta['title'][:50] if article_meta['title'] else 'No title'
+                logger.info(
+                    f"RAG Storage: Preparing article [{article_id[:8]}] for {symbol} - "
+                    f"'{title_preview}...' | Source: {article_meta['source']} | "
+                    f"Timestamp: {timestamp_str[:19] if timestamp_str else 'None'} | "
+                    f"Vector ID: {vector_id[:20]}..."
+                )
                 
                 vectors_to_store.append({
                     'vector_id': vector_id,
@@ -422,9 +448,12 @@ class RAGService:
                 })
             
             # Batch store in Azure AI Search
-            logger.info(f"RAG Storage: Batch storing {len(vectors_to_store)} vectors in Azure AI Search")
+            logger.info(f"RAG Storage: Batch storing {len(vectors_to_store)} vectors in Azure AI Search for {symbol}")
             stored_count = self.vector_db.batch_store_vectors(vectors_to_store)
-            logger.info(f"RAG Storage: Successfully stored {stored_count}/{len(vectors_to_store)} articles in Azure AI Search")
+            logger.info(f"RAG Storage: ✅ Successfully stored {stored_count}/{len(vectors_to_store)} articles in Azure AI Search for {symbol}")
+            
+            if stored_count < len(vectors_to_store):
+                logger.warning(f"RAG Storage: ⚠️ Only {stored_count}/{len(vectors_to_store)} articles stored successfully")
             
             # Also mark as stored in Redis for duplicate checking (if Redis available)
             if self.cache and self.cache.client:
@@ -725,8 +754,9 @@ class RAGService:
         filters = []
         filter_details = []
         
-        # Always filter by symbol
-        filters.append(f"symbol eq '{symbol}'")
+        # Always filter by symbol (safely escape)
+        escaped_symbol = str(symbol).replace("'", "''")
+        filters.append(f"symbol eq '{escaped_symbol}'")
         filter_details.append(f"symbol={symbol}")
         
         # Date range filter
@@ -734,37 +764,65 @@ class RAGService:
             from datetime import datetime, timedelta
             end_date = datetime.now()
             start_date = end_date - timedelta(days=days_back)
-            filters.append(f"timestamp ge {start_date.isoformat()}Z")
-            filters.append(f"timestamp le {end_date.isoformat()}Z")
-            filter_details.append(f"date_range=last_{days_back}_days")
-            logger.info(f"RAG Filter: Applying date filter - last {days_back} days")
+            try:
+                filters.append(f"timestamp ge {start_date.isoformat()}Z")
+                filters.append(f"timestamp le {end_date.isoformat()}Z")
+                filter_details.append(f"date_range=last_{days_back}_days")
+                logger.info(f"RAG Filter: Applying date filter - last {days_back} days")
+            except Exception as e:
+                logger.error(f"RAG Filter: Error building date filter: {e}")
         elif date_range:
             start_date, end_date = date_range
             if start_date:
-                filters.append(f"timestamp ge {start_date.isoformat()}Z")
-                filter_details.append(f"start_date={start_date.strftime('%Y-%m-%d')}")
+                try:
+                    if hasattr(start_date, 'isoformat'):
+                        filters.append(f"timestamp ge {start_date.isoformat()}Z")
+                        filter_details.append(f"start_date={start_date.strftime('%Y-%m-%d')}")
+                    else:
+                        logger.warning(f"RAG Filter: Invalid start_date type: {type(start_date)}")
+                except Exception as e:
+                    logger.error(f"RAG Filter: Error formatting start_date: {e}")
             if end_date:
-                filters.append(f"timestamp le {end_date.isoformat()}Z")
-                filter_details.append(f"end_date={end_date.strftime('%Y-%m-%d')}")
+                try:
+                    if hasattr(end_date, 'isoformat'):
+                        filters.append(f"timestamp le {end_date.isoformat()}Z")
+                        filter_details.append(f"end_date={end_date.strftime('%Y-%m-%d')}")
+                    else:
+                        logger.warning(f"RAG Filter: Invalid end_date type: {type(end_date)}")
+                except Exception as e:
+                    logger.error(f"RAG Filter: Error formatting end_date: {e}")
             if start_date or end_date:
-                logger.info(f"RAG Filter: Applying custom date range - {start_date.strftime('%Y-%m-%d') if start_date else 'any'} to {end_date.strftime('%Y-%m-%d') if end_date else 'any'}")
+                start_str = start_date.strftime('%Y-%m-%d') if start_date and hasattr(start_date, 'strftime') else 'any'
+                end_str = end_date.strftime('%Y-%m-%d') if end_date and hasattr(end_date, 'strftime') else 'any'
+                logger.info(f"RAG Filter: Applying custom date range - {start_str} to {end_str}")
         
-        # Source filters
+        # Source filters (safely escape source names)
         if sources:
-            source_filters = [f"source eq '{s}'" for s in sources]
-            filters.append(f"({' or '.join(source_filters)})")
-            filter_details.append(f"sources={', '.join(sources)}")
-            logger.info(f"RAG Filter: Including sources - {', '.join(sources)}")
+            source_filters = []
+            for s in sources:
+                if s:  # Only add non-empty sources
+                    escaped_source = str(s).replace("'", "''")
+                    source_filters.append(f"source eq '{escaped_source}'")
+            if source_filters:
+                filters.append(f"({' or '.join(source_filters)})")
+                filter_details.append(f"sources={', '.join(sources)}")
+                logger.info(f"RAG Filter: Including sources - {', '.join(sources)}")
         
         if exclude_sources:
-            exclude_filters = [f"source ne '{s}'" for s in exclude_sources]
-            filters.extend(exclude_filters)
-            filter_details.append(f"exclude_sources={', '.join(exclude_sources)}")
-            logger.info(f"RAG Filter: Excluding sources - {', '.join(exclude_sources)}")
+            exclude_filters = []
+            for s in exclude_sources:
+                if s:  # Only add non-empty sources
+                    escaped_source = str(s).replace("'", "''")
+                    exclude_filters.append(f"source ne '{escaped_source}'")
+            if exclude_filters:
+                filters.extend(exclude_filters)
+                filter_details.append(f"exclude_sources={', '.join(exclude_sources)}")
+                logger.info(f"RAG Filter: Excluding sources - {', '.join(exclude_sources)}")
         
         filter_string = " and ".join(filters) if filters else None
         if filter_string:
             logger.info(f"RAG Filter: Built OData filter for {symbol} - {', '.join(filter_details)}")
+            logger.debug(f"RAG Filter: Full OData filter string: {filter_string}")
         
         return filter_string
     
@@ -839,24 +897,51 @@ class RAGService:
         try:
             # Use Azure AI Search if available
             if self.vector_db and self.vector_db.is_available():
-                logger.info(f"RAG: Using Azure AI Search for retrieval (symbol={symbol}, top_k={top_k}, hybrid={use_hybrid})")
+                logger.info(f"RAG Retrieval: Using Azure AI Search for retrieval (symbol={symbol}, top_k={top_k}, hybrid={use_hybrid})")
+                logger.info(f"RAG Retrieval: Query: '{query[:100] if query else 'empty'}...'")
+                logger.info(f"RAG Retrieval: Expanded query: '{expanded_query[:100] if expanded_query else 'empty'}...'")
                 
                 # Get query embedding
+                logger.info(f"RAG Retrieval: Generating embedding for query...")
                 query_embedding = self.get_embedding(expanded_query)
                 if not query_embedding:
-                    logger.warning("RAG retrieval failed: Could not get query embedding")
+                    logger.warning("RAG Retrieval: ❌ Failed - Could not get query embedding")
                     return []
+                logger.info(f"RAG Retrieval: ✅ Query embedding generated (dimension: {len(query_embedding) if query_embedding else 0})")
                 
                 # Use hybrid search if enabled, otherwise pure vector search
                 if use_hybrid:
-                    logger.info(f"RAG: Performing hybrid search (vector + keyword) for query: '{query[:50]}...'")
+                    query_preview = query[:50] if query and len(query) > 50 else query
+                    logger.info(f"RAG Retrieval: Performing hybrid search (vector + keyword) for query: '{query_preview}...' (symbol={symbol})")
+                    if filter_string:
+                        logger.info(f"RAG Retrieval: Filter applied - {filter_string[:100]}...")
                     results = self.vector_db.hybrid_search(
                         query_text=query,
                         query_vector=query_embedding,
                         top_k=top_k * 2,  # Get more for filtering
                         filter=filter_string
                     )
-                    logger.info(f"RAG: Hybrid search returned {len(results)} results")
+                    logger.info(f"RAG Retrieval: Hybrid search returned {len(results)} raw results for {symbol}")
+                    
+                    # Log details of retrieved articles
+                    if results:
+                        logger.info(f"RAG Retrieval: ✅ Retrieved {len(results)} articles for {symbol}:")
+                        for i, result in enumerate(results[:5], 1):  # Log top 5
+                            title = result.get('title') or 'No title'
+                            score = result.get('rrf_score') or result.get('similarity') or 0.0
+                            source = result.get('source') or 'Unknown'
+                            article_id = result.get('article_id') or 'Unknown'
+                            symbol_found = result.get('symbol') or 'Unknown'
+                            logger.info(f"  [{i}] Score: {score:.3f} | Symbol: {symbol_found} | Source: {source} | ID: {article_id[:8]} | Title: {title[:60]}")
+                    else:
+                        logger.warning(f"RAG Retrieval: ⚠️ No articles found for {symbol} with query '{query_preview}...'")
+                        logger.warning(f"RAG Retrieval: Possible reasons:")
+                        logger.warning(f"  1. Articles may not be indexed yet (Azure AI Search indexing delay)")
+                        logger.warning(f"  2. Filter may be too restrictive")
+                        logger.warning(f"  3. Query may not match stored articles")
+                        if filter_string:
+                            logger.warning(f"RAG Retrieval: Current filter: {filter_string}")
+                        logger.warning(f"RAG Retrieval: Try searching without filters or wait a few seconds for indexing")
                 else:
                     logger.info(f"RAG: Performing vector search for query: '{query[:50]}...'")
                     results = self.vector_db.search_vectors(
@@ -868,24 +953,33 @@ class RAGService:
                 
                 # Apply similarity threshold
                 similarity_threshold = self.settings.app.rag_similarity_threshold
-                filtered_results = [
-                    r for r in results 
-                    if r.get('similarity', r.get('rrf_score', 0)) >= similarity_threshold
-                ]
+                filtered_results = []
+                for r in results:
+                    score = r.get('rrf_score') or r.get('similarity') or 0.0
+                    if score >= similarity_threshold:
+                        filtered_results.append(r)
+                    else:
+                        title = r.get('title') or 'No title'
+                        logger.debug(f"RAG Filter: Excluded article (score {score:.3f} < threshold {similarity_threshold}): '{title[:50]}...'")
                 
                 if len(results) > len(filtered_results):
-                    logger.info(f"RAG: Similarity threshold ({similarity_threshold}) filtered {len(results) - len(filtered_results)} results, {len(filtered_results)} remaining")
+                    logger.info(f"RAG Filter: Similarity threshold ({similarity_threshold}) filtered {len(results) - len(filtered_results)} results, {len(filtered_results)} remaining")
                 
                 # Apply temporal decay if enabled (for Redis fallback compatibility)
                 if apply_temporal_decay and filtered_results:
-                    logger.info(f"RAG: Applying temporal decay to {len(filtered_results)} results")
+                    logger.info(f"RAG Filter: Applying temporal decay to {len(filtered_results)} results")
                     filtered_results = self._apply_temporal_decay(filtered_results)
                 
                 # Return top_k
                 final_results = filtered_results[:top_k]
-                logger.info(f"RAG: Returning {len(final_results)} articles for context (requested: {top_k})")
+                logger.info(f"RAG Retrieval: ✅ Returning {len(final_results)} articles for context (requested: {top_k}, symbol={symbol})")
                 if final_results:
-                    logger.info(f"RAG: Top article - '{final_results[0].get('title', 'N/A')[:60]}...' (similarity: {final_results[0].get('similarity', final_results[0].get('rrf_score', 0)):.3f})")
+                    top_title = final_results[0].get('title') or 'N/A'
+                    top_score = final_results[0].get('rrf_score') or final_results[0].get('similarity') or 0.0
+                    top_source = final_results[0].get('source') or 'Unknown'
+                    logger.info(f"RAG Retrieval: Top article - '{top_title[:60]}...' (score: {top_score:.3f}, source: {top_source})")
+                else:
+                    logger.warning(f"RAG Retrieval: ⚠️ No articles returned after filtering (symbol={symbol}, threshold={similarity_threshold})")
                 
                 return final_results
             

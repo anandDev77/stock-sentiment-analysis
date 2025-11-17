@@ -22,7 +22,6 @@ from ..utils.retry import retry_with_exponential_backoff
 from ..utils.circuit_breaker import CircuitBreaker, CircuitBreakerOpenError
 from .cache import RedisCache
 from .rag import RAGService
-from .cost_tracker import CostTracker
 
 logger = get_logger(__name__)
 
@@ -57,8 +56,7 @@ class SentimentAnalyzer:
         self,
         settings: Optional[Settings] = None,
         redis_cache: Optional[RedisCache] = None,
-        rag_service: Optional[RAGService] = None,
-        cost_tracker: Optional[CostTracker] = None
+        rag_service: Optional[RAGService] = None
     ):
         """
         Initialize the sentiment analyzer.
@@ -67,7 +65,6 @@ class SentimentAnalyzer:
             settings: Application settings (uses global if not provided)
             redis_cache: Redis cache instance for caching results
             rag_service: RAG service for context retrieval
-            cost_tracker: Cost tracker for monitoring API usage
             
         Raises:
             ValueError: If Azure OpenAI configuration is invalid
@@ -75,7 +72,6 @@ class SentimentAnalyzer:
         self.settings = settings or get_settings()
         self.cache = redis_cache
         self.rag_service = rag_service
-        self.cost_tracker = cost_tracker or (CostTracker(cache=redis_cache) if redis_cache else None)
         
         # Initialize Azure OpenAI client
         azure_config = self.settings.azure_openai
@@ -319,17 +315,6 @@ Respond ONLY with valid JSON. No explanations, no markdown, just the JSON object
                     "Using TextBlob fallback to prevent cascading failures."
                 )
                 return self._textblob_fallback(text)
-            
-            # Track costs
-            if self.cost_tracker:
-                input_tokens = response.usage.prompt_tokens if hasattr(response.usage, 'prompt_tokens') else 0
-                output_tokens = response.usage.completion_tokens if hasattr(response.usage, 'completion_tokens') else 0
-                self.cost_tracker.track_api_call(
-                    model=self.deployment_name,
-                    input_tokens=input_tokens,
-                    output_tokens=output_tokens,
-                    operation_type="completion"
-                )
             
             # Extract JSON from response
             content = response.choices[0].message.content.strip()

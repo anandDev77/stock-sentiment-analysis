@@ -10,7 +10,6 @@ from ..services.sentiment import SentimentAnalyzer
 from ..services.collector import StockDataCollector
 from ..services.cache import RedisCache
 from ..services.rag import RAGService
-from ..services.cost_tracker import CostTracker
 from ..utils.logger import get_logger, setup_logger
 
 logger = get_logger(__name__)
@@ -60,22 +59,13 @@ def get_collector(_settings, _cache):
 
 
 @st.cache_resource
-def get_cost_tracker(_settings, _cache):
-    """Get or create cost tracker instance."""
-    if _cache and _cache.client:
-        return CostTracker(cache=_cache, settings=_settings)
-    return None
-
-
-@st.cache_resource
-def get_analyzer(_settings, _cache, _rag_service, _cost_tracker):
+def get_analyzer(_settings, _cache, _rag_service):
     """Get sentiment analyzer instance."""
     try:
         return SentimentAnalyzer(
             settings=_settings,
             redis_cache=_cache,
-            rag_service=_rag_service,
-            cost_tracker=_cost_tracker
+            rag_service=_rag_service
         )
     except ValueError as e:
         logger.error(f"Configuration Error: {e}")
@@ -89,26 +79,24 @@ def initialize_services(settings) -> Tuple[
     Optional[RedisCache],
     Optional[RAGService],
     StockDataCollector,
-    Optional[CostTracker],
     Optional[SentimentAnalyzer]
 ]:
     """
     Initialize all application services.
     
     Returns:
-        Tuple of (redis_cache, rag_service, collector, cost_tracker, analyzer)
+        Tuple of (redis_cache, rag_service, collector, analyzer)
     """
     redis_cache = get_redis_cache(settings)
     rag_service = get_rag_service(settings, redis_cache)
     collector = get_collector(settings, redis_cache)
-    cost_tracker = get_cost_tracker(settings, redis_cache)
-    analyzer = get_analyzer(settings, redis_cache, rag_service, cost_tracker)
+    analyzer = get_analyzer(settings, redis_cache, rag_service)
     
     if analyzer is None:
         st.error("Failed to initialize sentiment analyzer. Please check your configuration.")
         st.stop()
     
-    return redis_cache, rag_service, collector, cost_tracker, analyzer
+    return redis_cache, rag_service, collector, analyzer
 
 
 def initialize_session_state():
@@ -120,7 +108,6 @@ def initialize_session_state():
         'social_sentiments': [],
         'symbol': "AAPL",
         'title_shown': False,
-        'recent_searches': [],
         'data_errors': {},
         'show_comparison': False,
         'comparison_stocks': [],

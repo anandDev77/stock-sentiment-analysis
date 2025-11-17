@@ -16,7 +16,6 @@ def render_sidebar(
     redis_cache: Optional[Any],
     rag_service: Optional[Any],
     analyzer: Optional[Any],
-    cost_tracker: Optional[Any],
     settings
 ) -> str:
     """
@@ -26,7 +25,6 @@ def render_sidebar(
         redis_cache: RedisCache instance
         rag_service: RAGService instance
         analyzer: SentimentAnalyzer instance
-        cost_tracker: CostTracker instance
         settings: Application settings
         
     Returns:
@@ -59,26 +57,14 @@ def render_sidebar(
         # Search filters
         _render_search_filters(settings)
         
-        # Recent searches
-        _render_recent_searches()
+        # Sentiment cache controls
+        _render_sentiment_cache_controls(settings)
         
         # Load button
         if st.button("🚀 Load Data", type="primary", width='stretch'):
             st.session_state.load_data = True
             st.session_state.symbol = symbol
             st.session_state.title_shown = False
-            
-            # Add to recent searches
-            if symbol and symbol not in st.session_state.recent_searches:
-                st.session_state.recent_searches.append(symbol)
-                # Keep only last 10
-                if len(st.session_state.recent_searches) > 10:
-                    st.session_state.recent_searches = st.session_state.recent_searches[-10:]
-        
-        st.markdown("---")
-        
-        # Cache status
-        _render_cache_status(redis_cache)
         
         st.markdown("---")
         
@@ -87,8 +73,8 @@ def render_sidebar(
         
         st.markdown("---")
         
-        # Performance metrics
-        _render_performance_metrics(redis_cache, analyzer, cost_tracker)
+        # Summary log
+        _render_summary_log()
         
         # Cache management
         _render_cache_management(redis_cache)
@@ -350,71 +336,47 @@ def _render_search_filters(settings):
         }
 
 
-def _render_recent_searches():
-    """Render recent searches section."""
-    if st.session_state.recent_searches:
-        st.markdown("### 🔍 Recent Searches")
-        for sym in st.session_state.recent_searches[-5:]:  # Show last 5
-            if st.button(sym, key=f"recent_{sym}", width='stretch'):
-                st.session_state.symbol = sym
-                st.session_state.load_data = True
-                st.rerun()
-        st.markdown("---")
-
-
-def _render_cache_status(redis_cache: Optional[Any]):
-    """Render cache status indicators."""
-    if 'cache_status' in st.session_state and st.session_state.cache_status:
-        cache_status = st.session_state.cache_status
-        st.markdown("### 🔄 Cache Status (Last Request)")
+def _render_sentiment_cache_controls(settings):
+    """Render sentiment cache TTL controls."""
+    with st.expander("⚙️ Sentiment Cache Settings", expanded=False):
+        st.markdown("**Control sentiment caching to test RAG functionality**")
+        st.markdown("*When sentiment cache is disabled, RAG will be used for every analysis*")
         
-        cache_col1, cache_col2 = st.columns(2)
-        with cache_col1:
-            if cache_status['stock']['hit']:
-                st.success("✅ Stock Data: **CACHED**")
-            elif cache_status['stock']['miss']:
-                st.info("🔄 Stock Data: **FRESH** (from API)")
-            else:
-                st.warning("⚠️ Stock Data: Unknown status")
-            
-            if cache_status['news']['hit']:
-                st.success("✅ News: **CACHED**")
-            elif cache_status['news']['miss']:
-                st.info("🔄 News: **FRESH** (from API)")
-            else:
-                st.warning("⚠️ News: Unknown status")
+        # Enable/disable sentiment cache
+        cache_enabled = st.checkbox(
+            "Enable Sentiment Caching",
+            value=settings.app.cache_sentiment_enabled,
+            key="sentiment_cache_enabled",
+            help="Disable to force RAG usage for every sentiment analysis"
+        )
         
-        with cache_col2:
-            total_sentiment = cache_status['sentiment']['hits'] + cache_status['sentiment']['misses']
-            if total_sentiment > 0:
-                hit_rate = (cache_status['sentiment']['hits'] / total_sentiment) * 100
-                st.metric(
-                    "Sentiment Cache",
-                    f"{hit_rate:.0f}%",
-                    f"{cache_status['sentiment']['hits']}/{total_sentiment} hits"
-                )
-            else:
-                st.info("No sentiment analysis yet")
+        # Update settings if changed
+        if cache_enabled != settings.app.cache_sentiment_enabled:
+            settings.app.cache_sentiment_enabled = cache_enabled
+            logger.info(f"Sentiment cache {'enabled' if cache_enabled else 'disabled'}")
+        
+        if cache_enabled:
+            # TTL control
+            ttl_hours = settings.app.cache_ttl_sentiment / 3600
+            new_ttl_hours = st.slider(
+                "Cache TTL (hours)",
+                min_value=0.1,
+                max_value=168.0,  # 7 days
+                value=float(ttl_hours),
+                step=0.1,
+                format="%.1f",
+                key="sentiment_cache_ttl",
+                help="Time-to-live for sentiment cache. Lower values = more RAG usage"
+            )
             
-            if redis_cache and redis_cache.last_tier_used:
-                tier_display = redis_cache.last_tier_used
-                if tier_display == "Redis":
-                    tier_emoji = "🔴"
-                    tier_desc = "Redis Cache"
-                    tier_color = "success"
-                elif tier_display == "MISS":
-                    tier_emoji = "⚪"
-                    tier_desc = "Cache Miss"
-                    tier_color = "info"
-                else:
-                    tier_emoji = "🔴"
-                    tier_desc = tier_display
-                    tier_color = "success"
-                
-                if tier_color == "success":
-                    st.success(f"{tier_emoji} Last Cache: **{tier_desc}**")
-                else:
-                    st.info(f"{tier_emoji} Last Cache: **{tier_desc}**")
+            new_ttl_seconds = int(new_ttl_hours * 3600)
+            if new_ttl_seconds != settings.app.cache_ttl_sentiment:
+                settings.app.cache_ttl_sentiment = new_ttl_seconds
+                logger.info(f"Sentiment cache TTL updated to {new_ttl_hours:.1f} hours ({new_ttl_seconds}s)")
+            
+            st.info(f"Current TTL: {ttl_hours:.1f} hours ({settings.app.cache_ttl_sentiment}s)")
+        else:
+            st.warning("⚠️ Sentiment caching is disabled - RAG will be used for all analyses")
 
 
 def _render_connection_details(redis_cache: Optional[Any], rag_service: Optional[Any], settings):
@@ -461,93 +423,52 @@ def _render_connection_details(redis_cache: Optional[Any], rag_service: Optional
         st.code(f"Azure OpenAI Available: {settings.is_azure_openai_available()}")
 
 
-def _render_performance_metrics(redis_cache: Optional[Any], analyzer: Optional[Any], cost_tracker: Optional[Any]):
-    """Render performance metrics section."""
-    st.markdown("### 📊 Performance Metrics")
-    
-    # Get cache stats from Redis
-    cache_stats = {'cache_hits': 0, 'cache_misses': 0, 'cache_sets': 0}
-    if redis_cache and redis_cache.client:
-        try:
-            redis_cache.client.ping()
-            cache_stats = redis_cache.get_cache_stats()
-        except Exception as e:
-            logger.warning(f"Error getting cache stats: {e}")
-    
-    # Get analyzer stats
-    analyzer_stats = {'rag_uses': 0, 'rag_attempts': 0, 'total_requests': 0}
-    if analyzer:
-        try:
-            if hasattr(analyzer, 'get_stats'):
-                analyzer_stats = analyzer.get_stats()
+def _render_summary_log():
+    """Render summary log of last operation."""
+    if 'operation_summary' in st.session_state and st.session_state.operation_summary:
+        summary = st.session_state.operation_summary
+        st.markdown("### 📋 Operation Summary (Last Request)")
+        
+        with st.expander("View Details", expanded=True):
+            # Redis usage
+            redis_used = summary.get('redis_used', False)
+            redis_status = "✅ Used" if redis_used else "❌ Not Used"
+            st.markdown(f"**Redis Cache:** {redis_status}")
+            if redis_used:
+                st.markdown(f"  - Stock data: {'✅ Cached' if summary.get('stock_cached') else '🔄 Fresh'}")
+                st.markdown(f"  - News data: {'✅ Cached' if summary.get('news_cached') else '🔄 Fresh'}")
+                sentiment_hits = summary.get('sentiment_cache_hits', 0)
+                sentiment_misses = summary.get('sentiment_cache_misses', 0)
+                total_sentiment = sentiment_hits + sentiment_misses
+                if total_sentiment > 0:
+                    hit_rate = (sentiment_hits / total_sentiment) * 100
+                    st.markdown(f"  - Sentiment: {sentiment_hits} cached, {sentiment_misses} fresh ({hit_rate:.0f}% hit rate)")
+            
+            # RAG usage
+            rag_used = summary.get('rag_used', False)
+            rag_status = "✅ Used" if rag_used else "❌ Not Used"
+            st.markdown(f"**RAG Service:** {rag_status}")
+            if rag_used:
+                rag_queries = summary.get('rag_queries', 0)
+                rag_articles_found = summary.get('rag_articles_found', 0)
+                st.markdown(f"  - RAG queries made: {rag_queries}")
+                st.markdown(f"  - Articles retrieved: {rag_articles_found}")
+            
+            # Articles stored
+            articles_stored = summary.get('articles_stored', 0)
+            if articles_stored > 0:
+                st.markdown(f"**Articles Stored in RAG:** {articles_stored}")
+            
+            # Summary
+            st.markdown("---")
+            if redis_used and rag_used:
+                st.success("✅ Both Redis and RAG were used in this operation")
+            elif redis_used:
+                st.info("ℹ️ Only Redis was used (sentiment was cached)")
+            elif rag_used:
+                st.info("ℹ️ Only RAG was used (sentiment cache disabled or expired)")
             else:
-                analyzer_stats = {
-                    'rag_uses': getattr(analyzer, 'rag_uses', 0),
-                    'rag_attempts': getattr(analyzer, 'rag_attempts', 0),
-                    'cache_hits': getattr(analyzer, 'cache_hits', 0),
-                    'cache_misses': getattr(analyzer, 'cache_misses', 0)
-                }
-        except Exception as e:
-            logger.warning(f"Error getting analyzer stats: {e}")
-    
-    # Cache metrics
-    cache_col1, cache_col2 = st.columns(2)
-    with cache_col1:
-        st.metric(
-            "Cache Hits",
-            cache_stats.get('cache_hits', 0),
-            delta=None,
-            delta_color="normal",
-            help="Total cache hits (persisted in Redis)"
-        )
-    with cache_col2:
-        st.metric(
-            "Cache Misses",
-            cache_stats.get('cache_misses', 0),
-            delta=None,
-            delta_color="normal",
-            help="Total cache misses (persisted in Redis)"
-        )
-    
-    # Calculate hit rate
-    total_cache_ops = cache_stats.get('cache_hits', 0) + cache_stats.get('cache_misses', 0)
-    if total_cache_ops > 0:
-        hit_rate = (cache_stats.get('cache_hits', 0) / total_cache_ops) * 100
-        st.metric(
-            "Cache Hit Rate",
-            f"{hit_rate:.1f}%",
-            delta=f"{cache_stats.get('cache_hits', 0)}/{total_cache_ops}",
-            delta_color="normal",
-            help="Percentage of cache hits vs total cache operations"
-        )
-    
-    # RAG uses
-    rag_uses = analyzer_stats.get('rag_uses', 0)
-    rag_attempts = analyzer_stats.get('rag_attempts', 0)
-    rag_success_rate = (rag_uses / rag_attempts * 100) if rag_attempts > 0 else 0.0
-    
-    st.metric(
-        "RAG Uses",
-        rag_uses,
-        delta=f"{rag_attempts} attempts ({rag_success_rate:.1f}% success)" if rag_attempts > 0 else "No attempts",
-        delta_color="normal",
-        help=f"RAG successfully used {rag_uses} times out of {rag_attempts} attempts."
-    )
-    
-    # Cost tracking
-    if cost_tracker:
-        try:
-            cost_summary = cost_tracker.get_cost_summary(days=7)
-            st.markdown("### 💰 Cost Tracking (Last 7 Days)")
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.metric("Total Cost", f"${cost_summary.get('total_cost', 0):.4f}", help="Total API costs in USD")
-            with col2:
-                st.metric("Avg Daily", f"${cost_summary.get('average_daily_cost', 0):.4f}", help="Average daily cost")
-            with col3:
-                st.metric("API Calls", f"{cost_summary.get('total_calls', 0):,}", help="Total API calls made")
-        except Exception as e:
-            logger.warning(f"Error displaying cost tracking: {e}")
+                st.warning("⚠️ Neither Redis nor RAG was used")
 
 
 def _render_cache_management(redis_cache: Optional[Any]):
@@ -572,8 +493,6 @@ def _render_cache_management(redis_cache: Optional[Any]):
                         if redis_cache.clear_all_cache():
                             st.success("All cache data cleared!")
                             st.session_state.confirm_clear_cache = False
-                            if 'cache_status' in st.session_state:
-                                del st.session_state.cache_status
                             st.rerun()
                         else:
                             st.error("Failed to clear cache. Check logs for details.")

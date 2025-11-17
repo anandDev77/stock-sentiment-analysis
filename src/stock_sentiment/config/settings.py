@@ -212,6 +212,7 @@ class AppSettings(BaseSettings):
     cache_ttl_stock: int = Field(default=3600, description="Stock data cache TTL")  # 1 hour
     cache_ttl_news: int = Field(default=7200, description="News cache TTL")  # 2 hours
     cache_ttl_rag_articles: int = Field(default=604800, description="RAG article cache TTL (7 days in seconds)")
+    cache_sentiment_enabled: bool = Field(default=True, description="Enable sentiment caching (disable to force RAG usage)")
     
     # Redis connection settings
     redis_connect_timeout: int = Field(default=5, description="Redis connection timeout in seconds")

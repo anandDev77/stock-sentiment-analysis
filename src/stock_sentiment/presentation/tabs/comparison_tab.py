@@ -34,8 +34,7 @@ def render_comparison_tab(collector, analyzer, rag_service):
     with col1:
         compare_stocks = st.multiselect(
             "Select stocks to compare (2-5 recommended)",
-            options=['AAPL', 'MSFT', 'GOOGL', 'TSLA', 'AMZN', 'META', 'NVDA', 'NFLX', 'AMD', 'INTC'] + 
-                    [s for s in st.session_state.recent_searches if s not in ['AAPL', 'MSFT', 'GOOGL', 'TSLA', 'AMZN', 'META', 'NVDA', 'NFLX', 'AMD', 'INTC']],
+                options=['AAPL', 'MSFT', 'GOOGL', 'TSLA', 'AMZN', 'META', 'NVDA', 'NFLX', 'AMD', 'INTC'],
             default=[current_symbol] if current_symbol else [],
             key="compare_stocks_select",
             help="Select 2 or more stocks to compare their sentiment and performance"
