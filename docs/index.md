@@ -1,7 +1,7 @@
 # Stock Sentiment Analysis Dashboard - Complete Documentation
 
-**Version:** 2.0  
-**Last Updated:** December 2024  
+**Version:** 1.0  
+**Last Updated:** November 2025  
 **Author:** Anand Mohan Singh  
 **Repository:** [https://github.com/anandDev77/stock-sentiment-analysis](https://github.com/anandDev77/stock-sentiment-analysis)  
 **Target Audience:** ML Engineers, Data Scientists, Software Developers, and ML Enthusiasts
@@ -2625,7 +2625,7 @@ The modular design allows easy extension:
 
 ---
 
-**Version**: 2.0  
-**Last Updated**: November 2024  
-**Maintainer**: Stock Sentiment Analysis Team
+**Version**: 1.0  
+**Last Updated**: November 2025 
+**Maintainer**: Anand Mohan Singh
 
