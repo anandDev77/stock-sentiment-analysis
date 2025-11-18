@@ -241,8 +241,8 @@ class AppSettings(BaseSettings):
     circuit_breaker_failure_threshold: int = Field(default=5, description="Number of failures before opening circuit breaker")
     circuit_breaker_timeout: int = Field(default=60, description="Seconds to wait before trying half-open state")
     
-    # API timeout settings
-    api_timeout: int = Field(default=10, description="Default timeout for external API calls in seconds")
+    # External API timeout settings (for data sources like yfinance, Alpha Vantage, etc.)
+    external_api_timeout: int = Field(default=10, description="Default timeout for external API calls in seconds")
     
     # Data collection limits
     news_limit_default: int = Field(default=10, description="Default limit for news articles per source")
@@ -252,6 +252,14 @@ class AppSettings(BaseSettings):
     # UI display settings
     ui_articles_per_page: int = Field(default=10, description="Number of articles to display per page in UI")
     ui_show_all_articles: bool = Field(default=False, description="Show all articles by default (overrides pagination)")
+    
+    # API settings
+    api_host: str = Field(default="0.0.0.0", description="API server host")
+    api_port: int = Field(default=8000, description="API server port")
+    api_reload: bool = Field(default=False, description="Enable auto-reload for development")
+    api_base_url: str = Field(default="http://localhost:8000", description="API base URL for client connections")
+    api_timeout: int = Field(default=180, description="API request timeout in seconds (increased for RAG operations)")
+    api_enabled: bool = Field(default=True, description="Enable API mode (dashboard uses API instead of direct services)")
     
     # Vector search settings (Azure AI Search)
     vector_search_m: int = Field(default=4, description="HNSW parameter m (number of bi-directional links)")

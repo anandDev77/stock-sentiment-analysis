@@ -39,15 +39,27 @@ apply_custom_styles()
 
 # Initialize settings and services
 settings = initialize_settings()
-redis_cache, rag_service, collector, analyzer = initialize_services(settings)
+api_client, redis_cache, rag_service, collector, analyzer = initialize_services(settings)
 initialize_session_state()
 
 # Render sidebar and get selected symbol
-symbol = render_sidebar(redis_cache, rag_service, analyzer, settings)
+symbol = render_sidebar(redis_cache, rag_service, analyzer, settings, api_client)
 
 # Load data if button clicked
 if st.session_state.load_data and symbol:
-    load_stock_data(symbol, collector, analyzer, rag_service, redis_cache, settings)
+    # Use API client if available, otherwise fall back to direct services
+    if api_client and settings.app.api_enabled:
+        load_stock_data(symbol, api_client, settings)
+    else:
+        # Fallback to direct service calls if API not available
+if analyzer is None:
+            st.error("❌ Sentiment analyzer not available. Please check your configuration or enable API mode.")
+            st.stop()
+        # For now, we'll show a message that API mode is required
+        # In the future, we could add fallback logic here
+        st.error("❌ API mode is required. Please set APP_API_ENABLED=true and ensure the API server is running.")
+        st.info("💡 Start the API server with: `python -m stock_sentiment.api`")
+    st.stop()
 
 # Main header - only show once
 if not st.session_state.title_shown:
@@ -110,7 +122,7 @@ tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
 # Get data from session state
 news_sentiments = st.session_state.news_sentiments
 social_sentiments = st.session_state.social_sentiments
-current_symbol = st.session_state.get('symbol', symbol)
+    current_symbol = st.session_state.get('symbol', symbol)
 
 # Render tabs based on data availability
 if data is None:
@@ -133,4 +145,9 @@ else:
         render_ai_insights_tab(news_sentiments, current_symbol)
     
     with tab6:
-        render_comparison_tab(collector, analyzer, rag_service)
+        # Comparison tab may need API client or services
+        # For now, pass None for services if using API mode
+        if api_client and settings.app.api_enabled:
+            render_comparison_tab(None, None, None)  # Comparison tab needs to be updated to use API
+                else:
+            render_comparison_tab(collector, analyzer, rag_service)

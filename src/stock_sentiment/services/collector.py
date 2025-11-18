@@ -490,7 +490,7 @@ class StockDataCollector:
                 'limit': min(limit, 50)  # Alpha Vantage max is 50
             }
             
-            response = requests.get(url, params=params, timeout=self.settings.app.api_timeout)
+            response = requests.get(url, params=params, timeout=self.settings.app.external_api_timeout)
             response.raise_for_status()
             data = response.json()
             
@@ -579,7 +579,7 @@ class StockDataCollector:
                 'to': datetime.now().strftime('%Y-%m-%d')
             }
             
-            response = requests.get(url, params=params, timeout=self.settings.app.api_timeout)
+            response = requests.get(url, params=params, timeout=self.settings.app.external_api_timeout)
             response.raise_for_status()
             data = response.json()
             

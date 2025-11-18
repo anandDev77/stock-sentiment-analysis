@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 
 from ...config.settings import get_settings
 from ...utils.logger import get_logger
+from ..api_client import SentimentAPIClient
 
 logger = get_logger(__name__)
 
@@ -16,16 +17,18 @@ def render_sidebar(
     redis_cache: Optional[Any],
     rag_service: Optional[Any],
     analyzer: Optional[Any],
-    settings
+    settings,
+    api_client: Optional[SentimentAPIClient] = None
 ) -> str:
     """
     Render the sidebar with all controls and status indicators.
     
     Args:
-        redis_cache: RedisCache instance
-        rag_service: RAGService instance
-        analyzer: SentimentAnalyzer instance
+        redis_cache: RedisCache instance (for status display)
+        rag_service: RAGService instance (for status display)
+        analyzer: SentimentAnalyzer instance (for status display)
         settings: Application settings
+        api_client: API client instance (for API mode)
         
     Returns:
         Selected stock symbol
@@ -50,7 +53,7 @@ def render_sidebar(
         ).upper()
         
         # System status indicators
-        _render_system_status(redis_cache, rag_service)
+        _render_system_status(api_client, redis_cache, rag_service, settings)
         
         st.markdown("<br>", unsafe_allow_html=True)
         
@@ -69,7 +72,7 @@ def render_sidebar(
         st.markdown("---")
         
         # Connection details
-        _render_connection_details(redis_cache, rag_service, settings)
+        _render_connection_details(api_client, redis_cache, rag_service, settings)
         
         st.markdown("---")
         
@@ -93,10 +96,16 @@ def render_sidebar(
     return symbol
 
 
-def _render_system_status(redis_cache: Optional[Any], rag_service: Optional[Any]):
+def _render_system_status(
+    api_client: Optional[SentimentAPIClient],
+    redis_cache: Optional[Any],
+    rag_service: Optional[Any],
+    settings
+):
     """Render system status indicators."""
     st.markdown("### 🔌 System Status")
     
+    # Always show Redis and RAG status prominently
     status_col1, status_col2 = st.columns(2)
     
     with status_col1:
@@ -174,6 +183,34 @@ def _render_system_status(redis_cache: Optional[Any], rag_service: Optional[Any]
                 """,
                 unsafe_allow_html=True
             )
+    
+    # Show API status if API mode is enabled
+    if api_client and settings.app.api_enabled:
+        try:
+            health = api_client.get_health()
+            status = health.get('status', 'unknown')
+            
+            if status == 'healthy':
+                st.success("✅ API: Healthy")
+            elif status == 'degraded':
+                st.warning("⚠️ API: Degraded")
+            else:
+                st.error("❌ API: Unhealthy")
+            
+            # Show service details in expander
+            with st.expander("Service Details"):
+                services = health.get('services', {})
+                for service_name, service_status in services.items():
+                    if service_status == 'available':
+                        st.success(f"✅ {service_name.title()}")
+                    elif service_status == 'not_configured':
+                        st.info(f"ℹ️ {service_name.title()} (not configured)")
+                    else:
+                        st.error(f"❌ {service_name.title()}: {service_status}")
+        except Exception as e:
+            logger.error(f"Error checking API health: {e}")
+            st.error("❌ API: Unreachable")
+            st.warning("Please ensure the API server is running")
 
 
 def _render_search_filters(settings):
@@ -379,43 +416,61 @@ def _render_sentiment_cache_controls(settings):
             st.warning("⚠️ Sentiment caching is disabled - RAG will be used for all analyses")
 
 
-def _render_connection_details(redis_cache: Optional[Any], rag_service: Optional[Any], settings):
+def _render_connection_details(
+    api_client: Optional[SentimentAPIClient],
+    redis_cache: Optional[Any],
+    rag_service: Optional[Any],
+    settings
+):
     """Render connection details for troubleshooting."""
     with st.expander("🔍 Connection Details", expanded=False):
-        st.markdown("### Redis Connection")
-        if redis_cache:
-            if redis_cache.client:
-                try:
-                    redis_cache.client.ping()
-                    st.success("✅ Redis: Connected and responding")
+        # If API mode, show API connection details
+        if api_client and settings.app.api_enabled:
+            st.markdown("### API Connection")
+            st.code(f"API URL: {api_client.base_url}")
+            try:
+                health = api_client.get_health()
+                st.success(f"✅ API Status: {health.get('status', 'unknown')}")
+                st.json(health.get('services', {}))
+            except Exception as e:
+                st.error(f"❌ API: Connection failed - {e}")
+                st.info("Please ensure the API server is running at the configured URL")
+        else:
+            # Show direct service connections
+            st.markdown("### Redis Connection")
+            if redis_cache:
+                if redis_cache.client:
                     try:
-                        info = redis_cache.client.info('server')
-                        st.code(f"Redis Version: {info.get('redis_version', 'Unknown')}")
-                    except:
-                        pass
-                except Exception as e:
-                    st.error(f"❌ Redis: Connection failed - {e}")
-            else:
-                st.warning("⚠️ Redis: Client not initialized")
-                if settings.is_redis_available():
-                    st.info("Redis config exists but connection failed. Check your .env file.")
+                        redis_cache.client.ping()
+                        st.success("✅ Redis: Connected and responding")
+                        try:
+                            info = redis_cache.client.info('server')
+                            st.code(f"Redis Version: {info.get('redis_version', 'Unknown')}")
+                        except:
+                            pass
+                    except Exception as e:
+                        st.error(f"❌ Redis: Connection failed - {e}")
                 else:
-                    st.info("Redis not configured in .env file")
-        else:
-            st.warning("⚠️ Redis: Cache instance not created")
-        
-        st.markdown("### RAG Service")
-        if rag_service:
-            st.success(f"✅ RAG Service: Initialized")
-            st.code(f"Embeddings Enabled: {rag_service.embeddings_enabled}")
-            if hasattr(rag_service, 'embedding_deployment'):
-                st.code(f"Embedding Model: {rag_service.embedding_deployment or 'Not configured'}")
-        else:
-            st.warning("⚠️ RAG Service: Not initialized")
-            if settings.is_rag_available():
-                st.info("RAG config exists but service failed to initialize. Check embedding deployment.")
+                    st.warning("⚠️ Redis: Client not initialized")
+                    if settings.is_redis_available():
+                        st.info("Redis config exists but connection failed. Check your .env file.")
+                    else:
+                        st.info("Redis not configured in .env file")
             else:
-                st.info("RAG not configured (missing embedding deployment in .env)")
+                st.warning("⚠️ Redis: Cache instance not created")
+            
+            st.markdown("### RAG Service")
+            if rag_service:
+                st.success(f"✅ RAG Service: Initialized")
+                st.code(f"Embeddings Enabled: {rag_service.embeddings_enabled}")
+                if hasattr(rag_service, 'embedding_deployment'):
+                    st.code(f"Embedding Model: {rag_service.embedding_deployment or 'Not configured'}")
+            else:
+                st.warning("⚠️ RAG Service: Not initialized")
+                if settings.is_rag_available():
+                    st.info("RAG config exists but service failed to initialize. Check embedding deployment.")
+                else:
+                    st.info("RAG not configured (missing embedding deployment in .env)")
         
         st.markdown("### Configuration Check")
         st.code(f"Redis Available: {settings.is_redis_available()}")
