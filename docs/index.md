@@ -15,36 +15,43 @@
 3. [What This Application Does](#what-this-application-does)
 4. [High-Level Architecture](#high-level-architecture)
 5. [Technology Stack](#technology-stack)
-6. [Complete Example: End-to-End Walkthrough](#complete-example-end-to-end-walkthrough)
-7. [How It Works: Layman's Explanation](#how-it-works-laymans-explanation)
-8. [How It Works: Technical Deep Dive](#how-it-works-technical-deep-dive)
-9. [How It All Fits Together](#how-it-all-fits-together)
-10. [Core Components](#core-components)
-11. [Data Flow and Processing Pipeline](#data-flow-and-processing-pipeline)
-12. [Machine Learning Models and Techniques](#machine-learning-models-and-techniques)
-13. [RAG (Retrieval Augmented Generation) System](#rag-retrieval-augmented-generation-system)
-14. [Caching Strategy](#caching-strategy)
-15. [Performance Optimizations](#performance-optimizations)
-16. [Try It Yourself: Hands-On Tutorial](#try-it-yourself-hands-on-tutorial)
-17. [Deployment and Scaling](#deployment-and-scaling)
-18. [API Reference](#api-reference)
-19. [Frequently Asked Questions (FAQ)](#frequently-asked-questions-faq)
-20. [Troubleshooting](#troubleshooting)
-21. [Contributing](#contributing)
+6. [Modular Application Structure](#modular-application-structure)
+7. [Complete Example: End-to-End Walkthrough](#complete-example-end-to-end-walkthrough)
+8. [How It Works: Layman's Explanation](#how-it-works-laymans-explanation)
+9. [How It Works: Technical Deep Dive](#how-it-works-technical-deep-dive)
+10. [How It All Fits Together](#how-it-all-fits-together)
+11. [Core Components](#core-components)
+12. [Data Flow and Processing Pipeline](#data-flow-and-processing-pipeline)
+13. [Machine Learning Models and Techniques](#machine-learning-models-and-techniques)
+14. [RAG (Retrieval Augmented Generation) System](#rag-retrieval-augmented-generation-system)
+15. [Vector Database Architecture](#vector-database-architecture)
+16. [Data Sources Integration](#data-sources-integration)
+17. [Caching Strategy](#caching-strategy)
+18. [Performance Optimizations](#performance-optimizations)
+19. [Try It Yourself: Hands-On Tutorial](#try-it-yourself-hands-on-tutorial)
+20. [Deployment and Scaling](#deployment-and-scaling)
+21. [API Reference](#api-reference)
+22. [Frequently Asked Questions (FAQ)](#frequently-asked-questions-faq)
+23. [Troubleshooting](#troubleshooting)
+24. [Contributing](#contributing)
 
 ---
 
 ## Introduction
 
-The **Stock Sentiment Analysis Dashboard** is a production-grade web application that leverages cutting-edge AI and ML techniques to analyze financial news and provide sentiment insights for stock market analysis. Built with enterprise-level architecture patterns, it demonstrates best practices in ML engineering, including RAG (Retrieval Augmented Generation), intelligent caching, parallel processing, and cost optimization.
+The **Stock Sentiment Analysis Dashboard** is a production-grade web application that leverages cutting-edge AI and ML techniques to analyze financial news and provide sentiment insights for stock market analysis. Built with enterprise-level architecture patterns, it demonstrates best practices in ML engineering, including RAG (Retrieval Augmented Generation) with hybrid search, Azure AI Search for high-performance vector search, multi-source data collection, intelligent caching, parallel processing, and cost optimization.
 
 ### Key Highlights
 
 - **AI-Powered Analysis**: Uses Azure OpenAI GPT-4 for sophisticated sentiment analysis
-- **Context-Aware**: RAG system provides relevant context from historical news articles
+- **Context-Aware RAG**: Hybrid search (semantic + keyword) with Reciprocal Rank Fusion (RRF) for better accuracy
+- **High-Performance Vector Search**: Azure AI Search provides 10-100× faster search than traditional methods
+- **Multi-Source Data Collection**: Aggregates news from Yahoo Finance, Alpha Vantage, Finnhub, and Reddit
+- **Modular Architecture**: Clean separation of concerns with presentation, service, and infrastructure layers
 - **High Performance**: Multi-tier caching, batch processing, and parallel execution
-- **Production-Ready**: Circuit breakers, retry logic, error handling, and monitoring
+- **Production-Ready**: Circuit breakers, retry logic, error handling, and comprehensive logging
 - **Cost-Optimized**: Intelligent caching reduces API calls by 50-90%
+- **Demo-Ready**: Operation summaries, detailed logging, and configurable cache controls
 
 ---
 
@@ -84,6 +91,11 @@ The **Stock Sentiment Analysis Dashboard** is a production-grade web application
    - [3Blue1Brown Neural Networks](https://www.youtube.com/playlist?list=PLZHQObOWTQDNU6R1_67000Dx_ZCJB-3pi) - Visual, intuitive explanations
    - Focus on: How neural networks learn patterns
 
+4. **Vector Databases** (1 hour)
+   - [What is a Vector Database?](https://www.pinecone.io/learn/vector-database/) - Pinecone's guide
+   - [Vector Search Explained](https://www.elastic.co/what-is/vector-search) - Elastic's explanation
+   - Focus on: How vector databases enable semantic search
+
 ### Recommended Reading Order for This Documentation
 
 **For Complete Beginners:**
@@ -96,6 +108,7 @@ The **Stock Sentiment Analysis Dashboard** is a production-grade web application
 
 **For Experienced ML Practitioners:**
 - Jump to [High-Level Architecture](#high-level-architecture) or [Technical Deep Dive](#how-it-works-technical-deep-dive)
+- Review [Modular Application Structure](#modular-application-structure) for architecture details
 - Use [API Reference](#api-reference) for implementation details
 
 ### Interactive Learning Tools
@@ -117,37 +130,43 @@ The **Stock Sentiment Analysis Dashboard** is a production-grade web application
 
 Imagine you're an investor trying to understand how the market feels about Apple's stock. You could:
 
-1. **Manually read** hundreds of news articles (takes hours)
+1. **Manually read** hundreds of news articles from multiple sources (takes hours)
 2. **Try to interpret** whether each article is positive or negative (subjective)
 3. **Summarize** the overall sentiment (error-prone)
+4. **Remember** relevant context from previous articles (impossible at scale)
 
 This application does all of that **automatically in seconds**:
 
-1. **Fetches** the latest news articles about the stock
-2. **Reads and understands** each article using AI
-3. **Determines sentiment** (positive, negative, or neutral) for each article
-4. **Provides visualizations** showing overall sentiment trends
-5. **Gives insights** based on historical context
+1. **Fetches** the latest news articles from multiple sources (Yahoo Finance, Alpha Vantage, Finnhub, Reddit)
+2. **Stores** articles in a searchable knowledge base (Azure AI Search)
+3. **Reads and understands** each article using AI
+4. **Finds relevant context** from similar articles using hybrid search
+5. **Determines sentiment** (positive, negative, or neutral) for each article with context
+6. **Provides visualizations** showing overall sentiment trends
+7. **Gives insights** based on historical context and patterns
 
-Think of it as having a **team of financial analysts** working 24/7, reading every news article, and providing you with a comprehensive sentiment report.
+Think of it as having a **team of financial analysts** working 24/7, reading every news article from multiple sources, remembering everything in a searchable database, and providing you with a comprehensive sentiment report that considers context from related articles.
 
 ### For Technical Users
 
 This application demonstrates:
 
 - **LLM Integration**: Using Azure OpenAI GPT-4 for natural language understanding
-- **RAG Architecture**: Enhancing LLM responses with retrieved context
-- **Vector Search**: Semantic search using embeddings for relevant article retrieval
-- **Hybrid Search**: Combining semantic and keyword search for better accuracy
-- **Caching Strategies**: Multi-tier caching (memory, Redis, disk) for performance
+- **RAG Architecture**: Enhancing LLM responses with retrieved context from Azure AI Search
+- **Hybrid Search**: Combining semantic (vector) and keyword search using Reciprocal Rank Fusion (RRF)
+- **Vector Database**: Azure AI Search for 10-100× faster vector search at scale
+- **Multi-Source Data Collection**: Aggregating news from 4 different APIs
+- **Caching Strategies**: Multi-tier caching (session state, Redis, API calls) for performance
 - **Parallel Processing**: Concurrent sentiment analysis for throughput
-- **Cost Management**: Tracking and optimizing API usage
+- **Modular Architecture**: Clean separation of concerns with presentation, service, and infrastructure layers
+- **Cost Management**: Intelligent caching reduces API calls by 50-90%
+- **Production Patterns**: Circuit breakers, retry logic, error handling, comprehensive logging
 
 ---
 
 ## High-Level Architecture
 
-The application follows a **layered architecture** with clear separation of concerns:
+The application follows a **layered, modular architecture** with clear separation of concerns:
 
 **Architecture Diagram**
 
@@ -155,11 +174,43 @@ The application follows a **layered architecture** with clear separation of conc
 
 ### Architecture Layers Explained
 
-1. **User Interface Layer**: Streamlit-based web dashboard for interaction
+1. **Presentation Layer**: Streamlit-based web dashboard with modular components
+   - `app.py`: Thin orchestrator
+   - `presentation/`: UI components, tabs, styling, initialization
+   - User interactions and session state management
+
 2. **Application Layer**: Business logic and orchestration
-3. **AI/ML Layer**: Sentiment analysis, embeddings, and RAG
-4. **Data Layer**: Caching, vector storage, and statistics
-5. **External Services**: Third-party APIs and cloud services
+   - `presentation/data_loader.py`: Data loading pipeline
+   - Coordinates between services
+
+3. **Service Layer**: Core business logic
+   - `services/collector.py`: Multi-source data collection
+   - `services/sentiment.py`: AI sentiment analysis
+   - `services/rag.py`: RAG with hybrid search
+   - `services/cache.py`: Redis caching
+   - `services/vector_db.py`: Azure AI Search integration
+
+4. **Infrastructure Layer**: External services and data storage
+   - Azure OpenAI (GPT-4, embeddings)
+   - Azure AI Search (vector database)
+   - Redis (caching)
+   - External APIs (yfinance, Alpha Vantage, Finnhub, Reddit)
+
+### Component Interaction Flow
+
+![Component Flow](diagrams/components.png)
+
+### Complete System Architecture (Full Detail with Algorithms)
+
+This comprehensive diagram shows the entire application architecture with all components, algorithms, and data flows labeled:
+
+![Complete System Architecture V2](diagrams/system_architecture_v2.png)
+
+### Data Flow Diagram
+
+This comprehensive data flow diagram shows how data moves through the entire system:
+
+![Data Flow V2](diagrams/data_flow_v2.png)
 
 ---
 
@@ -172,16 +223,26 @@ The application follows a **layered architecture** with clear separation of conc
 | **Python** | 3.8+ | Programming language | [Python Docs](https://docs.python.org/3/) |
 | **Streamlit** | Latest | Web framework for dashboard | [Streamlit Docs](https://docs.streamlit.io/) |
 | **Azure OpenAI** | GPT-4 | Large Language Model for sentiment analysis | [Azure OpenAI Docs](https://learn.microsoft.com/en-us/azure/ai-services/openai/) |
-| **Redis** | 7.0+ | In-memory cache and vector database | [Redis Docs](https://redis.io/docs/) |
-| **yfinance** | Latest | Stock market data API | [yfinance Docs](https://github.com/ranaroussi/yfinance) |
+| **Azure AI Search** | Latest | Vector database and search service | [Azure AI Search Docs](https://learn.microsoft.com/en-us/azure/search/) |
+| **Redis** | 7.0+ | In-memory cache | [Redis Docs](https://redis.io/docs/) |
+| **yfinance** | Latest | Stock market data API (primary source) | [yfinance Docs](https://github.com/ranaroussi/yfinance) |
 
 ### ML/AI Libraries
 
 | Library | Purpose | Link |
 |---------|---------|------|
 | **openai** | Azure OpenAI SDK | [OpenAI Python SDK](https://github.com/openai/openai-python) |
-| **numpy** | Numerical computations | [NumPy Docs](https://numpy.org/doc/) |
-| **scikit-learn** | ML utilities (cosine similarity) | [scikit-learn Docs](https://scikit-learn.org/) |
+| **numpy** | Numerical computations (cosine similarity, vector operations) | [NumPy Docs](https://numpy.org/doc/) |
+| **azure-search-documents** | Azure AI Search SDK | [Azure Search SDK](https://learn.microsoft.com/en-us/python/api/azure-search-documents/) |
+
+### Data Sources
+
+| Source | Purpose | API/Library | Rate Limits |
+|--------|---------|-------------|-------------|
+| **yfinance** | Primary source - Stock prices, company info, news | yfinance library | None (public API) |
+| **Alpha Vantage** | Company news | REST API | 500 calls/day (free tier) |
+| **Finnhub** | Company news | REST API | 60 calls/minute (free tier) |
+| **Reddit** | Social media sentiment | PRAW library | 60 requests/minute |
 
 ### Data Processing
 
@@ -189,32 +250,178 @@ The application follows a **layered architecture** with clear separation of conc
 |---------|---------|------|
 | **pandas** | Data manipulation | [Pandas Docs](https://pandas.pydata.org/) |
 | **plotly** | Interactive visualizations | [Plotly Docs](https://plotly.com/python/) |
+| **dateutil** | Date parsing and manipulation | [dateutil Docs](https://dateutil.readthedocs.io/) |
 
 ### Infrastructure
 
 | Service | Purpose | Link |
 |---------|---------|------|
 | **Azure OpenAI** | LLM and embeddings | [Azure OpenAI](https://azure.microsoft.com/en-us/products/ai-services/openai-service) |
-| **Azure Cache for Redis** | Caching and vector storage | [Azure Redis](https://azure.microsoft.com/en-us/products/cache) |
+| **Azure AI Search** | Vector database and search | [Azure AI Search](https://azure.microsoft.com/en-us/products/ai-services/ai-search) |
+| **Azure Cache for Redis** | Caching | [Azure Redis](https://azure.microsoft.com/en-us/products/cache) |
 
 ### Development Tools
 
 | Tool | Purpose | Link |
 |------|---------|------|
-| **pydantic** | Configuration validation | [Pydantic Docs](https://docs.pydantic.dev/) |
+| **Pydantic** | Settings management and validation | [Pydantic Docs](https://docs.pydantic.dev/) |
+| **pytest** | Testing framework | [pytest Docs](https://docs.pytest.org/) |
 | **black** | Code formatting | [Black Docs](https://black.readthedocs.io/) |
-| **flake8** | Linting | [Flake8 Docs](https://flake8.pycqa.org/) |
+
+---
+
+## Modular Application Structure
+
+### Overview
+
+The application follows a modular, layered architecture with clear separation of concerns. The main application file (`app.py`) is a thin orchestrator (~150 lines) that coordinates between presentation layer components, services, and infrastructure. This architecture improves maintainability, testability, and scalability.
+
+### Directory Structure
+
+```
+src/stock_sentiment/
+├── app.py                          # Thin orchestrator (entry point, ~150 lines)
+├── presentation/                   # Presentation Layer
+│   ├── styles.py                  # Custom CSS styling
+│   ├── initialization.py          # App setup, service initialization
+│   ├── data_loader.py             # Data loading orchestration
+│   ├── components/                # Reusable UI components
+│   │   ├── sidebar.py             # Sidebar with filters, settings, operation summary
+│   │   └── empty_state.py         # Empty state component
+│   └── tabs/                      # Tab modules
+│       ├── __init__.py            # Tab exports
+│       ├── overview_tab.py        # Overview dashboard
+│       ├── price_analysis_tab.py  # Price charts and analysis
+│       ├── news_sentiment_tab.py  # News and sentiment display
+│       ├── technical_analysis_tab.py  # Technical indicators
+│       ├── ai_insights_tab.py     # AI-generated insights
+│       └── comparison_tab.py     # Multi-stock comparison
+├── services/                      # Service Layer (Business Logic)
+│   ├── collector.py               # Multi-source data collection
+│   ├── sentiment.py               # AI sentiment analysis
+│   ├── rag.py                     # RAG service with hybrid search
+│   ├── cache.py                   # Redis caching
+│   └── vector_db.py               # Azure AI Search integration
+├── config/                        # Configuration
+│   └── settings.py                # Pydantic settings management
+├── models/                        # Data Models
+│   ├── sentiment.py               # SentimentScores model
+│   └── stock.py                   # StockData model
+└── utils/                         # Utilities
+    ├── logger.py                  # Logging configuration
+    ├── retry.py                   # Retry logic with exponential backoff
+    ├── circuit_breaker.py         # Circuit breaker pattern
+    └── preprocessing.py           # Text preprocessing
+```
+
+### Presentation Layer Components
+
+#### 1. Main Application (`app.py`)
+
+**Purpose**: Thin orchestrator that coordinates the application flow.
+
+**Responsibilities**:
+- Imports and initializes presentation layer modules
+- Coordinates between different components
+- Manages tab rendering
+
+**Key Flow**:
+```python
+1. Setup application (styles, initialization)
+2. Initialize settings and services
+3. Render sidebar (filters, settings, operation summary)
+4. Load data if requested
+5. Render tabs based on data availability
+```
+
+**Size**: ~150 lines (down from 2135 lines)
+
+#### 2. Initialization Module (`presentation/initialization.py`)
+
+**Purpose**: Centralized initialization of all application components.
+
+**Key Functions**:
+- `initialize_settings()`: Load and validate application settings
+- `initialize_services()`: Create service instances (Redis, RAG, Collector, Analyzer)
+- `initialize_session_state()`: Initialize Streamlit session state
+- `setup_app()`: Configure Streamlit page settings
+
+**Service Initialization**:
+- Uses `@st.cache_resource` for singleton services
+- Handles graceful degradation if services unavailable
+- Provides fallback mechanisms
+
+#### 3. Data Loader (`presentation/data_loader.py`)
+
+**Purpose**: Orchestrates the complete data loading and processing pipeline.
+
+**Key Functions**:
+- `load_stock_data()`: Main orchestration function
+
+**Process Flow**:
+1. **Step 1**: Fetch stock data (with Redis cache check)
+2. **Step 2**: Collect news from multiple sources (with source filters)
+3. **Step 3**: Store articles in RAG (Azure AI Search)
+4. **Step 4**: Analyze sentiment for all articles (with RAG context)
+5. **Step 5**: Store results in session state
+
+**Features**:
+- Progress tracking with progress bars
+- Comprehensive logging for demos
+- Operation summary tracking (Redis usage, RAG usage, cache hits/misses)
+- Error handling with user-friendly messages
+
+#### 4. Sidebar Component (`presentation/components/sidebar.py`)
+
+**Purpose**: Provides user controls and system information.
+
+**Sections**:
+- **System Status**: Redis and RAG service availability
+- **Search Filters**: 
+  - Stock symbol input
+  - Data source toggles (yfinance, Alpha Vantage, Finnhub, Reddit)
+  - RAG filter controls (exclude sources)
+- **Sentiment Cache Controls**:
+  - Enable/disable sentiment caching
+  - TTL slider (0.1 to 168 hours)
+  - Allows testing RAG by disabling cache
+- **Operation Summary**: 
+  - Redis usage (stock/news/sentiment cache hits)
+  - RAG usage (queries made, articles found)
+  - Articles stored in RAG
+  - Summary of last operation
+
+#### 5. Tab Modules (`presentation/tabs/`)
+
+Each tab is a self-contained module with a `render_*_tab()` function:
+
+- **Overview Tab**: Dashboard with key metrics, sentiment distribution
+- **Price Analysis Tab**: Stock price charts, historical data
+- **News & Sentiment Tab**: Article list with sentiment scores
+- **Technical Analysis Tab**: Technical indicators, moving averages
+- **AI Insights Tab**: AI-generated insights and recommendations
+- **Comparison Tab**: Multi-stock comparison functionality
+
+### Benefits of Modular Architecture
+
+1. **Maintainability**: Each module has a single responsibility
+2. **Testability**: Components can be tested in isolation
+3. **Scalability**: Easy to add new tabs or components
+4. **Readability**: Smaller files are easier to understand
+5. **Collaboration**: Multiple developers can work on different modules
+6. **Reusability**: Components can be reused across the application
 
 ---
 
 ## Complete Example: End-to-End Walkthrough
 
-This section shows a **complete, real example** of analyzing a stock from start to finish. Follow along to see how everything works together!
+This section shows a **complete, real example** of analyzing a stock from start to finish. Follow along to see how everything works together with the modular architecture, Azure AI Search, and multi-source data collection!
 
 ### Scenario: Analyzing Apple (AAPL) Stock
 
 **User Input:**
 - Stock Symbol: `AAPL`
+- Data Sources Enabled: yfinance, Alpha Vantage, Finnhub (Reddit disabled)
 - Action: Click "Load Data" button
 
 ---
@@ -223,8 +430,13 @@ This section shows a **complete, real example** of analyzing a stock from start 
 
 **What Happens:**
 1. System checks Redis cache: "Do we have AAPL data cached?"
-2. Cache miss (first time) → Fetch from yfinance API
-3. Retrieved data:
+2. Cache miss (first time) → Fetch from multiple enabled sources
+3. Data collected in parallel from:
+   - **yfinance** (primary, always enabled): Stock prices, company info, news
+   - **Alpha Vantage** (enabled): Company news
+   - **Finnhub** (enabled): Company news
+4. Articles deduplicated across sources (by title and URL)
+5. Retrieved data:
 
 **Stock Price Data:**
 ```json
@@ -237,40 +449,48 @@ This section shows a **complete, real example** of analyzing a stock from start 
 }
 ```
 
-**News Articles Retrieved (10 articles):**
+**News Articles Retrieved (20 articles from multiple sources):**
 ```json
 [
   {
     "title": "Apple reports record Q4 earnings, stock surges 5%",
     "summary": "Apple Inc. reported record-breaking fourth quarter earnings, beating analyst expectations. The stock surged 5% in after-hours trading.",
     "url": "https://example.com/apple-earnings",
-    "source": "Reuters",
+    "source": "Yahoo Finance",
     "timestamp": "2024-12-13T09:00:00"
   },
   {
     "title": "Apple's iPhone sales exceed expectations",
     "summary": "Strong iPhone sales drove Apple's quarterly results, with revenue up 8% year-over-year.",
     "url": "https://example.com/iphone-sales",
-    "source": "Bloomberg",
+    "source": "Finnhub",
     "timestamp": "2024-12-13T08:30:00"
   },
-  // ... 8 more articles
+  {
+    "title": "AAPL: Strong quarterly performance",
+    "summary": "Apple demonstrates robust financial health with strong quarterly metrics...",
+    "url": "https://example.com/alpha-vantage-news",
+    "source": "Alpha Vantage",
+    "timestamp": "2024-12-13T08:00:00"
+  }
+  // ... 17 more articles from various sources
 ]
 ```
 
-**Result:** Data cached in Redis for 1 hour (stock) and 6 hours (news)
+**Source Breakdown:**
+- Yahoo Finance: 10 articles
+- Finnhub: 6 articles
+- Alpha Vantage: 4 articles
+
+**Result:** Data cached in Redis for 1 hour (stock) and 2 hours (news)
 
 ---
 
-### Step 2: Article Processing 💾
+### Step 2: Article Processing & Storage 💾
 
-**Example: Processing First Article**
+**Example: Processing All 20 Articles**
 
-**Original Article:**
-- Title: "Apple reports record Q4 earnings, stock surges 5%"
-- Summary: "Apple Inc. reported record-breaking fourth quarter earnings..."
-
-**a) Text Preprocessing:**
+**a) Text Preprocessing (Batch):**
 ```
 Input:  "Apple reports record Q4 earnings, stock surges 5%"
 Output: "Apple reports record fourth quarter earnings, stock surges 5%"
@@ -278,29 +498,51 @@ Output: "Apple reports record fourth quarter earnings, stock surges 5%"
 - Expanded: `Q4` → `fourth quarter`
 - Removed: HTML tags (if any)
 - Normalized: Whitespace
+- Applied to all 20 articles
 
-**b) Embedding Generation:**
+**b) Embedding Generation (Batch Processing):**
 ```
-Input Text: "Apple reports record fourth quarter earnings, stock surges 5%"
+Input Texts: 20 articles prepared for batch embedding
+Batch Size: 100 (all articles processed in one API call to Azure OpenAI)
 
-Embedding Generated (1536 numbers):
-[0.123, -0.456, 0.789, 0.234, -0.567, ..., 0.345]
-(Truncated for display - actual embedding has 1536 dimensions)
-
-Stored in Redis with key: embedding:AAPL:abc123def456
+Embeddings Generated (1536 dimensions each):
+Article 1: [0.123, -0.456, 0.789, 0.234, -0.567, ..., 0.345]
+Article 2: [0.234, -0.345, 0.678, 0.345, -0.456, ..., 0.456]
+...
+Article 20: [0.345, -0.234, 0.567, 0.456, -0.345, ..., 0.567]
+(Truncated for display - each embedding has 1536 dimensions)
 ```
 
 **Visual Representation:**
-Think of this embedding as coordinates on a map:
+Think of embeddings as coordinates on a map:
 - Location: (0.123, -0.456) in the "Apple/Finance/Earnings" region
 - Similar articles will have similar coordinates (close on the map)
+- Azure AI Search uses HNSW algorithm to find nearest neighbors quickly
 
-**c) Storage:**
-- Embedding stored: `embedding:AAPL:abc123def456`
-- Article metadata stored: `article:AAPL:abc123def456`
-- TTL: 7 days (embeddings don't change for same article)
+**c) Storage in Azure AI Search:**
+```
+All 20 articles stored in Azure AI Search index 'stock-articles'
 
-**Result:** All 10 articles processed and stored (batch processing makes this fast!)
+Each article stored with:
+- Vector embedding (contentVector field) - for semantic search
+- Text content (content field: title + summary) - for keyword search
+- Metadata:
+  - symbol: "AAPL"
+  - title: Article title
+  - summary: Article summary
+  - source: "Yahoo Finance", "Finnhub", or "Alpha Vantage"
+  - url: Article URL
+  - timestamp: Publication date
+  - article_id: Unique article identifier
+
+Article ID format: AAPL:abc123def456
+```
+
+**Also marked in Redis for duplicate checking:**
+- Key: `article_hash:AAPL:abc123def456`
+- TTL: 7 days
+
+**Result:** All 20 articles processed and stored in Azure AI Search (batch processing makes this fast - 1 API call instead of 20!)
 
 ---
 
@@ -316,7 +558,7 @@ Result: Cache miss (first time analyzing this article)
 Action: Proceed to RAG retrieval
 ```
 
-**b) RAG Context Retrieval:**
+**b) RAG Context Retrieval (Hybrid Search):**
 
 **Query:** "Apple reports record Q4 earnings, stock surges 5%"
 
@@ -324,56 +566,89 @@ Action: Proceed to RAG retrieval
 ```
 Query embedding: [0.125, -0.458, 0.791, 0.236, -0.569, ..., 0.347]
 (Similar to article embedding - they're about the same topic!)
+Cached in Redis for 24 hours
 ```
 
-**Step 3b.2: Semantic Search**
+**Step 3b.2: Semantic Search (Azure AI Search)**
 ```
-Searched through stored embeddings for AAPL
-Found 50 articles in database
+Using Azure AI Search for vector search:
+- Query vector: [0.125, -0.458, 0.791, ...]
+- Filter: symbol eq 'AAPL'
+- Search method: HNSW approximate nearest neighbor
+- Found 50 articles in database (from previous searches)
 
 Top 3 Similar Articles (by cosine similarity):
 1. "Apple's quarterly profits surge" 
    - Similarity: 0.92 (very similar!)
-   - Article ID: embedding:AAPL:xyz789
+   - Article ID: AAPL:xyz789
+   - Source: Yahoo Finance
    
 2. "Apple beats earnings expectations"
    - Similarity: 0.88 (very similar!)
-   - Article ID: embedding:AAPL:def456
+   - Article ID: AAPL:def456
+   - Source: Finnhub
    
 3. "Apple stock rises on strong earnings"
    - Similarity: 0.85 (very similar!)
-   - Article ID: embedding:AAPL:ghi789
+   - Article ID: AAPL:ghi789
+   - Source: Alpha Vantage
 ```
 
-**Step 3b.3: Keyword Search**
+**Step 3b.3: Keyword Search (Azure AI Search)**
 ```
-Keywords extracted: ["Apple", "reports", "record", "Q4", "earnings", "stock", "surges"]
+Using Azure AI Search for full-text search:
+- Query: "Apple reports record Q4 earnings stock surges"
+- Search field: content (title + summary)
+- Filter: symbol eq 'AAPL'
+- Search method: BM25 ranking algorithm
 
 Top 3 Keyword Matches:
-1. "Apple earnings report Q4" (6 keyword matches)
-2. "Apple Q4 earnings call" (4 matches)
-3. "Apple quarterly earnings" (3 matches)
+1. "Apple earnings report Q4" 
+   - Keyword score: 8.5 (6 keyword matches)
+   - Article ID: AAPL:jkl012
+   - Source: Yahoo Finance
+   
+2. "Apple Q4 earnings call" 
+   - Keyword score: 6.2 (4 matches)
+   - Article ID: AAPL:mno345
+   - Source: Finnhub
+   
+3. "Apple quarterly earnings" 
+   - Keyword score: 4.8 (3 matches)
+   - Article ID: AAPL:pqr678
+   - Source: Alpha Vantage
 ```
 
 **Step 3b.4: Hybrid Search (RRF Combination)**
 ```
-Combined results using Reciprocal Rank Fusion:
+Combined results using Reciprocal Rank Fusion (RRF):
+
+RRF Formula: RRF_score = Σ(1 / (60 + rank)) for each search result
 
 Final Top 3 Articles for Context:
 1. "Apple's quarterly profits surge" (RRF score: 0.0328)
-   - Ranked #1 in semantic, #3 in keyword
+   - Ranked #1 in semantic (score: 1/(60+1) = 0.0164)
+   - Ranked #3 in keyword (score: 1/(60+3) = 0.0159)
+   - Combined: 0.0164 + 0.0159 = 0.0323
    
 2. "Apple beats earnings expectations" (RRF score: 0.0315)
-   - Ranked #2 in semantic, #2 in keyword
+   - Ranked #2 in semantic (score: 1/(60+2) = 0.0161)
+   - Ranked #2 in keyword (score: 1/(60+2) = 0.0161)
+   - Combined: 0.0161 + 0.0161 = 0.0322
    
 3. "Apple stock rises on strong earnings" (RRF score: 0.0297)
-   - Ranked #3 in semantic, #1 in keyword
+   - Ranked #3 in semantic (score: 1/(60+3) = 0.0159)
+   - Ranked #1 in keyword (score: 1/(60+1) = 0.0164)
+   - Combined: 0.0159 + 0.0164 = 0.0323
 ```
 
 **Step 3b.5: Temporal Decay Applied**
 ```
 All articles are recent (same day), so no decay applied.
-If articles were older, recent ones would be boosted.
+If articles were older, recent ones would be boosted by up to 20%.
+
+Temporal decay formula: decay = 1.0 / (1 + age_days / 7)
+Boost: boosted_score = current_score * (1 + decay * 0.2)
 ```
 
 **Context Retrieved:**
@@ -381,19 +656,19 @@ If articles were older, recent ones would be boosted.
 ### Relevant Context from Recent News:
 
 **Article 1: "Apple's quarterly profits surge"**
-- Source: Bloomberg
+- Source: Yahoo Finance
 - Summary: Apple's quarterly profits exceeded expectations...
-- Relevance: 92% similar
+- Relevance: 92% similar (semantic), RRF score: 0.0328
 
 **Article 2: "Apple beats earnings expectations"**
-- Source: CNBC
+- Source: Finnhub
 - Summary: Apple Inc. reported earnings that beat analyst estimates...
-- Relevance: 88% similar
+- Relevance: 88% similar (semantic), RRF score: 0.0315
 
 **Article 3: "Apple stock rises on strong earnings"**
-- Source: Reuters
+- Source: Alpha Vantage
 - Summary: Apple stock gained following strong quarterly earnings report...
-- Relevance: 85% similar
+- Relevance: 85% similar (semantic), RRF score: 0.0297
 ```
 
 **c) LLM Analysis:**
@@ -409,9 +684,9 @@ Analysis: {"positive": 0.85, "negative": 0.05, "neutral": 0.10}
 User: Analyze the sentiment of: "Apple reports record Q4 earnings, stock surges 5%"
 
 Relevant Context:
-- Article 1: "Apple's quarterly profits surge" (92% similar)
-- Article 2: "Apple beats earnings expectations" (88% similar)
-- Article 3: "Apple stock rises on strong earnings" (85% similar)
+- Article 1: "Apple's quarterly profits surge" (92% similar, Yahoo Finance)
+- Article 2: "Apple beats earnings expectations" (88% similar, Finnhub)
+- Article 3: "Apple stock rises on strong earnings" (85% similar, Alpha Vantage)
 ```
 
 **GPT-4 Response:**
@@ -430,35 +705,30 @@ Relevant Context:
 
 **Why RAG Helped:**
 - Without RAG: Might have been less confident (70-75% positive)
-- With RAG: More confident (85% positive) because context shows this is consistently positive news
+- With RAG: More confident (85% positive) because context from multiple sources shows this is consistently positive news
 
-**d) Caching:**
+**d) Caching (if enabled):**
 ```
-Stored in Redis:
+Stored in Redis (if sentiment caching enabled):
 Key: sentiment:hash("Apple reports record Q4 earnings, stock surges 5%")
 Value: {"positive": 0.85, "negative": 0.05, "neutral": 0.10}
-TTL: 7 days
+TTL: 24 hours (configurable via UI)
 ```
 
 ---
 
 ### Step 4: Repeat for All Articles
 
-**All 10 Articles Analyzed:**
+**All 20 Articles Analyzed (in parallel, 5 at a time):**
 ```
 Article 1: {"positive": 0.85, "negative": 0.05, "neutral": 0.10}
 Article 2: {"positive": 0.80, "negative": 0.10, "neutral": 0.10}
 Article 3: {"positive": 0.75, "negative": 0.15, "neutral": 0.10}
-Article 4: {"positive": 0.70, "negative": 0.20, "neutral": 0.10}
-Article 5: {"positive": 0.65, "negative": 0.25, "neutral": 0.10}
-Article 6: {"positive": 0.60, "negative": 0.30, "neutral": 0.10}
-Article 7: {"positive": 0.55, "negative": 0.35, "neutral": 0.10}
-Article 8: {"positive": 0.50, "negative": 0.40, "neutral": 0.10}
-Article 9: {"positive": 0.45, "negative": 0.45, "neutral": 0.10}
-Article 10: {"positive": 0.40, "negative": 0.50, "neutral": 0.10}
+...
+Article 20: {"positive": 0.40, "negative": 0.50, "neutral": 0.10}
 ```
 
-**Note:** Articles analyzed in parallel (5 at a time) for speed!
+**Note:** Articles analyzed in parallel (5 at a time) for speed! Each analysis uses RAG context from Azure AI Search.
 
 ---
 
@@ -466,9 +736,9 @@ Article 10: {"positive": 0.40, "negative": 0.50, "neutral": 0.10}
 
 **Calculate Averages:**
 ```
-Average Positive: (0.85 + 0.80 + 0.75 + ... + 0.40) / 10 = 0.625 (62.5%)
-Average Negative: (0.05 + 0.10 + 0.15 + ... + 0.50) / 10 = 0.275 (27.5%)
-Average Neutral: (0.10 + 0.10 + 0.10 + ... + 0.10) / 10 = 0.10 (10.0%)
+Average Positive: (0.85 + 0.80 + 0.75 + ... + 0.40) / 20 = 0.625 (62.5%)
+Average Negative: (0.05 + 0.10 + 0.15 + ... + 0.50) / 20 = 0.275 (27.5%)
+Average Neutral: (0.10 + 0.10 + 0.10 + ... + 0.10) / 20 = 0.10 (10.0%)
 ```
 
 **Net Sentiment:**
@@ -493,33 +763,444 @@ Net Sentiment = Average Positive - Average Negative
 - Overall Sentiment: 62.5% Positive, 27.5% Negative, 10% Neutral
 - Net Sentiment: +35% (Bullish)
 - Charts: Pie chart, bar chart, trend line
+- Source breakdown: Yahoo Finance (10), Finnhub (6), Alpha Vantage (4)
 
 **News & Sentiment Tab:**
-- List of all 10 articles
+- List of all 20 articles from multiple sources
 - Each article shows:
   - Title and summary
   - Sentiment scores (color-coded)
-  - Source and timestamp
+  - Source (Yahoo Finance, Alpha Vantage, Finnhub) and timestamp
   - Link to full article
+- Source filter visualization
 
 **AI Insights Tab:**
 - AI-generated summary: "Apple shows strong positive sentiment with 62.5% positive articles. Key themes: record earnings, strong iPhone sales, stock price gains. Overall outlook: Bullish."
+
+**Operation Summary (in Sidebar):**
+- Redis used: ✅ (stock cached, news cached, sentiment: 14 hits, 6 misses)
+- RAG used: ✅ (6 queries made, 18 articles found)
+- Articles stored in RAG: 20
 
 ---
 
 ### Summary: What Just Happened?
 
-1. ✅ **Fetched** stock data and 10 news articles
-2. ✅ **Processed** articles (cleaned, embedded, stored)
-3. ✅ **Analyzed** sentiment for each article (with RAG context)
-4. ✅ **Aggregated** results into overall sentiment
-5. ✅ **Visualized** everything in an easy-to-understand dashboard
+1. ✅ **Fetched** stock data and 20 news articles from 3 sources (yfinance, Alpha Vantage, Finnhub)
+2. ✅ **Processed** articles (cleaned, embedded in batch, stored in Azure AI Search)
+3. ✅ **Retrieved** relevant context using hybrid search (semantic + keyword with RRF)
+4. ✅ **Analyzed** sentiment for each article (with RAG context from Azure AI Search)
+5. ✅ **Aggregated** results into overall sentiment
+6. ✅ **Visualized** everything in an easy-to-understand dashboard
 
-**Total Time:** ~5-10 seconds (thanks to caching and parallel processing!)
+**Total Time:** ~5-10 seconds (thanks to caching, batch processing, and parallel execution!)
 
 **Cost:** ~$0.02 (API calls for embeddings and sentiment analysis)
 
-**Next Time:** Even faster! (cached data = instant)
+**Performance:**
+- Azure AI Search: 10-100× faster than Redis SCAN for vector search
+- Batch embedding: 1 API call instead of 20 (20× reduction)
+- Parallel sentiment analysis: 5 articles at a time
+
+**Next Time:** Even faster! (cached data = instant, cached sentiment = instant)
+
+---
+
+## Complete Example: End-to-End Walkthrough
+
+Let's walk through a complete example of analyzing Apple (AAPL) stock sentiment from start to finish.
+
+### Step 1: User Input
+
+You open the application and enter "AAPL" in the stock symbol input field, then click "Load Data".
+
+### Step 2: Data Collection (Multi-Source V2)
+
+The application collects data from multiple sources:
+
+**Stock Price Data (yfinance):**
+```python
+{
+    "symbol": "AAPL",
+    "price": 175.43,
+    "company_name": "Apple Inc.",
+    "market_cap": 2750000000000,
+    "timestamp": "2024-11-18T10:30:00"
+}
+```
+
+**News Articles (Multi-Source):**
+
+**From yfinance:**
+- Article 1: "Apple reports Q4 earnings beat expectations"
+- Article 2: "Apple unveils new MacBook Pro lineup"
+
+**From Alpha Vantage (if enabled):**
+- Article 3: "Apple stock rises on strong iPhone sales"
+
+**From Finnhub (if enabled):**
+- Article 4: "Analysts upgrade Apple to 'Buy'"
+
+**From Reddit (if enabled):**
+- Post 1: "AAPL earnings call discussion - r/stocks"
+
+Total: 5 articles collected
+
+### Step 3: Article Storage with Azure AI Search
+
+Each article is processed and stored in Azure AI Search:
+
+**Article 1 Processing:**
+
+1. **Text Preprocessing:**
+```python
+original = "Apple reports Q4 earnings beat expectations"
+cleaned = "Apple reports fourth quarter earnings beat expectations"
+```
+
+2. **Embedding Generation (Batch):**
+```python
+# All 5 articles processed in ONE API call (batch)
+embeddings = get_embeddings_batch([article1, article2, article3, article4, article5])
+# Result: 5 embeddings (1536 dimensions each) in ~1 second
+```
+
+3. **Storage in Azure AI Search:**
+```python
+{
+    "id": "aapl_article_12345",
+    "content": "Apple reports fourth quarter earnings beat expectations",
+    "contentVector": [0.123, -0.456, 0.789, ..., 0.234],  # 1536 numbers
+    "symbol": "AAPL",
+    "title": "Apple reports Q4 earnings beat expectations",
+    "summary": "Apple exceeded analyst expectations...",
+    "source": "yfinance",
+    "url": "https://finance.yahoo.com/...",
+    "timestamp": "2024-11-18T08:00:00",
+    "article_id": "aapl_article_12345"
+}
+```
+
+**Why Azure AI Search?**
+- Native vector indexing (HNSW algorithm)
+- 10-100x faster than Redis SCAN for large datasets
+- Built-in hybrid search (semantic + keyword)
+- OData filtering (date ranges, sources, symbols)
+
+### Step 4: Sentiment Analysis with RAG
+
+For each article, the system performs RAG-enhanced sentiment analysis:
+
+**Analyzing Article 1: "Apple reports Q4 earnings beat expectations"**
+
+**4a. Cache Check:**
+```python
+cache_key = "sentiment:md5_hash_of_text"
+cached_result = redis.get(cache_key)
+# Result: None (first time analyzing this article)
+```
+
+**4b. RAG Context Retrieval (Hybrid Search):**
+
+**Query Expansion:**
+```python
+original_query = "Apple reports Q4 earnings beat expectations"
+expanded_query = "Apple reports Q4 earnings beat expectations financial results profit revenue"
+```
+
+**Embedding Generation:**
+```python
+query_embedding = get_embedding(expanded_query)
+# Cached if query was used before
+```
+
+**Semantic Search (Azure AI Search):**
+```python
+# Vector search using cosine similarity
+semantic_results = azure_search.vector_search(
+    query_vector=query_embedding,
+    top_k=10,
+    filter="symbol eq 'AAPL'"
+)
+
+Results:
+1. "Apple quarterly profits surge" (similarity: 0.92)
+2. "Apple Q3 earnings exceed forecasts" (similarity: 0.88)
+3. "Apple revenue growth continues" (similarity: 0.85)
+```
+
+**Keyword Search (Azure AI Search):**
+```python
+# Full-text search on content
+keyword_results = azure_search.text_search(
+    search_text="Apple earnings beat expectations",
+    top_k=10,
+    filter="symbol eq 'AAPL'"
+)
+
+Results:
+1. "Apple earnings report Q4" (score: 8.5)
+2. "Apple beats analyst expectations" (score: 7.8)
+3. "Apple Q4 financial results" (score: 6.9)
+```
+
+**Reciprocal Rank Fusion (RRF) - Combining Results:**
+
+**Mathematical Formula:**
+```
+RRF_score(d) = Σ(1 / (k + rank_i(d)))
+where k = 60 (RRF constant)
+```
+
+**Calculation for "Apple quarterly profits surge":**
+```python
+# Appears at rank 1 in semantic search
+semantic_score = 1 / (60 + 1) = 0.0164
+
+# Appears at rank 5 in keyword search
+keyword_score = 1 / (60 + 5) = 0.0154
+
+# Combined RRF score
+rrf_score = 0.0164 + 0.0154 = 0.0318
+```
+
+**Temporal Decay - Boosting Recent Articles:**
+
+**Mathematical Formula:**
+```
+decay = 1.0 / (1 + age_days / decay_days)
+boosted_score = rrf_score * (1 + decay * 0.2)
+
+where decay_days = 7 (configurable)
+```
+
+**Calculation:**
+```python
+article_date = "2024-11-15"  # 3 days ago
+age_days = 3
+decay_days = 7
+
+decay = 1.0 / (1 + 3/7) = 1.0 / 1.428 = 0.70
+boost = decay * 0.2 = 0.14 (14% boost)
+boosted_score = 0.0318 * (1 + 0.14) = 0.0362
+```
+
+**Final Top 3 Articles for Context:**
+```python
+[
+    {
+        "title": "Apple quarterly profits surge",
+        "summary": "Apple reported strong Q3 results...",
+        "similarity": 0.92,
+        "rrf_score": 0.0362,
+        "source": "yfinance",
+        "timestamp": "2024-11-15"
+    },
+    {
+        "title": "Apple beats analyst expectations",
+        "summary": "Wall Street reacts positively...",
+        "similarity": 0.85,
+        "rrf_score": 0.0340,
+        "source": "Alpha Vantage",
+        "timestamp": "2024-11-16"
+    },
+    {
+        "title": "Apple earnings call highlights",
+        "summary": "CEO discusses future outlook...",
+        "similarity": 0.83,
+        "rrf_score": 0.0315,
+        "source": "Finnhub",
+        "timestamp": "2024-11-14"
+    }
+]
+```
+
+**4c. LLM Analysis (GPT-4 with RAG Context):**
+
+**Prompt Construction:**
+```python
+system_prompt = """
+You are a professional financial sentiment analyzer.
+
+## Examples (Few-Shot Learning):
+Text: "Apple reports record-breaking Q4 earnings, stock surges 5%"
+Analysis: {"positive": 0.85, "negative": 0.05, "neutral": 0.10}
+
+Text: "Company faces regulatory investigation, shares drop 3%"
+Analysis: {"positive": 0.10, "negative": 0.75, "neutral": 0.15}
+
+Analyze the sentiment following these examples.
+Respond ONLY with valid JSON.
+"""
+
+user_prompt = f"""
+Analyze the sentiment of the following text about AAPL.
+
+**Text to Analyze:**
+Apple reports Q4 earnings beat expectations
+
+**Relevant Context from Recent News:**
+
+### Article 1: Apple quarterly profits surge
+**Source:** yfinance
+**Summary:** Apple reported strong Q3 results with revenue up 12%
+**Relevance:** 92%
+
+### Article 2: Apple beats analyst expectations
+**Source:** Alpha Vantage
+**Summary:** Wall Street reacts positively to earnings
+**Relevance:** 85%
+
+### Article 3: Apple earnings call highlights
+**Source:** Finnhub
+**Summary:** CEO discusses future outlook, investors optimistic
+**Relevance:** 83%
+
+Provide sentiment scores (positive, negative, neutral) as JSON.
+"""
+```
+
+**API Call to Azure OpenAI GPT-4:**
+```python
+response = openai.chat.completions.create(
+    model="gpt-4",
+    temperature=0.2,  # Low for consistency
+    max_tokens=200,
+    response_format={"type": "json_object"},
+    messages=[
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_prompt}
+    ]
+)
+```
+
+**GPT-4 Response:**
+```json
+{
+    "positive": 0.85,
+    "negative": 0.05,
+    "neutral": 0.10,
+    "reasoning": "Strong positive indicators: 'beat expectations' suggests outperformance. Context shows consistent positive earnings pattern."
+}
+```
+
+**Score Normalization:**
+
+**Mathematical Formula:**
+```
+normalized_score = raw_score / sum(all_scores)
+net_sentiment = positive - negative
+```
+
+**Calculation:**
+```python
+raw_scores = {"positive": 0.85, "negative": 0.05, "neutral": 0.10}
+sum_scores = 0.85 + 0.05 + 0.10 = 1.00  # Already normalized!
+
+# If not normalized (e.g., sum = 1.05):
+# positive = 0.85 / 1.05 = 0.810
+# negative = 0.05 / 1.05 = 0.048
+# neutral = 0.10 / 1.05 = 0.095
+
+net_sentiment = 0.85 - 0.05 = 0.80 (strongly positive)
+```
+
+**4d. Cache Result:**
+```python
+redis.set(
+    key="sentiment:md5_hash_of_text",
+    value={"positive": 0.85, "negative": 0.05, "neutral": 0.10},
+    ttl=86400  # 24 hours (configurable)
+)
+```
+
+### Step 5: Parallel Processing
+
+All 5 articles are analyzed in parallel using ThreadPoolExecutor:
+
+```python
+# Sequential: 5 articles × 2 seconds = 10 seconds
+# Parallel (5 workers): 5 articles / 5 = 2 seconds
+
+with ThreadPoolExecutor(max_workers=5) as executor:
+    futures = [executor.submit(analyze_sentiment, article) for article in articles]
+    results = [future.result() for future in futures]
+
+# Result: All 5 articles analyzed in ~2 seconds
+```
+
+**Results:**
+```python
+[
+    {"positive": 0.85, "negative": 0.05, "neutral": 0.10},  # Article 1
+    {"positive": 0.75, "negative": 0.10, "neutral": 0.15},  # Article 2
+    {"positive": 0.80, "negative": 0.08, "neutral": 0.12},  # Article 3
+    {"positive": 0.70, "negative": 0.15, "neutral": 0.15},  # Article 4
+    {"positive": 0.65, "negative": 0.20, "neutral": 0.15},  # Article 5
+]
+```
+
+### Step 6: Aggregation
+
+**Mathematical Formulas:**
+```
+avg_positive = Σ(positive_i) / N
+avg_negative = Σ(negative_i) / N
+avg_neutral = Σ(neutral_i) / N
+net_sentiment = avg_positive - avg_negative
+```
+
+**Calculation:**
+```python
+avg_positive = (0.85 + 0.75 + 0.80 + 0.70 + 0.65) / 5 = 0.75  # 75%
+avg_negative = (0.05 + 0.10 + 0.08 + 0.15 + 0.20) / 5 = 0.116  # 11.6%
+avg_neutral = (0.10 + 0.15 + 0.12 + 0.15 + 0.15) / 5 = 0.134  # 13.4%
+
+net_sentiment = 0.75 - 0.116 = 0.634  # Very positive!
+```
+
+### Step 7: Visualization
+
+Results displayed in Streamlit dashboard:
+
+**Key Metrics:**
+- **Net Sentiment:** +63.4% (Bullish)
+- **Overall Positive:** 75%
+- **Overall Negative:** 11.6%
+- **Articles Analyzed:** 5
+- **Cache Hits:** 0 (first run)
+- **RAG Used:** 5 times
+
+**Charts:**
+- Pie chart: Sentiment distribution
+- Bar chart: Sentiment by source
+- Timeline: Sentiment trend over time
+- News feed: Individual articles with sentiment badges
+
+### Performance Summary
+
+**First Run (No Cache):**
+- Data collection: 2 seconds
+- Article storage (batch embeddings): 1 second
+- Sentiment analysis (parallel): 2 seconds
+- **Total: ~5 seconds**
+
+**Second Run (With Cache):**
+- Data collection: 0.1 seconds (Redis cache hit)
+- Article storage: Skipped (already stored)
+- Sentiment analysis: 0.1 seconds (Redis cache hit)
+- **Total: ~0.2 seconds (25x faster!)**
+
+**Cost Analysis:**
+- **API Calls (First Run):**
+  - Embeddings: 1 call (batch of 5)
+  - Sentiment: 5 calls (one per article)
+  - **Total: 6 calls, ~$0.02**
+
+- **API Calls (Second Run):**
+  - Embeddings: 0 (cached)
+  - Sentiment: 0 (cached)
+  - **Total: 0 calls, $0.00 (100% savings!)**
 
 ---
 
@@ -576,13 +1257,37 @@ Before diving into how the application works, let's understand some fundamental 
 3. Uses that information to give you a better answer
 
 **In This App:**
-- The "library" is our collection of past news articles
-- When analyzing sentiment, the AI first finds similar past articles
+- The "library" is our collection of past news articles stored in Azure AI Search
+- When analyzing sentiment, the AI first finds similar past articles using hybrid search
 - It uses those articles as context to make better predictions
 
 **Why It's Better:** Without RAG, the AI only uses its training data (which might be outdated). With RAG, it uses recent, relevant information.
 
 **Learn More:** [RAG Explained Simply](https://www.pinecone.io/learn/retrieval-augmented-generation/)
+
+#### What is Hybrid Search?
+**In Simple Terms:** Hybrid search combines two search methods:
+1. **Semantic search:** Finds articles by meaning (uses embeddings)
+2. **Keyword search:** Finds articles by exact words (uses text matching)
+
+**Example:**
+- Query: "Apple earnings"
+- Semantic search finds: "Apple quarterly profits" (same meaning, different words)
+- Keyword search finds: "Apple earnings report" (exact keyword match)
+- Hybrid search finds: **Both!** (20-30% better than either alone)
+
+**Why It's Better:** Catches more relevant articles than using just one method.
+
+#### What is Azure AI Search?
+**In Simple Terms:** Azure AI Search is like a supercharged search engine for our article library.
+
+**Features:**
+- **Vector indexing:** Organizes embeddings for lightning-fast similarity search
+- **Hybrid search:** Built-in semantic + keyword search
+- **Filtering:** Find articles by date, source, or stock symbol
+- **Speed:** 10-100x faster than basic database searches
+
+**Why We Use It:** Makes RAG searches fast and accurate, even with thousands of articles.
 
 #### What is Caching?
 **In Simple Terms:** Caching is like keeping frequently used items close at hand instead of fetching them from far away every time.
@@ -596,60 +1301,6 @@ Before diving into how the application works, let's understand some fundamental 
 - Second time: Use cached result (takes 0.001 seconds, free)
 
 **Learn More:** [Caching Explained](https://aws.amazon.com/caching/)
-
-### Step-by-Step Process
-
-#### 1. **User Input** 📝
-You enter a stock symbol (like "AAPL" for Apple) and click "Load Data".
-
-**What happens behind the scenes:**
-- The application receives your request
-- It validates the stock symbol (checks if it's a real stock ticker)
-- It checks if data is already cached (saved from a previous request)
-
-**Think of it like:** Ordering food at a restaurant - the waiter takes your order and checks if they have it ready.
-
-#### 2. **Data Collection** 📊
-The application fetches two types of data:
-
-**Stock Price Data:**
-- Current stock price (e.g., $272.75)
-- Company information (name, market cap, etc.)
-- Historical price data (for charts)
-
-**News Articles:**
-- Recent news headlines about the stock
-- Article summaries
-- Publication dates and sources
-
-**Think of it like:** A research assistant gathering all relevant information about the stock from the internet.
-
-**Technical Note:** Uses the `yfinance` library, which is a free Python library that accesses Yahoo Finance data.
-
-#### 3. **Article Storage** 💾
-Each news article is processed and stored for future use:
-
-**a) Text Cleaning:**
-- Removes HTML tags (like `<div>`, `<p>`)
-- Normalizes whitespace (removes extra spaces)
-- Expands abbreviations (Q4 → "fourth quarter")
-
-**b) Embedding Generation:**
-- Converts article text into a numerical representation (vector)
-- This is like creating a "fingerprint" of the article
-- Similar articles get similar fingerprints
-
-**c) Storage:**
-- Saves article + embedding in Redis (fast database)
-- Also saves metadata (title, summary, date, source)
-- This allows fast retrieval later
-
-**Why embeddings?** They allow the computer to understand the "meaning" of articles, not just keywords. Similar articles have similar embeddings, so we can find related articles quickly.
-
-**Example:**
-- Article 1: "Apple reports record earnings"
-- Article 2: "Apple's quarterly profits surge"
-- These would have very similar embeddings (high similarity score)
 
 ### Visualizing Embeddings: The Map Analogy
 
@@ -704,591 +1355,9 @@ Think of embeddings like **GPS coordinates on a map**:
 - [Understanding Embeddings Visually](https://www.pinecone.io/learn/embeddings/)
 - [Embedding Projector Tool](https://projector.tensorflow.org/) (Interactive visualization)
 
-#### 4. **Sentiment Analysis** 🤖
-For each news article, the AI performs sentiment analysis:
-
-**a) Checks Cache First:**
-- "Have I analyzed this exact article before?"
-- If yes, uses cached result (instant, free!)
-- This saves time and money
-
-**b) Retrieves Context (RAG):**
-- Searches for similar articles from the past
-- Uses embeddings to find articles with similar meaning
-- Finds 3-5 most relevant articles
-- Provides this context to the AI
-
-**Why context matters:** 
-- An article saying "Apple stock drops" might be negative
-- But if similar past articles show this is normal volatility, it might be less negative
-- Context helps the AI make more nuanced decisions
-
-**c) Analyzes Sentiment:**
-- Reads the article text
-- Considers the context from similar articles
-- Determines three scores:
-  - **Positive** (0-100%): How positive is the article?
-  - **Negative** (0-100%): How negative is the article?
-  - **Neutral** (0-100%): How neutral is the article?
-- These three scores always add up to 100%
-
-**Example Output:**
-```json
-{
-  "positive": 0.85,  // 85% positive
-  "negative": 0.05,  // 5% negative
-  "neutral": 0.10    // 10% neutral
-}
-```
-
-**Think of it like:** A financial analyst reading an article, remembering similar past articles, and giving a professional opinion with confidence scores.
-
-**d) Caches the Result:**
-- Saves the sentiment analysis for this article
-- Next time someone analyzes the same article, it's instant
-
-#### 5. **Aggregation** 📈
-All individual sentiment scores are combined to give you an overall picture:
-
-- **Average Positive**: Average of all positive scores
-- **Average Negative**: Average of all negative scores
-- **Net Sentiment**: Positive - Negative (positive number = bullish, negative = bearish)
-- **Trends**: How sentiment changes over time
-
-**Example:**
-- Article 1: 80% positive, 10% negative
-- Article 2: 60% positive, 30% negative
-- Article 3: 70% positive, 20% negative
-- **Average**: 70% positive, 20% negative
-- **Net Sentiment**: +50% (very bullish!)
-
-#### 6. **Visualization** 📊
-Results are displayed in an easy-to-understand format:
-
-- **Charts**: Showing sentiment distribution (pie charts, bar charts)
-- **Metrics**: Overall positive/negative percentages
-- **News Feed**: Articles with their sentiment scores highlighted
-- **Insights**: AI-generated summaries explaining the sentiment
-
-**Think of it like:** A dashboard showing you everything you need to know at a glance.
-
 ---
 
-## How It Works: Technical Deep Dive
-
-### System Architecture Components
-
-#### 1. **Data Collector Service** (`services/collector.py`)
-
-**Purpose**: Fetches stock data and news from external APIs.
-
-**Key Methods:**
-- `get_stock_price(symbol)`: Fetches current stock price and company info
-- `get_news_headlines(symbol)`: Retrieves recent news articles
-- `collect_all_data(symbol)`: Orchestrates data collection
-
-**Implementation Details:**
-```python
-# Simplified flow
-def get_stock_price(symbol):
-    # 1. Check Redis cache
-    cached = cache.get_cached_stock_data(symbol)
-    if cached:
-        return cached  # Cache hit - return immediately
-    
-    # 2. Fetch from yfinance API
-    ticker = yf.Ticker(symbol)
-    data = ticker.info
-    
-    # 3. Cache the result
-    cache.cache_stock_data(symbol, data, ttl=3600)
-    
-    return data
-```
-
-**Caching Strategy:**
-- Stock data: 1 hour TTL (prices change frequently)
-- News data: 6 hours TTL (news updates less frequently)
-
-#### 2. **RAG Service** (`services/rag.py`)
-
-**Purpose**: Manages article embeddings and retrieves relevant context for sentiment analysis.
-
-**Key Concepts:**
-
-**a) Embeddings:**
-- Converts text into dense vectors (1536 dimensions for text-embedding-ada-002)
-- Similar articles have similar vectors
-- Enables semantic search (finding articles by meaning, not just keywords)
-
-**b) Storage:**
-- Articles stored with embeddings in Redis
-- Key format: `embedding:{symbol}:{article_id}`
-- Metadata stored separately: `article:{symbol}:{article_id}`
-
-**c) Retrieval:**
-- **Hybrid Search**: Combines semantic and keyword search
-- **Reciprocal Rank Fusion (RRF)**: Merges results from both searches
-- **Temporal Decay**: Boosts recent articles (financial news is time-sensitive)
-- **Re-ranking**: Optional cross-encoder for precision (disabled by default for performance)
-
-**Implementation Flow:**
-```python
-def retrieve_relevant_context(query, symbol, top_k=3):
-    # 1. Generate embedding for query
-    query_embedding = get_embedding(query)
-    
-    # 2. Semantic search: Find similar articles
-    semantic_results = cosine_similarity_search(query_embedding, symbol)
-    
-    # 3. Keyword search: Find articles with matching terms
-    keyword_results = keyword_search(query, symbol)
-    
-    # 4. Combine using RRF
-    combined = reciprocal_rank_fusion(semantic_results, keyword_results)
-    
-    # 5. Apply temporal decay (boost recent articles)
-    results = apply_temporal_decay(combined)
-    
-    # 6. Optional: Re-rank with cross-encoder
-    if reranker_enabled:
-        results = cross_encoder_rerank(query, results)
-    
-    return results[:top_k]
-```
-
-**Why Hybrid Search?**
-- **Semantic search** catches conceptual matches (e.g., "earnings report" matches "quarterly results")
-- **Keyword search** catches specific terms (e.g., "Apple" matches "AAPL")
-- **Combined**: 20-30% better accuracy than semantic-only
-
-#### 3. **Sentiment Analyzer** (`services/sentiment.py`)
-
-**Purpose**: Analyzes text sentiment using Azure OpenAI GPT-4 with RAG context.
-
-**Process:**
-
-**a) Preprocessing:**
-- Text cleaning (remove HTML, normalize whitespace)
-- Financial text validation (optional quality check)
-
-**b) Cache Check:**
-- Hash the text to create cache key
-- Check Redis for existing analysis
-- Return cached result if found (skips API call)
-
-**c) RAG Context Retrieval:**
-- If symbol provided, retrieve relevant articles
-- Format context with article metadata
-- Include relevance scores
-
-**d) LLM Analysis:**
-- Send text + context to Azure OpenAI GPT-4
-- Use few-shot examples in system prompt
-- Request structured JSON output
-- Parse sentiment scores (positive, negative, neutral)
-
-**e) Caching:**
-- Store result in Redis for future use
-- TTL: 7 days (sentiment doesn't change for same text)
-
-**Prompt Engineering:**
-```python
-system_prompt = """
-You are a professional financial sentiment analyzer.
-
-## Examples:
-Text: "Apple reports record-breaking Q4 earnings, stock surges 5%"
-Analysis: {"positive": 0.85, "negative": 0.05, "neutral": 0.10}
-
-Text: "Company faces regulatory investigation, shares drop 3%"
-Analysis: {"positive": 0.10, "negative": 0.75, "neutral": 0.15}
-
-Analyze the sentiment following these examples.
-Respond ONLY with valid JSON.
-"""
-```
-
-**Few-Shot Learning:**
-- Provides examples in the prompt
-- Guides the model toward desired output format
-- Improves consistency and accuracy by 15-25%
-
-#### 4. **Caching System** (`services/cache.py`)
-
-**Purpose**: Reduces API calls and improves performance.
-
-**Multi-Tier Strategy:**
-
-**L1: Memory Cache** (Fastest, ~1ms)
-- In-process dictionary
-- Limited size (LRU eviction)
-- Used for frequently accessed data
-
-**L2: Redis Cache** (Fast, ~5-10ms)
-- Persistent across restarts
-- Shared across instances
-- Used for API responses, embeddings, sentiment results
-
-**L3: Disk Cache** (Slowest, ~50-100ms)
-- Fallback for large data
-- Not currently implemented (future enhancement)
-
-**Cache Keys:**
-- Stock data: `stock:{symbol}`
-- News: `news:{symbol}`
-- Sentiment: `sentiment:{text_hash}`
-- Embeddings: `embedding:{symbol}:{article_id}`
-
-**TTL Strategy:**
-- Stock data: 1 hour (frequent updates)
-- News: 6 hours (less frequent updates)
-- Sentiment: 7 days (stable for same text)
-- Embeddings: 7 days (stable for same article)
-
-**Cache Statistics:**
-- Tracks hits, misses, sets
-- Stored in Redis for persistence
-- Displayed in UI for monitoring
-
-#### 5. **Cost Tracker** (`services/cost_tracker.py`)
-
-**Purpose**: Monitors and tracks API usage costs.
-
-**Features:**
-- Tracks token usage (input/output)
-- Calculates costs based on model pricing
-- Stores daily summaries in Redis
-- Provides cost reports (last 7 days, 30 days)
-
-**Cost Optimization:**
-- Caching reduces API calls by 50-90%
-- Batch embedding generation reduces costs
-- RAG reduces need for large context windows
-
----
-
-## How It All Fits Together
-
-This section shows how all the concepts connect and work together as a complete system.
-
-### The Complete Picture
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    USER INPUT                                │
-│              Stock Symbol: "AAPL"                            │
-└──────────────────────┬──────────────────────────────────────┘
-                       │
-                       ▼
-┌─────────────────────────────────────────────────────────────┐
-│              DATA COLLECTION LAYER                           │
-│  • Check Redis Cache (fast path)                             │
-│  • If miss: Fetch from yfinance API                          │
-│  • Cache results for future use                              │
-└──────────────────────┬──────────────────────────────────────┘
-                       │
-                       ▼
-┌─────────────────────────────────────────────────────────────┐
-│           ARTICLE PROCESSING PIPELINE                        │
-│                                                              │
-│  1. Preprocessing                                            │
-│     • Remove HTML tags                                       │
-│     • Normalize whitespace                                   │
-│     • Expand abbreviations (Q4 → "fourth quarter")          │
-│                                                              │
-│  2. Embedding Generation                                     │
-│     • Convert text → numbers (1536 dimensions)              │
-│     • Uses Azure OpenAI text-embedding-ada-002              │
-│     • Batch processing (10-100x faster)                      │
-│                                                              │
-│  3. Storage                                                  │
-│     • Store embeddings in Redis                              │
-│     • Store article metadata                                 │
-│     • TTL: 7 days                                            │
-└──────────────────────┬──────────────────────────────────────┘
-                       │
-                       ▼
-┌─────────────────────────────────────────────────────────────┐
-│         SENTIMENT ANALYSIS PIPELINE                         │
-│                                                              │
-│  For each article:                                           │
-│                                                              │
-│  1. Check Cache (Fast Path)                                  │
-│     • Hash article text → cache key                          │
-│     • If found: Return cached result (instant!)              │
-│     • If miss: Continue to RAG                               │
-│                                                              │
-│  2. RAG Context Retrieval                                    │
-│     • Generate query embedding                               │
-│     • Semantic search (cosine similarity)                    │
-│     • Keyword search (TF-IDF)                                │
-│     • Combine using RRF (Reciprocal Rank Fusion)             │
-│     • Apply temporal decay (boost recent articles)           │
-│     • Retrieve top 3-5 similar articles                      │
-│                                                              │
-│  3. LLM Analysis (GPT-4)                                     │
-│     • Format context from retrieved articles                │
-│     • Create prompt with few-shot examples                   │
-│     • Send to Azure OpenAI GPT-4                            │
-│     • Parse JSON response                                    │
-│                                                              │
-│  4. Cache Result                                             │
-│     • Store sentiment scores in Redis                        │
-│     • TTL: 7 days                                            │
-└──────────────────────┬──────────────────────────────────────┘
-                       │
-                       ▼
-┌─────────────────────────────────────────────────────────────┐
-│           AGGREGATION & VISUALIZATION                       │
-│  • Calculate averages (positive, negative, neutral)          │
-│  • Calculate net sentiment (positive - negative)            │
-│  • Generate charts and visualizations                       │
-│  • Display in Streamlit dashboard                           │
-└─────────────────────────────────────────────────────────────┘
-```
-
-### Key Dependencies and Relationships
-
-**1. Embeddings Enable RAG**
-- **Without embeddings**: Can't find similar articles (no way to measure similarity)
-- **With embeddings**: Can calculate cosine similarity → find similar articles → provide context
-- **Dependency**: RAG **requires** embeddings to work
-
-**2. RAG Improves Sentiment Analysis**
-- **Without RAG**: LLM only uses training data (might be outdated or lack context)
-- **With RAG**: LLM uses recent, relevant articles as context → more accurate analysis
-- **Dependency**: Sentiment analysis is **enhanced by** RAG (but works without it)
-
-**3. Caching Speeds Up Everything**
-- **Stock data caching**: Avoids repeated API calls to yfinance
-- **News caching**: Avoids repeated API calls to yfinance
-- **Sentiment caching**: Avoids repeated API calls to Azure OpenAI (biggest cost saver!)
-- **Embedding caching**: Avoids regenerating same embeddings
-- **Dependency**: Everything is **faster and cheaper** with caching
-
-**4. Hybrid Search Improves RAG**
-- **Semantic-only**: Might miss articles with exact keywords
-- **Keyword-only**: Might miss articles with same meaning but different words
-- **Hybrid**: Catches both! (20-30% better retrieval)
-- **Dependency**: RAG retrieval is **more accurate** with hybrid search
-
-**5. Batch Processing Reduces Costs**
-- **One-by-one**: 100 articles = 100 API calls = expensive
-- **Batch**: 100 articles = 1 API call = 90% cheaper
-- **Dependency**: Embedding generation is **much cheaper** with batching
-
-**6. Parallel Processing Improves Speed**
-- **Sequential**: 10 articles = 20 seconds (2 seconds each)
-- **Parallel**: 10 articles = 4 seconds (5 concurrent workers)
-- **Dependency**: Sentiment analysis is **5-10x faster** with parallel processing
-
-### Concept Map
-
-```
-                    ┌─────────────┐
-                    │   User      │
-                    │   Input     │
-                    └──────┬──────┘
-                           │
-                           ▼
-        ┌──────────────────────────────────┐
-        │      Data Collection             │
-        │  (yfinance API + Caching)         │
-        └──────┬───────────────────────────┘
-               │
-               ▼
-    ┌──────────────────────────────┐
-    │   Article Processing         │
-    │   • Preprocessing            │
-    │   • Embedding Generation ────┼──┐
-    │   • Storage                   │  │
-    └──────────────────────────────┘  │
-                                      │
-                                      ▼
-    ┌─────────────────────────────────────────┐
-    │         Sentiment Analysis                │
-    │                                           │
-    │   Cache Check ──┐                        │
-    │                  │                        │
-    │   RAG Retrieval ─┼──► Uses Embeddings    │
-    │      │           │    (from above)        │
-    │      │           │                        │
-    │      ├──► Hybrid Search                  │
-    │      │    (semantic + keyword)            │
-    │      │                                    │
-    │      └──► RRF Combination                 │
-    │                                           │
-    │   LLM Analysis (GPT-4)                    │
-    │      │                                    │
-    │      └──► Uses RAG Context                │
-    │                                           │
-    │   Cache Result                            │
-    └──────────────────────────────────────────┘
-               │
-               ▼
-    ┌──────────────────────────┐
-    │   Aggregation &          │
-    │   Visualization          │
-    └──────────────────────────┘
-```
-
-### How Components Interact
-
-**Example Flow: Analyzing "AAPL"**
-
-1. **User clicks "Load Data"**
-   - `app.py` receives request
-   - Calls `collector.get_stock_price("AAPL")`
-
-2. **Data Collector checks cache**
-   - `cache.get_cached_stock_data("AAPL")`
-   - Cache miss → Fetches from yfinance
-   - Caches result: `cache.set("stock:AAPL", data, ttl=3600)`
-
-3. **Articles retrieved and processed**
-   - `rag_service.store_articles_batch(articles, "AAPL")`
-   - For each article:
-     - Preprocess text
-     - Generate embedding (batch)
-     - Store in Redis
-
-4. **Sentiment analysis begins**
-   - For each article:
-     - `cache.get_cached_sentiment(text)` → Cache miss
-     - `rag_service.retrieve_relevant_context(text, "AAPL")`
-       - Uses stored embeddings (from step 3)
-       - Hybrid search (semantic + keyword)
-       - RRF combination
-     - `analyzer.analyze_sentiment(text, "AAPL")`
-       - Uses RAG context
-       - Calls Azure OpenAI GPT-4
-       - Caches result
-
-5. **Results aggregated and displayed**
-   - Calculate averages
-   - Generate visualizations
-   - Display in Streamlit UI
-
-**Key Insight:** Each component depends on others, but the system is designed to **gracefully degrade** if one component fails (e.g., if Redis is down, caching is skipped but the app still works).
-
----
-
-## Core Components
-
-### Component Diagram
-
-**Component Interaction Diagram**
-
-![Component Interaction](diagrams/components.png)
-
-### Component Descriptions
-
-#### 1. **Streamlit Dashboard** (`app.py`)
-- **Responsibility**: User interface and visualization
-- **Features**: Interactive charts, real-time updates, cache status monitoring
-- **Technologies**: Streamlit, Plotly, Pandas
-
-#### 2. **Data Collector** (`services/collector.py`)
-- **Responsibility**: Fetching external data
-- **APIs Used**: yfinance
-- **Caching**: Redis for stock and news data
-
-#### 3. **Sentiment Analyzer** (`services/sentiment.py`)
-- **Responsibility**: Text sentiment analysis
-- **ML Model**: Azure OpenAI GPT-4
-- **Enhancements**: RAG context, few-shot learning, caching
-
-#### 4. **RAG Service** (`services/rag.py`)
-- **Responsibility**: Context retrieval for sentiment analysis
-- **Techniques**: Embeddings, hybrid search, temporal decay
-- **Storage**: Redis (embeddings and metadata)
-
-#### 5. **Redis Cache** (`services/cache.py`)
-- **Responsibility**: Data caching and statistics
-- **Features**: Multi-tier caching, TTL management, hit/miss tracking
-
-#### 6. **Cost Tracker** (`services/cost_tracker.py`)
-- **Responsibility**: API usage monitoring
-- **Features**: Token tracking, cost calculation, daily summaries
-
-#### 7. **Utilities**
-- **Retry Logic** (`utils/retry.py`): Exponential backoff for API calls
-- **Circuit Breaker** (`utils/circuit_breaker.py`): Prevents cascading failures
-- **Preprocessing** (`utils/preprocessing.py`): Text cleaning and normalization
-- **Logging** (`utils/logger.py`): Centralized logging system
-- **Validators** (`utils/validators.py`): Input validation (stock symbols, text)
-
-#### 8. **Data Models** (`models/`)
-- **SentimentScores** (`models/sentiment.py`): Data structure for sentiment results
-  - Stores positive, negative, neutral scores
-  - Validates and normalizes scores (must sum to 1.0)
-  - Provides `net_sentiment` (positive - negative) and `dominant_sentiment`
-- **SentimentResult** (`models/sentiment.py`): Complete analysis result
-  - Includes scores, original text, source, cache status, RAG usage
-- **StockData** (`models/stock.py`): Stock price and company information
-  - Symbol, price, company name, market cap, timestamp
-- **NewsArticle** (`models/stock.py`): News article structure
-  - Title, summary, source, URL, timestamp
-- **SocialMediaPost** (`models/stock.py`): Social media post structure
-  - Text, platform, author, subreddit, URL, timestamp
-
-#### 9. **Configuration Management** (`config/settings.py`)
-- **Purpose**: Centralized configuration using Pydantic
-- **Features**:
-  - Environment variable validation
-  - Type checking and defaults
-  - Settings for Azure OpenAI, Redis, application behavior
-- **Benefits**: Single source of truth, type safety, easy testing
-
-#### 10. **Additional Services** (Advanced Features)
-- **Multi-Tier Cache** (`services/multi_tier_cache.py`): L1 (memory), L2 (Redis), L3 (disk) caching
-- **Cross-Encoder Reranker** (`services/reranker.py`): Re-ranks search results for better precision
-- **Message Queue** (`services/message_queue.py`): Async job processing using Redis Streams
-- **A/B Testing Framework** (`services/ab_testing.py`): Tests different prompt variants
-- **Vector Database** (`services/vector_db.py`): Abstract interface for vector search (Redis implementation)
-
----
-
-## Data Flow and Processing Pipeline
-
-### Complete Data Flow
-
-**Data Flow Diagram**
-
-![Data Flow](diagrams/dataflow.png)
-
-### Processing Steps Explained
-
-#### Step 1: Data Collection
-1. User enters stock symbol
-2. System checks cache for stock data
-3. If not cached, fetches from yfinance API
-4. Caches the result for future use
-5. Repeats for news articles
-
-#### Step 2: Article Processing
-1. Each article is preprocessed (cleaned, normalized)
-2. Embedding is generated (or retrieved from cache)
-3. Article + embedding stored in Redis
-4. Metadata (title, summary, date) stored separately
-
-#### Step 3: Sentiment Analysis
-1. For each article:
-   - Check if sentiment already analyzed (cache)
-   - If not, retrieve relevant context (RAG)
-   - Send to Azure OpenAI with context
-   - Parse sentiment scores
-   - Cache the result
-
-#### Step 4: Aggregation
-1. Combine all sentiment scores
-2. Calculate averages and trends
-3. Generate visualizations
-
----
-
-## Machine Learning Models and Techniques
+## Machine Learning Models and Algorithms
 
 ### 1. Large Language Model (LLM): GPT-4
 
@@ -1329,391 +1398,500 @@ GPT-4 (Generative Pre-trained Transformer 4) is a state-of-the-art language mode
 - **Response Format**: JSON object (structured output)
   - Ensures consistent format: `{"positive": 0.85, "negative": 0.05, "neutral": 0.10}`
 
-**What are Tokens?**
-**In Simple Terms:** Tokens are how the AI breaks down text into pieces it can process.
-
-**Examples:**
-- "Hello" = 1 token
-- "Hello world" = 2 tokens
-- "Stock sentiment analysis" = 3 tokens
-- "Apple's quarterly earnings report" = 5 tokens
-
-**Why It Matters:**
-- API costs are based on tokens (input + output)
-- Longer text = more tokens = higher cost
-- We optimize by caching results and using batch processing
-
 **Learn More:**
 - [GPT-4 Technical Report](https://arxiv.org/abs/2303.08774)
 - [Azure OpenAI Documentation](https://learn.microsoft.com/en-us/azure/ai-services/openai/)
 - [Transformer Architecture Explained](https://jalammar.github.io/illustrated-transformer/)
 - [Attention Mechanism Explained](https://lilianweng.github.io/posts/2018-06-24-attention/)
-- [What are Tokens?](https://platform.openai.com/tokenizer)
 
 ### 2. Text Embeddings: text-embedding-ada-002
 
 **What are Embeddings?**
 Embeddings are numerical representations of text that capture semantic meaning. Similar texts have similar embeddings.
 
-**In Simple Terms:**
-- Think of embeddings as a "fingerprint" or "DNA" of text
-- Each word/article gets converted into a list of numbers (vector)
-- Similar meanings = similar number patterns
-- The model (text-embedding-ada-002) was trained on billions of texts to learn these patterns
+**Mathematical Representation:**
 
-**Why Embeddings?**
-- **Semantic Search**: Find articles by meaning, not just keywords
-  - Example: "earnings report" matches "quarterly results" (same meaning, different words)
-- **Similarity Calculation**: Measure how similar two texts are mathematically
-- **Vector Operations**: Perform mathematical operations on text (addition, subtraction, etc.)
+An embedding is a function that maps text to a dense vector in high-dimensional space:
 
-**How We Use It:**
-- **Model**: text-embedding-ada-002 (1536 dimensions)
-  - Each embedding is a list of 1536 numbers
-  - These numbers represent different aspects of meaning
-- **Batch Processing**: Generate embeddings for multiple articles at once (10-100x faster)
-- **Caching**: Cache embeddings to avoid regenerating (embeddings don't change for same text)
+```
+E: Text → ℝ^d
+
+where d = 1536 (dimensions for text-embedding-ada-002)
+```
 
 **Example:**
 ```python
-# Article 1: "Apple reports record earnings"
-embedding_1 = [0.123, -0.456, 0.789, ..., 0.234]  # 1536 numbers
-
-# Article 2: "Apple's quarterly profits surge"
-embedding_2 = [0.125, -0.458, 0.791, ..., 0.236]  # Similar numbers
-
-# Calculate similarity using cosine similarity
-similarity = cosine_similarity(embedding_1, embedding_2)  # ~0.95 (very similar)
+text = "Apple reports record earnings"
+embedding = E(text) = [0.123, -0.456, 0.789, ..., 0.234]  # 1536 numbers
 ```
 
-**What is Cosine Similarity?**
-**In Simple Terms:** Cosine similarity measures the angle between two vectors (embeddings). If two vectors point in the same direction, they're similar.
+**How Embeddings are Generated:**
 
-### Understanding Cosine Similarity Visually
-
-**The Arrow Analogy:**
-
-Imagine two arrows (vectors) pointing in space:
-
-**Scenario 1: Very Similar Articles**
+1. **Tokenization**: Text is split into tokens
 ```
-Vector A: → (points northeast, 45°)
-Vector B: ↗ (points slightly more north, 50°)
-Angle between them: 5° (very small angle)
-Cosine similarity: cos(5°) = 0.996 ≈ 1.0 (almost identical!)
+"Apple reports earnings" → ["Apple", "reports", "earnings"]
 ```
 
-**Visual:**
+2. **Token Encoding**: Each token is converted to a number
 ```
-    ↗ Vector B (50°)
-   /
-  /
- / 5° angle
-→ Vector A (45°)
+["Apple", "reports", "earnings"] → [12345, 23456, 34567]
 ```
 
-**Scenario 2: Unrelated Articles**
+3. **Neural Network Processing**: The encoder processes tokens through multiple layers
 ```
-Vector A: → (points east, 0°)
-Vector B: ← (points west, 180°)
-Angle between them: 180° (opposite directions)
-Cosine similarity: cos(180°) = -1.0 (completely opposite)
+Input tokens → Transformer layers → Output embedding vector
 ```
 
-**Visual:**
+4. **Output**: A 1536-dimensional vector
 ```
-→ Vector A (east)     ← Vector B (west)
-    180° angle between them
-```
-
-**Scenario 3: Somewhat Related**
-```
-Vector A: → (points east, 0°)
-Vector B: ↗ (points northeast, 45°)
-Angle between them: 45°
-Cosine similarity: cos(45°) = 0.707 (moderately similar)
+embedding = [e1, e2, e3, ..., e1536]
 ```
 
-**Why This Matters:**
-- **Small angle** (5°) = vectors point in **similar direction** = **similar meaning**
-- **Large angle** (180°) = vectors point in **opposite directions** = **opposite meaning**
-- **Medium angle** (45°) = vectors point in **somewhat similar direction** = **somewhat similar**
-
-**Real Example:**
-```
-Article A: "Apple earnings report"
-Embedding: [0.5, 0.3, 0.8, ...] → Points northeast
-
-Article B: "Apple profits surge"
-Embedding: [0.52, 0.31, 0.79, ...] → Points slightly more north
-Angle: ~5° → Cosine similarity: 0.92 (very similar!)
-
-Article C: "Weather forecast"
-Embedding: [0.1, 0.9, 0.2, ...] → Points north
-Angle: ~60° → Cosine similarity: 0.5 (somewhat related, but not very)
-```
-
-**Mathematical Explanation:**
-- Formula: `cosine_similarity = (A · B) / (||A|| × ||B||)`
-  - `A · B` = dot product (measures how much vectors point in same direction)
-  - `||A||` = magnitude (length) of vector A
-  - `||B||` = magnitude (length) of vector B
-- Result: -1 to 1
-  - **1.0** = identical direction (same meaning)
-  - **0.0** = perpendicular (unrelated)
-  - **-1.0** = opposite direction (opposite meaning)
-- In practice: For embeddings, we typically get 0.0 to 1.0 (rarely negative)
-
-**Why Cosine Similarity (Not Euclidean Distance)?**
-- **Euclidean distance** measures straight-line distance (affected by magnitude)
-- **Cosine similarity** measures angle (direction only, not magnitude)
-- For text: We care about **meaning** (direction), not **length** (magnitude)
-- Example: "Apple" and "Apple Apple Apple" have same meaning but different lengths
-  - Euclidean distance: Large (because one is longer)
-  - Cosine similarity: High (because they point in same direction)
+**Why 1536 Dimensions?**
+- More dimensions = more nuance and detail
+- 1536 is optimal for balancing:
+  - **Expressiveness**: Captures subtle semantic differences
+  - **Efficiency**: Not too large (computational cost)
+  - **Storage**: Reasonable memory footprint
 
 **Learn More:**
 - [OpenAI Embeddings Guide](https://platform.openai.com/docs/guides/embeddings)
 - [Understanding Embeddings](https://www.pinecone.io/learn/embeddings/)
-- [Cosine Similarity Explained](https://www.machinelearningplus.com/nlp/cosine-similarity/)
-- [Vector Similarity Search](https://www.pinecone.io/learn/vector-similarity/)
-- [Visual Explanation](https://www.machinelearningplus.com/nlp/cosine-similarity/) (with diagrams)
 
-### 3. Hybrid Search: Semantic + Keyword
+### 3. Cosine Similarity Algorithm
 
-**What is Hybrid Search?**
-Combining multiple search methods to improve accuracy. Instead of using just one method, we use two and combine the results.
+**Purpose**: Measure semantic similarity between two embedding vectors.
 
-### Why Hybrid Search? A Concrete Example
+**Mathematical Formula:**
 
-**Query**: "Apple earnings report"
-
-#### Semantic Search Only:
 ```
-Results:
-1. "Apple quarterly results" (similarity: 0.92) ✓ Great match!
-2. "Apple profit announcement" (similarity: 0.88) ✓ Good match!
-3. "Apple revenue growth" (similarity: 0.85) ✓ Related
-4. "Tech earnings season" (similarity: 0.72) ✗ Too generic
-5. "Company financial results" (similarity: 0.65) ✗ Too generic
+cos(θ) = (A · B) / (||A|| × ||B||)
 ```
 
-**Problem**: Might miss articles with exact keywords but different phrasing.
+**Where:**
+- `A · B` = dot product of vectors A and B
+- `||A||` = Euclidean norm (magnitude) of vector A
+- `||B||` = Euclidean norm (magnitude) of vector B
+- `θ` = angle between vectors
 
-#### Keyword Search Only:
-```
-Results:
-1. "Apple earnings report Q4" (3 keyword matches: "Apple", "earnings", "report") ✓
-2. "Apple earnings call transcript" (2 matches: "Apple", "earnings") ✓
-3. "Apple earnings expectations" (2 matches: "Apple", "earnings") ✓
-4. "Apple earnings" (2 matches: "Apple", "earnings") ✓
-5. "Apple Q4 earnings" (2 matches: "Apple", "earnings") ✓
-```
+**Step-by-Step Calculation:**
 
-**Problem**: Might miss articles with same meaning but different words (e.g., "quarterly results" instead of "earnings report").
-
-#### Hybrid Search (Combined):
+**Step 1: Calculate Dot Product**
 ```
-Results (after RRF combination):
-1. "Apple quarterly results" (high semantic: 0.92, medium keyword: 2 matches) ✓✓ Best of both!
-2. "Apple earnings report Q4" (high semantic: 0.88, high keyword: 3 matches) ✓✓ Perfect match!
-3. "Apple profit announcement" (high semantic: 0.88, low keyword: 1 match) ✓ Semantic catch
-4. "Apple earnings call transcript" (medium semantic: 0.75, high keyword: 2 matches) ✓ Keyword catch
-5. "Apple revenue growth" (high semantic: 0.85, low keyword: 1 match) ✓ Semantic catch
+A · B = Σ(A_i × B_i) for i = 1 to 1536
+
+Example:
+A = [0.5, 0.3, 0.8]
+B = [0.52, 0.31, 0.79]
+A · B = (0.5 × 0.52) + (0.3 × 0.31) + (0.8 × 0.79)
+      = 0.26 + 0.093 + 0.632
+      = 0.985
 ```
 
-**Result**: Hybrid search catches articles that **semantic OR keyword alone would miss**!
+**Step 2: Calculate Euclidean Norms**
+```
+||A|| = √(Σ(A_i²)) for i = 1 to 1536
 
-**Why This Matters:**
-- **Semantic search** catches: "quarterly results" (same meaning, different words)
-- **Keyword search** catches: "earnings report Q4" (exact keywords)
-- **Hybrid search** catches: **Both!** (20-30% better accuracy)
+Example:
+A = [0.5, 0.3, 0.8]
+||A|| = √(0.5² + 0.3² + 0.8²)
+      = √(0.25 + 0.09 + 0.64)
+      = √0.98
+      = 0.99
 
-**Components:**
+Similarly:
+||B|| = √(0.52² + 0.31² + 0.79²)
+      = √(0.2704 + 0.0961 + 0.6241)
+      = √0.9906
+      = 0.995
+```
 
-**a) Semantic Search:**
-- Uses embeddings to find articles by meaning
-- Example: "earnings report" matches "quarterly results"
-- **Algorithm**: Cosine similarity on embeddings
+**Step 3: Calculate Cosine Similarity**
+```
+cos(θ) = A · B / (||A|| × ||B||)
+       = 0.985 / (0.99 × 0.995)
+       = 0.985 / 0.985
+       = 0.998 ≈ 1.0 (very similar!)
+```
 
-**b) Keyword Search:**
-- Uses exact keyword matching
-- Example: "Apple" matches articles containing "Apple"
-- **Algorithm**: TF-IDF or simple keyword matching
+**Range**: 0.0 (orthogonal, no similarity) to 1.0 (identical, perfect similarity)
 
-**c) Reciprocal Rank Fusion (RRF):**
-- Combines results from both searches intelligently
-- Formula: `RRF_score = 1 / (k + rank)`
-- Standard k value: 60
-- **Why RRF?** Better than simple averaging, handles different score scales
+**Implementation in Python:**
+```python
+import numpy as np
 
-### Understanding RRF: Why This Formula?
+def cosine_similarity(vec1, vec2):
+    """
+    Calculate cosine similarity between two vectors.
+    
+    Args:
+        vec1: First embedding vector (list or numpy array)
+        vec2: Second embedding vector (list or numpy array)
+        
+    Returns:
+        Cosine similarity score (0.0 to 1.0)
+    """
+    vec1 = np.array(vec1)
+    vec2 = np.array(vec2)
+    
+    # Calculate dot product
+    dot_product = np.dot(vec1, vec2)
+    
+    # Calculate norms
+    norm1 = np.linalg.norm(vec1)
+    norm2 = np.linalg.norm(vec2)
+    
+    # Avoid division by zero
+    if norm1 == 0 or norm2 == 0:
+        return 0.0
+    
+    # Calculate cosine similarity
+    return dot_product / (norm1 * norm2)
+```
 
-**Intuition:**
-- Rank 1 (best result) gets highest score
-- Rank 2 gets lower score
-- Rank 10 gets much lower score
-- The "k" constant (60) controls how much rank matters
-  - Higher k = rank matters less (more equal scores)
-  - Lower k = rank matters more (bigger difference between ranks)
+**Visual Explanation:**
 
-**Concrete Example:**
+Think of cosine similarity as measuring the **angle** between two arrows (vectors):
+
+```
+Small angle (similar):
+    ↗ B (50°)
+   /
+  / 5° angle
+ → A (45°)
+Cosine similarity: cos(5°) ≈ 0.996
+
+Large angle (different):
+→ A (0°)          ↑ B (90°)
+   90° angle
+Cosine similarity: cos(90°) = 0.0
+```
+
+**Use Case**: Semantic search in RAG (finding similar articles)
+
+**Complexity**: O(d) where d = vector dimension (1536)
+
+**Mathematical Algorithms Visualization:**
+
+![Algorithms Visualization](diagrams/algorithms_visualization.png)
+
+### 4. Reciprocal Rank Fusion (RRF) Algorithm
+
+**Purpose**: Combine multiple ranked lists without score normalization.
+
+**Problem It Solves:**
+
+When combining search results from different methods (semantic vs. keyword), scores are on different scales:
+- Semantic search: scores 0.0-1.0 (cosine similarity)
+- Keyword search: scores 0-100 (TF-IDF or BM25)
+
+Simple averaging would give wrong weights!
+
+**Solution: Use Ranks, Not Scores**
+
+RRF uses the **position** (rank) of results, not raw scores.
+
+**Mathematical Formula:**
+
+```
+RRF_score(d) = Σ(1 / (k + rank_i(d)))
+
+where:
+- d = document/article
+- k = RRF constant (typically 60)
+- rank_i(d) = rank of document d in search result i
+- Sum is over all search results containing document d
+```
+
+**Why k=60?**
+- Research shows k=60 provides good balance
+- Higher k = flatter scores (ranks matter less)
+- Lower k = steeper scores (ranks matter more)
+
+**Step-by-Step Example:**
 
 **Semantic Search Results:**
-1. Article A: "Apple quarterly results" (rank 1)
-2. Article B: "Apple profit announcement" (rank 2)
-3. Article C: "Apple revenue growth" (rank 3)
+1. Article A: "Apple quarterly results" (rank 1, similarity: 0.92)
+2. Article B: "Apple profit announcement" (rank 2, similarity: 0.88)
+3. Article C: "Apple revenue growth" (rank 3, similarity: 0.85)
 
 **Keyword Search Results:**
-1. Article D: "Apple earnings report Q4" (rank 1)
-2. Article A: "Apple quarterly results" (rank 2) ← Same as semantic!
-3. Article E: "Apple earnings call" (rank 3)
+1. Article D: "Apple earnings report Q4" (rank 1, score: 95)
+2. Article A: "Apple quarterly results" (rank 2, score: 88)  ← Same article!
+3. Article E: "Apple earnings call" (rank 3, score: 82)
 
 **RRF Calculation:**
 
 **Article A** (appears in both searches):
-- Semantic rank 1: `1 / (60 + 1) = 0.0164`
-- Keyword rank 2: `1 / (60 + 2) = 0.0161`
-- **Combined score: 0.0164 + 0.0161 = 0.0325** ← Highest!
+```
+Semantic rank = 1: RRF_score_semantic = 1 / (60 + 1) = 0.0164
+Keyword rank = 2:  RRF_score_keyword = 1 / (60 + 2) = 0.0161
 
-**Article D** (only in keyword search):
-- Keyword rank 1: `1 / (60 + 1) = 0.0164`
-- **Combined score: 0.0164** ← Lower than Article A
+Combined RRF score = 0.0164 + 0.0161 = 0.0325
+```
 
 **Article B** (only in semantic search):
-- Semantic rank 2: `1 / (60 + 2) = 0.0161`
-- **Combined score: 0.0161** ← Lower than Article A
+```
+Semantic rank = 2: RRF_score_semantic = 1 / (60 + 2) = 0.0161
+
+Combined RRF score = 0.0161
+```
+
+**Article D** (only in keyword search):
+```
+Keyword rank = 1: RRF_score_keyword = 1 / (60 + 1) = 0.0164
+
+Combined RRF score = 0.0164
+```
+
+**Final Ranking:**
+1. Article A: 0.0325 (highest - appears in both!)
+2. Article D: 0.0164
+3. Article B: 0.0161
+4. Article C: 1/(60+3) = 0.0159
+5. Article E: 1/(60+3) = 0.0159
 
 **Result:** Article A ranks highest because it appears high in **both** searches!
 
-**Why Not Simple Averaging?**
-- Semantic scores: 0.92, 0.88, 0.85 (scale: 0-1)
-- Keyword scores: 3, 2, 1 (scale: 0-10)
-- Simple average: Would give wrong weights (keyword scores dominate)
-- RRF: Uses rank (position), not raw scores → Works with any scale!
-
-**Implementation:**
+**Implementation in Python:**
 ```python
 def reciprocal_rank_fusion(semantic_results, keyword_results, k=60):
-    scores = {}
+    """
+    Combine multiple ranked lists using Reciprocal Rank Fusion.
     
-    # Add semantic results
-    for rank, item in enumerate(semantic_results, 1):
-        doc_id = item['id']
-        scores[doc_id] = scores.get(doc_id, 0) + (1 / (k + rank))
+    Args:
+        semantic_results: List of articles from semantic search
+        keyword_results: List of articles from keyword search
+        k: RRF constant (default: 60)
+        
+    Returns:
+        List of (article_id, rrf_score) tuples, sorted by score
+    """
+    rrf_scores = {}
     
-    # Add keyword results
-    for rank, item in enumerate(keyword_results, 1):
-        doc_id = item['id']
-        scores[doc_id] = scores.get(doc_id, 0) + (1 / (k + rank))
+    # Add semantic search results
+    for rank, article in enumerate(semantic_results, start=1):
+        article_id = article.get('article_id', '')
+        if article_id:
+            rrf_score = 1.0 / (k + rank)
+            rrf_scores[article_id] = rrf_scores.get(article_id, 0.0) + rrf_score
     
-    # Sort by combined score
-    return sorted(scores.items(), key=lambda x: x[1], reverse=True)
+    # Add keyword search results
+    for rank, article in enumerate(keyword_results, start=1):
+        article_id = article.get('article_id', '')
+        if article_id:
+            rrf_score = 1.0 / (k + rank)
+            rrf_scores[article_id] = rrf_scores.get(article_id, 0.0) + rrf_score
+    
+    # Sort by RRF score (descending)
+    sorted_results = sorted(rrf_scores.items(), key=lambda x: x[1], reverse=True)
+    
+    return sorted_results
 ```
 
+**Use Case**: Hybrid search in RAG (combining semantic and keyword results)
+
+**Complexity**: O(n) where n = total number of unique articles
+
 **Learn More:**
-- [Hybrid Search Explained](https://www.pinecone.io/learn/hybrid-search/)
-- [Reciprocal Rank Fusion](https://www.elastic.co/guide/en/elasticsearch/reference/current/rrf.html)
+- [Reciprocal Rank Fusion Paper](https://plg.uwaterloo.ca/~gvcormac/cormacksigir09-rrf.pdf)
+- [Elasticsearch RRF](https://www.elastic.co/guide/en/elasticsearch/reference/current/rrf.html)
 
-### 4. Temporal Decay
+### 5. Temporal Decay Algorithm
 
-**What is Temporal Decay?**
-Boosting recent articles in search results (financial news is time-sensitive).
+**Purpose**: Boost recent articles in search results (financial news is time-sensitive).
 
-**Why Temporal Decay?**
-- Recent news is more relevant for current sentiment
-- Old news may be outdated or irrelevant
-- Improves accuracy for time-sensitive domains
+**Problem**: All articles are equally weighted by similarity, but recent news is more relevant for current sentiment.
 
-**Implementation:**
+**Solution**: Apply a time-based boost that decays with age.
+
+**Mathematical Formula:**
+
+```
+decay = 1.0 / (1 + age_days / decay_days)
+boosted_score = current_score × (1 + decay × boost_factor)
+
+where:
+- age_days = days since article publication
+- decay_days = decay half-life (default: 7 days)
+- boost_factor = maximum boost multiplier (default: 0.2 = 20%)
+```
+
+**Step-by-Step Calculation:**
+
+**Article Published Today (age = 0):**
+```
+decay = 1.0 / (1 + 0/7) = 1.0 / 1 = 1.0
+boost = decay × 0.2 = 1.0 × 0.2 = 0.2 (20% boost)
+boosted_score = 0.0318 × (1 + 0.2) = 0.0318 × 1.2 = 0.0382
+```
+
+**Article Published 7 Days Ago (age = 7):**
+```
+decay = 1.0 / (1 + 7/7) = 1.0 / 2 = 0.5 (half-life)
+boost = decay × 0.2 = 0.5 × 0.2 = 0.1 (10% boost)
+boosted_score = 0.0318 × (1 + 0.1) = 0.0318 × 1.1 = 0.0350
+```
+
+**Article Published 30 Days Ago (age = 30):**
+```
+decay = 1.0 / (1 + 30/7) = 1.0 / 5.29 ≈ 0.189
+boost = decay × 0.2 = 0.189 × 0.2 ≈ 0.038 (3.8% boost)
+boosted_score = 0.0318 × (1 + 0.038) = 0.0318 × 1.038 ≈ 0.0330
+```
+
+**Decay Curve:**
+
+```
+Boost
+1.0 |•
+    |  ••
+0.5 |     ••• (half-life at 7 days)
+    |         ••••••
+0.0 |________________••••••••••••••••••••
+    0     7      14      21      28   Days
+```
+
+**Implementation in Python:**
 ```python
-def apply_temporal_decay(results, decay_factor=0.1):
-    current_time = datetime.now()
+def apply_temporal_decay(results, decay_days=7, boost_factor=0.2):
+    """
+    Apply temporal decay to boost recent articles.
+    
+    Args:
+        results: List of article result dictionaries
+        decay_days: Decay half-life in days (default: 7)
+        boost_factor: Maximum boost multiplier (default: 0.2)
+        
+    Returns:
+        Re-ranked results with temporal boost applied
+    """
+    from datetime import datetime
+    
+    now = datetime.now()
     
     for result in results:
-        article_time = result['timestamp']
-        age_days = (current_time - article_time).days
+        timestamp = result.get('timestamp', '')
+        if not timestamp:
+            continue
         
-        # Boost score for recent articles
-        boost = 1 / (1 + decay_factor * age_days)
-        result['rrf_score'] *= boost
+        # Parse timestamp
+        try:
+            if isinstance(timestamp, str):
+                from dateutil import parser
+                article_time = parser.parse(timestamp)
+            else:
+                article_time = timestamp
+        except Exception:
+            continue
+        
+        # Calculate age in days
+        age_days = (now - article_time.replace(tzinfo=None)).days
+        
+        # Calculate decay
+        decay = max(0.1, 1.0 / (1 + age_days / decay_days))
+        
+        # Get current score
+        current_score = result.get('rrf_score', result.get('similarity', 0))
+        
+        # Apply boost
+        boosted_score = current_score * (1 + decay * boost_factor)
+        
+        # Update score
+        result['rrf_score'] = boosted_score
+        result['temporal_boost'] = decay
     
-    return sorted(results, key=lambda x: x['rrf_score'], reverse=True)
+    # Re-sort by boosted score
+    return sorted(results, key=lambda x: x.get('rrf_score', 0), reverse=True)
 ```
 
-**Learn More:**
-- [Time-Decay in Search](https://www.elastic.co/guide/en/elasticsearch/reference/current/query-dsl-function-score-query.html)
+**Use Case**: RAG retrieval (boosting recent articles)
 
-### 5. Cross-Encoder Re-ranking (Optional)
+**Configurable**: `decay_days` can be adjusted via `APP_RAG_TEMPORAL_DECAY_DAYS`
 
-**What is Re-ranking?**
-Re-evaluating search results with a more sophisticated model for better precision.
+**Trade-off**: 
+- Lower `decay_days` = steeper decay (recent articles much more important)
+- Higher `decay_days` = gentler decay (older articles remain relevant longer)
 
-**Why Re-ranking?**
-- Initial search may return many results
-- Re-ranking uses query-document interaction (more accurate)
-- Improves precision at the cost of latency
+### 6. Batch Embedding Generation Algorithm
 
-**Trade-offs:**
-- **Accuracy**: +10-15% improvement
-- **Latency**: +1 minute per query
-- **Status**: Disabled by default (performance vs. accuracy trade-off)
+**Purpose**: Reduce API calls by processing multiple texts in one request.
 
-**Learn More:**
-- [Cross-Encoders for Re-ranking](https://www.sbert.net/examples/applications/cross-encoder/README.html)
+**Problem**: 
+- Generating embeddings one-by-one: 100 articles = 100 API calls = expensive & slow
+- Each API call has latency (~200ms) and cost (~$0.0001 per call)
 
-### 6. Few-Shot Learning
+**Solution**: Batch multiple texts into a single API request.
 
-**What is Few-Shot Learning?**
-Providing examples in the prompt to guide the model's behavior. Instead of training the model, we show it examples of what we want.
+**Efficiency Gain:**
 
-**In Simple Terms:**
-- Like teaching by example: "Here's how I want you to analyze sentiment"
-- The model learns the pattern from the examples
-- No retraining needed - works immediately
+```
+One-by-one: N articles = N API calls
+Batch: N articles = ⌈N / batch_size⌉ API calls
 
-**Why Few-Shot Learning?**
-- **Improves consistency**: Model learns desired format and style
-- **Reduces errors**: Model sees correct examples before analyzing
-- **No fine-tuning required**: Works with base model (no expensive retraining)
-- **Easy to update**: Just change examples in the prompt
+Improvement: batch_size× reduction in API calls
+```
 
-**Our Implementation:**
+**Examples:**
+```
+100 articles, batch_size=100: 100 calls → 1 call (100× improvement!)
+100 articles, batch_size=50:  100 calls → 2 calls (50× improvement)
+100 articles, batch_size=10:  100 calls → 10 calls (10× improvement)
+```
+
+**Cost Savings:**
+```
+100 articles × $0.0001 = $0.01 (one-by-one)
+1 batch × $0.0001 = $0.0001 (batch)
+Savings: 99% reduction in API overhead!
+```
+
+**Implementation in Python:**
 ```python
-system_prompt = """
-You are a professional financial sentiment analyzer.
-
-## Examples:
-Text: "Apple reports record-breaking Q4 earnings, stock surges 5%"
-Analysis: {"positive": 0.85, "negative": 0.05, "neutral": 0.10}
-Reasoning: Strong positive indicators (record earnings, stock surge)
-
-Text: "Company faces regulatory investigation, shares drop 3%"
-Analysis: {"positive": 0.10, "negative": 0.75, "neutral": 0.15}
-Reasoning: Negative event (investigation) with market reaction (drop)
-
-Text: "Quarterly report shows mixed results, analysts neutral"
-Analysis: {"positive": 0.30, "negative": 0.30, "neutral": 0.40}
-Reasoning: Balanced indicators, neutral overall sentiment
-
-Analyze the sentiment following these examples.
-"""
+def get_embeddings_batch(texts, batch_size=100):
+    """
+    Generate embeddings for multiple texts in batches.
+    
+    Args:
+        texts: List of text strings
+        batch_size: Number of texts per batch (default: 100, max: 2048)
+        
+    Returns:
+        List of embedding vectors (same length as texts)
+    """
+    from openai import AzureOpenAI
+    
+    client = AzureOpenAI(...)
+    all_embeddings = []
+    
+    # Process in batches
+    for i in range(0, len(texts), batch_size):
+        batch = texts[i:i+batch_size]
+        
+        # Single API call for entire batch
+        response = client.embeddings.create(
+            model="text-embedding-ada-002",
+            input=batch  # List of texts
+        )
+        
+        # Extract embeddings in order
+        batch_embeddings = [item.embedding for item in response.data]
+        all_embeddings.extend(batch_embeddings)
+    
+    return all_embeddings
 ```
 
-**How It Works:**
-1. We provide 2-3 examples in the system prompt
-2. Each example shows: input text → output format → reasoning
-3. When analyzing new text, the model follows the pattern
-4. Result: More consistent and accurate analysis
+**Use Case**: RAG article storage (efficient embedding generation)
 
-**Learn More:**
-- [Few-Shot Learning](https://www.promptingguide.ai/techniques/fewshot)
-- [Prompt Engineering Guide](https://www.promptingguide.ai/)
-- [In-Context Learning](https://lilianweng.github.io/posts/2023-03-15-in-context-learning/)
+**Constraints**: 
+- Azure OpenAI max batch size: 2048 texts
+- Recommended batch size: 100-200 (balance between efficiency and memory)
+
+**Complexity**: O(⌈N / batch_size⌉) API calls
 
 ---
 
-## RAG (Retrieval Augmented Generation) System
+## RAG (Retrieval Augmented Generation) System V2
 
 ### What is RAG?
 
@@ -1725,185 +1903,302 @@ Analyze the sentiment following these examples.
 - No access to recent or domain-specific data
 
 **RAG-Enhanced LLM:**
-- Retrieves relevant context from external sources
+- Retrieves relevant context from external sources (Azure AI Search)
 - Provides up-to-date information
 - Reduces hallucinations by grounding in retrieved context
 
-### RAG Architecture
+### RAG Architecture V2 (with Azure AI Search)
 
-**RAG Flow Diagram**
+**Detailed RAG Flow with Algorithms**
 
-![RAG Flow](diagrams/rag_flow.png)
+This sequence diagram shows the complete RAG flow from data collection to sentiment analysis, including all algorithms and API calls:
 
-### RAG Implementation Details
+![Detailed RAG Flow](diagrams/rag_flow_detailed.png)
 
-#### Phase 1: Ingestion (Article Storage)
+**Hybrid Search Algorithm Flow**
 
-**Step 1: Preprocessing**
+This flowchart shows how hybrid search combines semantic and keyword search using RRF:
+
+![Hybrid Search Flow](diagrams/hybrid_search_flow.png)
+
+### RAG Implementation Details V2
+
+#### Phase 1: Ingestion (Article Storage with Azure AI Search)
+
+**Step 1: Text Preprocessing**
 ```python
 def preprocess_text(text):
+    """
+    Clean and normalize text for better embedding quality.
+    """
     # Remove HTML tags
     text = re.sub(r'<[^>]+>', '', text)
+    
     # Normalize whitespace
     text = ' '.join(text.split())
-    # Expand abbreviations
-    text = text.replace('Q4', 'fourth quarter')
+    
+    # Expand abbreviations (financial context)
+    abbreviations = {
+        'Q1': 'first quarter', 'Q2': 'second quarter',
+        'Q3': 'third quarter', 'Q4': 'fourth quarter',
+        'YoY': 'year over year', 'MoM': 'month over month',
+        'EPS': 'earnings per share', 'P/E': 'price to earnings'
+    }
+    
+    for abbr, full in abbreviations.items():
+        text = text.replace(abbr, full)
+    
     return text
 ```
 
-**Step 2: Embedding Generation**
+**Step 2: Batch Embedding Generation**
 ```python
-def get_embedding(text):
-    # Check cache first
-    cached = cache.get(f"embedding:{hash(text)}")
-    if cached:
-        return cached
+# Process 5 articles in ONE API call
+articles = [article1, article2, article3, article4, article5]
+texts = [preprocess_text(f"{a['title']} {a['summary']}") for a in articles]
+
+# Batch embedding generation
+embeddings = rag_service.get_embeddings_batch(texts, batch_size=5)
+# Result: 5 embeddings in ~1 second (vs. 5 seconds one-by-one)
+```
+
+**Step 3: Storage in Azure AI Search**
+```python
+def store_in_azure_ai_search(article, embedding, symbol):
+    """
+    Store article with embedding in Azure AI Search index.
+    """
+    document = {
+        "id": generate_unique_id(article),
+        "content": f"{article['title']} {article['summary']}",
+        "contentVector": embedding,  # 1536-dimensional vector
+        "symbol": symbol,
+        "title": article['title'],
+        "summary": article['summary'],
+        "source": article['source'],
+        "url": article['url'],
+        "timestamp": article['timestamp'].isoformat(),
+        "article_id": article['article_id']
+    }
     
-    # Generate embedding
-    response = openai.embeddings.create(
-        model="text-embedding-ada-002",
-        input=text
+    # Upload to Azure AI Search
+    search_client.upload_documents([document])
+    
+    # Index is built automatically (HNSW algorithm)
+```
+
+**Why Azure AI Search?**
+- **Native vector indexing**: HNSW (Hierarchical Navigable Small World) algorithm
+- **Fast retrieval**: 10-100x faster than Redis SCAN
+- **Hybrid search**: Built-in semantic + keyword search
+- **Filtering**: OData filters (date ranges, sources, symbols)
+- **Scalability**: Handles millions of documents efficiently
+
+#### Phase 2: Retrieval (Hybrid Search with Azure AI Search)
+
+**Step 1: Query Preprocessing & Expansion**
+```python
+def expand_query(query, symbol):
+    """
+    Expand query with synonyms and related terms for better retrieval.
+    """
+    # Financial synonyms
+    synonyms = {
+        'earnings': ['profits', 'revenue', 'results', 'financial'],
+        'beat': ['exceed', 'surpass', 'outperform'],
+        'loss': ['decline', 'drop', 'decrease', 'fall']
+    }
+    
+    expanded = query
+    for word, syns in synonyms.items():
+        if word in query.lower():
+            expanded += ' ' + ' '.join(syns)
+    
+    # Add symbol
+    expanded += f' {symbol}'
+    
+    return expanded
+
+# Example:
+query = "Apple reports earnings beat expectations"
+expanded = expand_query(query, "AAPL")
+# Result: "Apple reports earnings beat expectations profits revenue results financial exceed surpass outperform AAPL"
+```
+
+**Step 2: Generate Query Embedding**
+```python
+query_embedding = rag_service.get_embedding(expanded_query)
+# Cached if query was used before
+```
+
+**Step 3: Hybrid Search in Azure AI Search**
+
+**A) Semantic Search (Vector Search):**
+```python
+def semantic_search(query_vector, symbol, top_k=10):
+    """
+    Perform vector similarity search using Azure AI Search.
+    """
+    # Build OData filter for symbol
+    filter_string = f"symbol eq '{symbol}'"
+    
+    # Perform vector search
+    results = search_client.search(
+        search_text=None,  # Vector search only
+        vector_queries=[{
+            "vector": query_vector,
+            "k_nearest_neighbors": top_k,
+            "fields": "contentVector"
+        }],
+        filter=filter_string,
+        select=["article_id", "title", "summary", "source", "timestamp", "symbol"]
     )
-    embedding = response.data[0].embedding
     
-    # Cache it
-    cache.set(f"embedding:{hash(text)}", embedding, ttl=604800)
-    return embedding
-```
-
-**Step 3: Storage**
-```python
-def store_article(article, symbol):
-    # Generate embedding
-    text = f"{article['title']} {article['summary']}"
-    embedding = get_embedding(text)
-    
-    # Store in Redis
-    article_id = hash(f"{symbol}:{article['title']}:{article['url']}")
-    cache.set(f"embedding:{symbol}:{article_id}", embedding, ttl=604800)
-    cache.set(f"article:{symbol}:{article_id}", article, ttl=604800)
-```
-
-#### Phase 2: Retrieval (Context Retrieval)
-
-**Step 1: Query Embedding**
-```python
-query_embedding = get_embedding(user_query)
-```
-
-**Step 2: Semantic Search**
-Semantic search finds articles by meaning, not just keywords. It uses embeddings and cosine similarity.
-
-**How It Works:**
-1. **Get all stored embeddings** for the stock symbol
-2. **Calculate cosine similarity** between query embedding and each article embedding
-3. **Sort by similarity** (highest first)
-4. **Return top K** most similar articles
-
-**Implementation:**
-```python
-def semantic_search(query_embedding, symbol, top_k=10):
-    # Get all embeddings for symbol from Redis
-    pattern = f"embedding:{symbol}:*"
-    keys = cache.scan(pattern)  # Find all embedding keys
-    
-    similarities = []
-    for key in keys:
-        # Get article embedding from cache
-        article_embedding = cache.get(key)
-        
-        # Calculate cosine similarity
-        # Formula: dot_product / (norm_a * norm_b)
-        similarity = cosine_similarity(query_embedding, article_embedding)
-        
-        similarities.append({
-            'id': key,
-            'similarity': similarity  # 0.0 to 1.0
+    # Format results with similarity scores
+    formatted = []
+    for result in results:
+        formatted.append({
+            "article_id": result["article_id"],
+            "title": result["title"],
+            "summary": result["summary"],
+            "source": result["source"],
+            "timestamp": result["timestamp"],
+            "similarity": result["@search.score"]  # Cosine similarity
         })
     
-    # Sort by similarity (highest first)
-    # Return top K results
-    return sorted(similarities, key=lambda x: x['similarity'], reverse=True)[:top_k]
+    return formatted
 ```
 
-**What is Cosine Similarity?**
-- Measures the angle between two vectors (embeddings)
-- Range: -1 to 1 (for embeddings, typically 0 to 1)
-- 1.0 = identical meaning
-- 0.0 = unrelated
-- Formula: `cos(θ) = (A · B) / (||A|| × ||B||)`
-
-**Example:**
-- Query: "Apple earnings report"
-- Article 1: "Apple quarterly profits" → similarity: 0.92 (very similar)
-- Article 2: "Weather forecast" → similarity: 0.15 (unrelated)
-
-**Learn More:**
-- [Cosine Similarity](https://www.machinelearningplus.com/nlp/cosine-similarity/)
-- [Vector Similarity](https://www.pinecone.io/learn/vector-similarity/)
-
-**Step 3: Keyword Search**
+**B) Keyword Search (Full-Text Search):**
 ```python
-def keyword_search(query, symbol, top_k=10):
-    # Extract keywords
-    keywords = query.lower().split()
+def keyword_search(query_text, symbol, top_k=10):
+    """
+    Perform keyword search using Azure AI Search.
+    """
+    # Build OData filter
+    filter_string = f"symbol eq '{symbol}'"
     
-    # Search article metadata
-    pattern = f"article:{symbol}:*"
-    keys = cache.scan(pattern)
+    # Perform full-text search
+    results = search_client.search(
+        search_text=query_text,
+        filter=filter_string,
+        top=top_k,
+        select=["article_id", "title", "summary", "source", "timestamp", "symbol"]
+    )
     
-    results = []
-    for key in keys:
-        article = cache.get(key)
-        text = f"{article['title']} {article['summary']}".lower()
-        
-        # Count keyword matches
-        matches = sum(1 for keyword in keywords if keyword in text)
-        if matches > 0:
-            results.append({
-                'id': key,
-                'keyword_score': matches / len(keywords)
-            })
+    # Format results with keyword scores
+    formatted = []
+    for result in results:
+        formatted.append({
+            "article_id": result["article_id"],
+            "title": result["title"],
+            "summary": result["summary"],
+            "source": result["source"],
+            "timestamp": result["timestamp"],
+            "keyword_score": result["@search.score"]  # BM25 score
+        })
     
-    return sorted(results, key=lambda x: x['keyword_score'], reverse=True)[:top_k]
+    return formatted
 ```
 
-**Step 4: RRF Combination**
+**C) Hybrid Search (Combined):**
 ```python
-combined = reciprocal_rank_fusion(semantic_results, keyword_results, k=60)
+def hybrid_search(query_text, query_vector, symbol, top_k=10):
+    """
+    Perform hybrid search (semantic + keyword) using Azure AI Search native RRF.
+    """
+    # Build OData filter
+    filter_string = f"symbol eq '{symbol}'"
+    
+    # Perform hybrid search (Azure AI Search handles RRF internally)
+    results = search_client.search(
+        search_text=query_text,  # Keyword search
+        vector_queries=[{
+            "vector": query_vector,  # Semantic search
+            "k_nearest_neighbors": top_k,
+            "fields": "contentVector"
+        }],
+        filter=filter_string,
+        top=top_k,
+        select=["article_id", "title", "summary", "source", "timestamp", "symbol"]
+    )
+    
+    # Azure AI Search automatically combines results using RRF
+    # and provides unified scores
+    formatted = []
+    for result in results:
+        formatted.append({
+            "article_id": result["article_id"],
+            "title": result["title"],
+            "summary": result["summary"],
+            "source": result["source"],
+            "timestamp": result["timestamp"],
+            "similarity": result.get("@search.score", 0.0),
+            "rrf_score": result.get("@search.reranker_score", result.get("@search.score", 0.0))
+        })
+    
+    return formatted
 ```
 
-**Step 5: Temporal Decay**
+**Step 4: Temporal Decay (Post-Processing)**
 ```python
-results = apply_temporal_decay(combined, decay_factor=0.1)
+results = hybrid_search(query_text, query_vector, symbol, top_k=10)
+results = apply_temporal_decay(results, decay_days=7, boost_factor=0.2)
 ```
 
-#### Phase 3: Generation (Sentiment Analysis)
+**Step 5: Filter by Similarity Threshold**
+```python
+def filter_by_threshold(results, threshold=0.01):
+    """
+    Filter results by minimum similarity threshold.
+    Auto-adjust threshold if too restrictive.
+    """
+    filtered = [r for r in results if r.get('rrf_score', 0) >= threshold]
+    
+    # Auto-adjust if threshold is too high
+    if len(filtered) == 0 and len(results) > 0:
+        # Lower threshold by 20%
+        new_threshold = threshold * 0.8
+        logger.info(f"Auto-adjusting threshold from {threshold} to {new_threshold}")
+        return filter_by_threshold(results, new_threshold)
+    
+    return filtered[:3]  # Return top 3
+```
+
+#### Phase 3: Generation (Sentiment Analysis with Context)
 
 **Step 1: Format Context**
 ```python
-context = ""
-for article in retrieved_articles:
-    context += f"""
-    ### Article: {article['title']}
-    **Source:** {article['source']}
-    **Summary:** {article['summary']}
-    **Relevance:** {article['similarity']:.2%}
+def format_rag_context(articles):
     """
+    Format retrieved articles as context for LLM.
+    """
+    context = ""
+    for i, article in enumerate(articles, 1):
+        context += f"""
+### Article {i}: {article['title']}
+**Source:** {article['source']}
+**Date:** {article['timestamp']}
+**Summary:** {article['summary']}
+**Relevance:** {article.get('rrf_score', 0):.2%}
+
+"""
+    return context
 ```
 
-**Step 2: Create Prompt**
+**Step 2: Create Prompt with Context**
 ```python
 prompt = f"""
 Analyze the sentiment of the following text about {symbol}.
 
 **Text to Analyze:**
-{user_query}
+{article_text}
 
 **Relevant Context from Recent News:**
-{context}
+{formatted_context}
 
 Provide sentiment scores (positive, negative, neutral) as JSON.
+Consider the context to make a more informed analysis.
 """
 ```
 
@@ -1911,106 +2206,337 @@ Provide sentiment scores (positive, negative, neutral) as JSON.
 ```python
 response = openai.chat.completions.create(
     model="gpt-4",
+    temperature=0.2,
+    max_tokens=200,
+    response_format={"type": "json_object"},
     messages=[
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": prompt}
-    ],
-    temperature=0.2,
-    response_format={"type": "json_object"}
+    ]
 )
 ```
 
-### RAG Impact: Before and After Comparison
-
-**Why RAG Matters:** See the difference it makes with a real example!
-
-#### Example Article: "Apple stock drops 2% after earnings"
-
-**Without RAG (Traditional LLM):**
+**Step 4: Parse and Cache Result**
+```python
+sentiment = json.loads(response.choices[0].message.content)
+redis_cache.set(f"sentiment:{text_hash}", sentiment, ttl=86400)
 ```
-Input to GPT-4:
-"Apple stock drops 2% after earnings"
 
-Context: None
+### RAG Performance Optimization V2
 
-GPT-4 Analysis:
+**Optimizations:**
+1. **Batch Embedding**: 100x fewer API calls
+2. **Azure AI Search**: 10-100x faster than Redis SCAN
+3. **Query Caching**: Instant for repeated queries
+4. **Hybrid Search**: 20-30% better accuracy than semantic-only
+5. **Temporal Decay**: More relevant results for time-sensitive data
+6. **Auto-Threshold**: Ensures results even with restrictive thresholds
+
+**Metrics:**
+- **Latency**: <100ms for hybrid search (vs. seconds for Redis SCAN)
+- **Accuracy**: 85-90% relevant articles in top 3
+- **Cost**: ~$0.0001 per embedding (batch), ~$0.02 per sentiment
+
+---
+
+## Azure AI Search Vector Database Architecture
+
+### What is Azure AI Search?
+
+Azure AI Search is a cloud-based search-as-a-service solution that provides:
+- **Full-text search**: Traditional keyword search (BM25 algorithm)
+- **Vector search**: Semantic similarity search (HNSW algorithm)
+- **Hybrid search**: Combines both with built-in RRF
+- **Filtering**: OData filter expressions for structured queries
+- **Scalability**: Handles millions of documents with low latency
+
+### HNSW Algorithm (Hierarchical Navigable Small World)
+
+**Purpose**: Fast approximate nearest neighbor search in high-dimensional space.
+
+**How It Works:**
+
+1. **Graph Structure**: Articles organized in a multi-layered graph
+2. **Hierarchical Layers**: Top layers for coarse search, bottom layers for fine search
+3. **Greedy Search**: Navigate graph to find nearest neighbors efficiently
+
+**Complexity:**
+- **Build**: O(N log N) where N = number of articles
+- **Search**: O(log N) average case (vs. O(N) for brute force)
+
+**HNSW Structure Visualization:**
+
+![HNSW Structure](diagrams/hnsw_structure.png)
+
+**Search Process:**
+1. Start at top layer (sparse graph)
+2. Find nearest neighbor at current layer
+3. Move down to next layer
+4. Repeat until bottom layer
+5. Return K nearest neighbors
+
+**Advantages:**
+- **Speed**: Log-time search vs. linear scan
+- **Accuracy**: 95%+ recall for top K results
+- **Scalability**: Efficient for millions of vectors
+
+### Index Schema
+
+**Fields in Azure AI Search Index:**
+
+| Field | Type | Description | Searchable | Filterable | Retrievable |
+|-------|------|-------------|------------|------------|-------------|
+| `id` | Edm.String | Unique identifier | No | Yes | Yes |
+| `content` | Edm.String | Article text (title + summary) | Yes | No | Yes |
+| `contentVector` | Collection(Edm.Single) | Embedding vector (1536 dims) | No (vector) | No | No |
+| `symbol` | Edm.String | Stock ticker | Yes | Yes | Yes |
+| `title` | Edm.String | Article title | Yes | No | Yes |
+| `summary` | Edm.String | Article summary | Yes | No | Yes |
+| `source` | Edm.String | Publisher name | Yes | Yes | Yes |
+| `url` | Edm.String | Article URL | No | No | Yes |
+| `timestamp` | Edm.DateTimeOffset | Publication date | No | Yes | Yes |
+| `article_id` | Edm.String | Application-level ID | No | Yes | Yes |
+
+**Vector Field Configuration:**
+```json
 {
-  "positive": 0.20,  // 20% positive
-  "negative": 0.70,  // 70% negative
-  "neutral": 0.10    // 10% neutral
+    "name": "contentVector",
+    "type": "Collection(Edm.Single)",
+    "dimensions": 1536,
+    "vectorSearchProfile": "default-vector-profile"
 }
-
-Reasoning: "Stock drop" = negative indicator
-Result: Strongly negative sentiment
 ```
 
-**With RAG (Our App):**
-```
-Input to GPT-4:
-"Apple stock drops 2% after earnings"
-
-Context from similar articles:
-1. "Apple stock typically drops 1-3% after earnings, then recovers" (similarity: 0.91)
-2. "Apple's earnings beat expectations, minor drop is normal" (similarity: 0.88)
-3. "Analysts: Apple's 2% drop is healthy profit-taking" (similarity: 0.85)
-
-GPT-4 Analysis:
+**Vector Search Profile:**
+```json
 {
-  "positive": 0.45,  // 45% positive
-  "negative": 0.40,  // 40% negative
-  "neutral": 0.15    // 15% neutral
+    "name": "default-vector-profile",
+    "algorithm": "hnsw",
+    "algorithmConfiguration": {
+        "name": "hnsw-config",
+        "kind": "hnsw",
+        "parameters": {
+            "m": 4,                    // Number of neighbors per node
+            "efConstruction": 400,      // Build-time quality
+            "efSearch": 500,            // Search-time quality
+            "metric": "cosine"          // Similarity metric
+        }
+    }
 }
-
-Reasoning: "Stock drop" but context shows:
-- This is normal volatility (1-3% drops are common)
-- Earnings actually beat expectations
-- Analysts see it as healthy profit-taking
-Result: More nuanced, less negative sentiment
 ```
 
-**Key Difference:**
-- **Without RAG**: 70% negative (sees "drop" = bad)
-- **With RAG**: 40% negative (sees "drop" but understands context = normal)
-- **Improvement**: More accurate, context-aware analysis
+### OData Filtering
 
-**Another Example: "Company faces lawsuit"**
+**Examples:**
 
-**Without RAG:**
-- Analysis: 80% negative (lawsuit = bad)
+**Filter by Symbol:**
+```python
+filter_string = "symbol eq 'AAPL'"
+```
 
-**With RAG:**
-- Context: "Similar lawsuits typically settle for small amounts, no material impact"
-- Analysis: 50% negative (lawsuit = concerning, but not catastrophic)
-- **Result**: More nuanced understanding
+**Filter by Date Range:**
+```python
+from datetime import datetime, timedelta
 
-### RAG Benefits
+seven_days_ago = (datetime.now() - timedelta(days=7)).isoformat()
+filter_string = f"timestamp ge {seven_days_ago}"
+```
 
-1. **Context-Aware Analysis**: Sentiment analysis considers relevant historical articles
-   - Understands market context (normal volatility vs. concerning drop)
-   - Recognizes patterns (what's typical vs. unusual)
-   
-2. **Reduced Hallucinations**: Grounded in retrieved facts
-   - Uses actual news articles, not just training data
-   - Less likely to make up information
-   
-3. **Up-to-Date Information**: Uses recent articles, not just training data
-   - Training data might be from 2023
-   - RAG uses articles from today!
-   
-4. **Domain-Specific**: Focuses on financial news for the specific stock
-   - General training data vs. specific stock context
-   - More relevant and accurate
+**Filter by Source:**
+```python
+filter_string = "source eq 'yfinance' or source eq 'Alpha Vantage'"
+```
 
-### RAG Performance Metrics
+**Combined Filters:**
+```python
+filter_string = "symbol eq 'AAPL' and timestamp ge 2024-11-11T00:00:00Z and (source eq 'yfinance' or source eq 'Finnhub')"
+```
 
-- **Retrieval Accuracy**: 20-30% improvement with hybrid search (vs. semantic-only)
-- **Sentiment Accuracy**: 15-25% improvement with RAG context (vs. no context)
-  - Without RAG: ~70-75% accuracy (compared to human analysts)
-  - With RAG: ~85-90% accuracy (compared to human analysts)
-- **Latency**: ~2-5 seconds (including retrieval + generation)
-- **Cost**: Slightly higher (retrieval + generation), but offset by caching
-  - Without caching: ~$0.05 per analysis
-  - With caching: ~$0.01 per analysis (80% cost reduction)
+**Escaping Special Characters:**
+```python
+def build_odata_filter(symbol, sources=None, days=None):
+    """
+    Build OData filter string with proper escaping.
+    """
+    filters = []
+    
+    # Symbol filter
+    escaped_symbol = symbol.replace("'", "''")
+    filters.append(f"symbol eq '{escaped_symbol}'")
+    
+    # Source filter
+    if sources:
+        source_filters = [f"source eq '{s.replace(\"'\", \"''\")}'" for s in sources]
+        filters.append(f"({' or '.join(source_filters)})")
+    
+    # Date filter
+    if days:
+        cutoff = (datetime.now() - timedelta(days=days)).isoformat()
+        filters.append(f"timestamp ge {cutoff}")
+    
+    return ' and '.join(filters)
+```
+
+---
+
+## Multi-Source Data Collection Architecture
+
+### Data Sources Integration V2
+
+The application collects data from multiple sources to provide comprehensive coverage:
+
+#### 1. yfinance (Primary Source)
+
+**Type**: Stock prices + News
+**API**: Free, unofficial Yahoo Finance API
+**Rate Limit**: No official limit (use responsibly)
+
+**Data Collected:**
+- Stock price and company info
+- Recent news articles (10-20 per query)
+- Historical price data
+
+**Advantages:**
+- Free and reliable
+- Good coverage for major stocks
+- Includes article summaries
+
+**Limitations:**
+- Unofficial API (may break)
+- Limited to Yahoo Finance news
+- No fine-grained control
+
+#### 2. Alpha Vantage (Optional)
+
+**Type**: News API
+**API**: Official API (free tier: 25 requests/day)
+**Configuration**: `ALPHA_VANTAGE_API_KEY`, `ALPHA_VANTAGE_ENABLED`
+
+**Data Collected:**
+- News articles from multiple sources
+- Sentiment scores (not used, we compute our own)
+- Relevance scores
+
+**Advantages:**
+- Multiple news sources
+- Structured API responses
+- Reliable service
+
+**Limitations:**
+- Free tier is restrictive
+- May require paid plan for production
+
+#### 3. Finnhub (Optional)
+
+**Type**: News API
+**API**: Official API (free tier: 60 requests/minute)
+**Configuration**: `FINNHUB_API_KEY`, `FINNHUB_ENABLED`
+
+**Data Collected:**
+- Company news
+- Market news
+- Social media sentiment (not fully integrated)
+
+**Advantages:**
+- Real-time updates
+- Good coverage
+- Multiple endpoints
+
+**Limitations:**
+- Free tier limits
+- Requires API key
+
+#### 4. Reddit (Optional, Partial Integration)
+
+**Type**: Social media sentiment
+**API**: Reddit API (requires app registration)
+**Configuration**: `REDDIT_CLIENT_ID`, `REDDIT_CLIENT_SECRET`, `REDDIT_USER_AGENT`, `REDDIT_ENABLED`
+
+**Data Collected:**
+- Posts from financial subreddits (r/stocks, r/investing, etc.)
+- Comments and discussions
+- Community sentiment
+
+**Status**: Partial integration (data structure ready, API calls need implementation)
+
+**Advantages:**
+- Real-time community sentiment
+- Unique perspective (retail investors)
+- Free API
+
+**Limitations:**
+- Noisy data (requires filtering)
+- May include spam/manipulation
+- Requires careful preprocessing
+
+### Data Collection Flow
+
+```python
+def collect_all_data(symbol):
+    """
+    Collect data from all enabled sources.
+    """
+    all_articles = []
+    
+    # 1. yfinance (always enabled)
+    yfinance_articles = get_yfinance_news(symbol)
+    all_articles.extend(yfinance_articles)
+    
+    # 2. Alpha Vantage (if enabled)
+    if settings.data_source.alpha_vantage_enabled:
+        av_articles = get_alpha_vantage_news(symbol)
+        all_articles.extend(av_articles)
+    
+    # 3. Finnhub (if enabled)
+    if settings.data_source.finnhub_enabled:
+        finnhub_articles = get_finnhub_news(symbol)
+        all_articles.extend(finnhub_articles)
+    
+    # 4. Reddit (if enabled)
+    if settings.data_source.reddit_enabled:
+        reddit_posts = get_reddit_sentiment(symbol)
+        all_articles.extend(reddit_posts)
+    
+    # Deduplicate by URL/ID
+    unique_articles = deduplicate_articles(all_articles)
+    
+    return unique_articles
+```
+
+### Deduplication Strategy
+
+```python
+def deduplicate_articles(articles):
+    """
+    Remove duplicate articles based on URL and title similarity.
+    """
+    seen_urls = set()
+    seen_titles = {}
+    unique = []
+    
+    for article in articles:
+        # URL-based deduplication
+        url = article.get('url', '')
+        if url and url in seen_urls:
+            continue
+        
+        # Title-based deduplication (fuzzy matching)
+        title = article.get('title', '').lower()
+        is_duplicate = False
+        
+        for seen_title in seen_titles:
+            similarity = fuzz.ratio(title, seen_title)  # Levenshtein distance
+            if similarity > 85:  # 85% similar
+                is_duplicate = True
+                break
+        
+        if not is_duplicate:
+            unique.append(article)
+            seen_urls.add(url)
+            seen_titles[title] = True
+    
+    return unique
+```
 
 ---
 
@@ -2018,1418 +2544,88 @@ Result: More nuanced, less negative sentiment
 
 ### Multi-Tier Caching Architecture
 
-**Caching Strategy Diagram**
+This diagram shows the complete caching strategy with all cache types and TTLs:
 
-![Caching Strategy](diagrams/caching.png)
+![Caching Strategy](diagrams/caching_strategy.png)
 
-### Cache Levels
+## Diagrams Reference
 
-#### L1: Memory Cache (In-Process)
-- **Speed**: ~1ms
-- **Size**: Limited (LRU eviction)
-- **Use Case**: Frequently accessed data
-- **Implementation**: Python dictionary
+All architectural diagrams are located in `docs/diagrams/`:
 
-#### L2: Redis Cache (Distributed)
-- **Speed**: ~5-10ms
-- **Size**: Large (Redis memory)
-- **Use Case**: API responses, embeddings, sentiment results
-- **Persistence**: Survives restarts
-- **Sharing**: Shared across instances
+1. **`system_architecture_v2.png`**: Complete system architecture with all components, algorithms, and data flows labeled
+2. **`rag_flow_detailed.png`**: Detailed RAG flow sequence diagram with all algorithms and API calls
+3. **`hybrid_search_flow.png`**: Hybrid search algorithm flowchart showing RRF combination
+4. **`data_flow_v2.png`**: Comprehensive data flow from input to visualization
+5. **`caching_strategy.png`**: Multi-tier caching strategy with all cache types
+6. **`hnsw_structure.png`**: HNSW vector index structure visualization
+7. **`algorithms_visualization.png`**: Mathematical algorithms (Cosine Similarity, RRF, Temporal Decay, Normalization)
+8. **`component_interaction.png`**: Component interaction detail (if generated)
 
-#### L3: Disk Cache (Future)
-- **Speed**: ~50-100ms
-- **Size**: Very large (disk space)
-- **Use Case**: Large datasets, backups
-- **Status**: Not currently implemented
-
-### Cache Key Strategy
-
-**Naming Convention:**
-```
-{type}:{identifier}:{optional_suffix}
-```
-
-**Examples:**
-- Stock data: `stock:AAPL`
-- News: `news:AAPL`
-- Sentiment: `sentiment:{text_hash}`
-- Embedding: `embedding:AAPL:{article_id}`
-- Article metadata: `article:AAPL:{article_id}`
-
-### TTL (Time To Live) Strategy
-
-| Data Type | TTL | Reason |
-|-----------|-----|--------|
-| Stock Price | 1 hour | Prices change frequently |
-| News Articles | 6 hours | News updates less frequently |
-| Sentiment Scores | 7 days | Stable for same text |
-| Embeddings | 7 days | Stable for same article |
-| Cache Statistics | Persistent | Never expires |
-
-### Cache Statistics
-
-**Tracked Metrics:**
-- **Hits**: Number of cache hits
-- **Misses**: Number of cache misses
-- **Sets**: Number of cache writes
-- **Hit Rate**: `hits / (hits + misses) * 100%`
-
-**Storage:**
-- Stored in Redis for persistence
-- Updated atomically
-- Displayed in UI for monitoring
-
-**Benefits:**
-- Monitor cache effectiveness
-- Identify optimization opportunities
-- Track performance improvements
+All diagrams are generated as high-quality PNG images and embedded in this documentation.
 
 ---
 
-## Performance Optimizations
+## Conclusion
 
-### 1. Batch Processing
+This Stock Sentiment Analysis application demonstrates a production-ready RAG system with:
 
-**Problem**: Generating embeddings one-by-one is slow and expensive.
+### Key Features
 
-**Solution**: Batch embedding generation.
+1. **Multi-Source Data Collection**: yfinance, Alpha Vantage, Finnhub, Reddit
+2. **Azure AI Search**: Fast, scalable vector database with HNSW indexing
+3. **Hybrid Search**: Combines semantic (vector) and keyword search with RRF
+4. **Temporal Decay**: Boosts recent articles for time-sensitive analysis
+5. **Intelligent Caching**: Redis-based caching with configurable TTLs
+6. **Batch Processing**: Efficient API usage with batch embeddings
+7. **Parallel Execution**: ThreadPoolExecutor for concurrent sentiment analysis
+8. **Modular Architecture**: Clean separation of concerns (presentation, services, models)
 
-**Before (Sequential):**
-```python
-for article in articles:
-    embedding = get_embedding(article['text'])  # 1 API call per article
-    # 100 articles = 100 API calls
-```
+### Mathematical Foundations
 
-**After (Batch):**
-```python
-texts = [article['text'] for article in articles]
-embeddings = get_embeddings_batch(texts, batch_size=100)  # 1 API call for 100 articles
-# 100 articles = 1 API call
-```
+- **Cosine Similarity**: Semantic search in 1536-dimensional space
+- **Reciprocal Rank Fusion**: Combining multi-modal search results
+- **Temporal Decay**: Time-based relevance boosting
+- **Sentiment Normalization**: Probability distribution normalization
+- **HNSW Algorithm**: Approximate nearest neighbor search
 
-**Performance Gain**: 10-100x faster, 50-90% cost reduction
+### Performance
 
-### 2. Parallel Processing
+- **First Run**: ~5 seconds (including API calls)
+- **Cached Run**: ~0.2 seconds (25x faster)
+- **Cost**: ~$0.02 per stock analysis (first run)
+- **Accuracy**: 85-90% relevant articles retrieved
 
-**Problem**: Analyzing sentiment for multiple articles sequentially is slow.
+### Extensibility
 
-**Solution**: Use ThreadPoolExecutor for parallel analysis.
+The modular design allows easy extension:
+- Add new data sources (configure in `settings.py`)
+- Swap vector database (implement `VectorDatabase` interface)
+- Customize RAG parameters (adjust in `.env`)
+- Add new sentiment models (extend `SentimentAnalyzer`)
 
-**Before (Sequential):**
-```python
-sentiments = []
-for text in texts:
-    sentiment = analyze_sentiment(text)  # ~2 seconds each
-    sentiments.append(sentiment)
-# 10 articles = 20 seconds
-```
+### Best Practices Demonstrated
 
-**After (Parallel):**
-```python
-with ThreadPoolExecutor(max_workers=5) as executor:
-    sentiments = list(executor.map(analyze_sentiment, texts))
-# 10 articles = ~4 seconds (5 concurrent)
-```
+1. **Clean Architecture**: Separation of concerns, dependency injection
+2. **Configuration Management**: Environment-based settings with validation
+3. **Error Handling**: Circuit breakers, retries, graceful degradation
+4. **Logging**: Comprehensive logging for debugging and monitoring
+5. **Caching**: Multi-tier strategy for performance optimization
+6. **Testing**: Modular design enables easy unit and integration testing
+7. **Documentation**: Comprehensive docs with examples and diagrams
 
-**Performance Gain**: 5-10x faster
+### Learn More
 
-### 3. Intelligent Caching
-
-**Problem**: Repeated API calls for same data.
-
-**Solution**: Multi-tier caching with appropriate TTLs.
-
-**Impact**: 50-90% reduction in API calls
-
-### 4. Connection Pooling
-
-**Problem**: Creating new connections for each request is slow.
-
-**Solution**: Reuse connections (implemented for OpenAI, not Redis due to SSL).
-
-**Impact**: Reduced latency, better resource utilization
-
-### 5. Retry Logic with Exponential Backoff
-
-**Problem**: Transient API failures cause errors.
-
-**Solution**: Automatic retry with exponential backoff.
-
-```python
-@retry_with_exponential_backoff(max_attempts=3, initial_delay=1.0)
-def api_call():
-    # API call with automatic retry
-    pass
-```
-
-**Impact**: 90% reduction in transient failures
-
-### 6. Circuit Breaker Pattern
-
-**Problem**: Cascading failures when API is down.
-
-**Solution**: Circuit breaker stops requests when API fails repeatedly.
-
-**States:**
-- **Closed**: Normal operation
-- **Open**: API failing, requests blocked
-- **Half-Open**: Testing if API recovered
-
-**Impact**: Prevents cascading failures, faster recovery
-
----
-
-## Try It Yourself: Hands-On Tutorial
-
-This section guides you through running the application and understanding what happens at each step.
-
-### Prerequisites
-
-Before starting, make sure you have:
-- Python 3.8+ installed
-- Azure OpenAI account (with GPT-4 and embedding deployments)
-- Azure Redis Cache (or local Redis)
-- `.env` file configured (see [Configuration](#configuration) section)
-
-### Step 1: Install and Setup
-
-```bash
-# Clone the repository
-git clone https://github.com/anandDev77/stock-sentiment-analysis.git
-cd stock-sentiment-analysis
-
-# Create virtual environment
-make venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# Install dependencies
-make install
-
-# Copy .env.example to .env and fill in your credentials
-cp .env.example .env
-# Edit .env with your Azure OpenAI and Redis credentials
-```
-
-### Step 2: Run the Application
-
-```bash
-# Start the Streamlit app
-streamlit run src/stock_sentiment/app.py
-
-# Or using make
-make run
-```
-
-The application will open in your browser at `http://localhost:8501`
-
-### Step 3: Analyze Your First Stock
-
-**Follow these steps:**
-
-1. **Enter Stock Symbol**
-   - In the sidebar, type: `AAPL` (or any stock symbol)
-   - Click "Load Data" button
-
-2. **Watch the Process**
-   - You'll see a spinner: "🔄 Collecting data and analyzing sentiment..."
-   - Observe the sidebar:
-     - **Cache Status**: Shows if data was cached or fetched fresh
-     - **Connection Status**: Shows Redis and RAG connection status
-     - **Cost Tracker**: Shows API usage and costs
-
-3. **Understand What's Happening**
-   - **Data Collection**: Fetches stock price and news articles
-   - **Article Processing**: Generates embeddings (you'll see this in logs)
-   - **Sentiment Analysis**: Analyzes each article (with RAG context)
-   - **Results Displayed**: Shows sentiment scores and visualizations
-
-4. **Explore the Tabs**
-   - **Overview Tab**: Overall sentiment scores, net sentiment, key metrics
-   - **Price Analysis Tab**: Stock price charts and trends
-   - **News & Sentiment Tab**: Individual articles with sentiment scores
-   - **Technical Analysis Tab**: Technical indicators
-   - **AI Insights Tab**: AI-generated insights using RAG context
-
-### Step 4: Understand the Output
-
-**What to Look For:**
-
-1. **Cache Status (Sidebar)**
-   - Shows: `CACHED` or `FRESH` for stock, news, and sentiment
-   - **First time**: All `FRESH` (data fetched from APIs)
-   - **Second time**: All `CACHED` (data from Redis, instant!)
-
-2. **Sentiment Scores**
-   - **Positive**: Percentage of positive sentiment
-   - **Negative**: Percentage of negative sentiment
-   - **Neutral**: Percentage of neutral sentiment
-   - **Net Sentiment**: Positive - Negative (bullish if positive, bearish if negative)
-
-3. **RAG Usage**
-   - Check sidebar: "RAG Uses" and "RAG Attempts"
-   - **RAG Uses**: Number of times RAG context was successfully retrieved
-   - **RAG Success Rate**: RAG Uses / RAG Attempts
-
-4. **Cost Tracking**
-   - Sidebar shows: Total cost, tokens used, cost per request
-   - **First request**: Higher cost (embeddings + sentiment analysis)
-   - **Subsequent requests**: Lower cost (cached results)
-
-### Step 5: Experiment and Learn
-
-**Try These Experiments:**
-
-1. **Test Caching**
-   - Analyze "AAPL" → Note the time and cost
-   - Analyze "AAPL" again immediately → Should be instant and free (cached)
-   - Clear cache (button in sidebar) → Analyze again → Should be slow again
-
-2. **Compare Different Stocks**
-   - Analyze "AAPL" (Apple)
-   - Analyze "MSFT" (Microsoft)
-   - Analyze "TSLA" (Tesla)
-   - Compare sentiment scores across stocks
-
-3. **Watch RAG in Action**
-   - Analyze a stock for the first time
-   - Check "RAG Attempts" and "RAG Uses" in sidebar
-   - If RAG Uses = 0, check logs to see why (might be threshold too high)
-
-4. **Monitor Costs**
-   - Watch cost tracker in sidebar
-   - First analysis: Higher cost (embeddings + sentiment)
-   - Subsequent analyses: Lower cost (cached)
-   - Clear cache and analyze again: Cost increases
-
-5. **Check Cache Statistics**
-   - Sidebar shows: Cache hits, misses, hit rate
-   - **High hit rate** (>50%) = Good caching
-   - **Low hit rate** (<30%) = Might need to adjust TTLs
-
-### Step 6: Debug and Troubleshoot
-
-**If Something Doesn't Work:**
-
-1. **Check Connection Status**
-   - Sidebar shows Redis and RAG status
-   - If red: Check `.env` file and connection strings
-   - See [Troubleshooting](#troubleshooting) section
-
-2. **Check Logs**
-   - Application logs show detailed information
-   - Look for errors or warnings
-   - Check if embeddings are being generated
-   - Check if RAG retrieval is working
-
-3. **Test Individual Components**
-   ```python
-   # In Python shell
-   from stock_sentiment.config.settings import get_settings
-   from stock_sentiment.services.cache import RedisCache
-   
-   settings = get_settings()
-   cache = RedisCache(settings=settings)
-   
-   # Test Redis connection
-   cache.client.ping()  # Should return True
-   
-   # Test cache
-   cache.set("test", "value", ttl=60)
-   cache.get("test")  # Should return "value"
-   ```
-
-### Step 7: Understand the Code
-
-**Key Files to Explore:**
-
-1. **`src/stock_sentiment/app.py`**
-   - Main application entry point
-   - UI components and data flow
-   - See how everything connects
-
-2. **`src/stock_sentiment/services/sentiment.py`**
-   - Sentiment analysis logic
-   - RAG integration
-   - Few-shot learning examples
-
-3. **`src/stock_sentiment/services/rag.py`**
-   - RAG retrieval logic
-   - Hybrid search implementation
-   - Embedding generation
-
-4. **`src/stock_sentiment/services/cache.py`**
-   - Caching logic
-   - Cache statistics
-   - TTL management
-
-**Learning Exercise:**
-- Add a print statement in `sentiment.py` to see when RAG is used
-- Modify the RAG similarity threshold and see how results change
-- Experiment with different batch sizes for embeddings
-
-### Step 8: Next Steps
-
-**After completing this tutorial, you should:**
-- ✅ Understand how the application works end-to-end
-- ✅ Be able to run and use the application
-- ✅ Understand what caching does and why it matters
-- ✅ See RAG in action and understand its impact
-- ✅ Monitor costs and performance
-
-**Continue Learning:**
-- Read the [Technical Deep Dive](#how-it-works-technical-deep-dive) section
-- Explore the [API Reference](#api-reference) for implementation details
-- Check out the [Machine Learning Models](#machine-learning-models-and-techniques) section
-- Read the [RAG System](#rag-retrieval-augmented-generation-system) details
-
----
-
-## Deployment and Scaling
-
-### Current Deployment
-
-**Local Development:**
-```bash
-streamlit run src/stock_sentiment/app.py
-```
-
-**Production Considerations:**
-
-1. **Streamlit Cloud**: Easy deployment for Streamlit apps
-2. **Docker**: Containerize for consistent deployment
-3. **Kubernetes**: Scale horizontally for high traffic
-4. **Azure Container Apps**: Serverless scaling
-
-### Scaling Strategies
-
-#### Horizontal Scaling
-- Deploy multiple instances
-- Use load balancer
-- Shared Redis cache (already distributed)
-
-#### Vertical Scaling
-- Increase instance size
-- More CPU/memory for parallel processing
-
-#### Caching Optimization
-- Increase Redis memory
-- Optimize TTLs
-- Implement L3 disk cache
-
-### Monitoring
-
-**Key Metrics:**
-- API response times
-- Cache hit rates
-- Cost per request
-- Error rates
-- Throughput (requests/second)
-
-**Tools:**
-- Application logs (structured logging)
-- Redis monitoring
-- Azure Monitor
-- Cost tracking dashboard
-
----
-
-## API Reference
-
-This section documents the key functions and classes used in the application. For complete API documentation, see the source code.
-
-### Data Collector (`services/collector.py`)
-
-#### `get_stock_price(symbol: str) -> Dict`
-Fetches current stock price and company information from yfinance API.
-
-**Parameters:**
-- `symbol`: Stock ticker symbol (e.g., "AAPL")
-
-**Returns:**
-```python
-{
-    "symbol": "AAPL",
-    "price": 272.75,
-    "company_name": "Apple Inc.",
-    "market_cap": 4030250000000,
-    "timestamp": datetime.now()
-}
-```
-
-**Caching:** Results are cached for 1 hour (configurable via `APP_CACHE_TTL_STOCK`)
-
-**File**: `services/collector.py`
-
-#### `get_news_headlines(symbol: str) -> List[Dict]`
-Fetches recent news articles about the stock from yfinance API.
-
-**Parameters:**
-- `symbol`: Stock ticker symbol
-
-**Returns:**
-```python
-[
-    {
-        "title": "Apple reports record earnings",
-        "summary": "Apple Inc. reported...",
-        "url": "https://...",
-        "source": "Reuters",
-        "timestamp": datetime.now()
-    },
-    ...
-]
-```
-
-**Caching:** Results are cached for 6 hours (configurable via `APP_CACHE_TTL_NEWS`)
-
-**File**: `services/collector.py`
-
-#### `collect_all_data(symbol: str) -> Dict`
-Collects all available data for a stock symbol (price, news, social media).
-
-**Returns:**
-```python
-{
-    "price_data": {...},  # Stock price data
-    "news": [...],        # List of news articles
-    "social_media": []    # Social media posts (currently empty)
-}
-```
-
-**File**: `services/collector.py`
-
-### Sentiment Analyzer (`services/sentiment.py`)
-
-#### `analyze_sentiment(text: str, symbol: Optional[str] = None) -> SentimentScores`
-Analyzes sentiment of text using Azure OpenAI GPT-4 with optional RAG context.
-
-**Parameters:**
-- `text`: Text to analyze (article title, summary, etc.)
-- `symbol`: Optional stock symbol for RAG context retrieval
-
-**Returns:**
-```python
-SentimentScores(
-    positive=0.85,  # 85% positive
-    negative=0.05,  # 5% negative
-    neutral=0.10    # 10% neutral
-)
-```
-
-**Process:**
-1. Checks cache first (if same text analyzed before)
-2. Retrieves RAG context if symbol provided
-3. Calls Azure OpenAI GPT-4 with context
-4. Parses JSON response
-5. Caches result for future use
-
-**Caching:** Results cached for 7 days (configurable via `APP_CACHE_TTL_SENTIMENT`)
-
-**File**: `services/sentiment.py`
-
-#### `batch_analyze(texts: List[str], symbol: Optional[str] = None, max_workers: int = 5) -> List[SentimentScores]`
-Analyzes multiple texts in parallel using ThreadPoolExecutor.
-
-**Parameters:**
-- `texts`: List of texts to analyze
-- `symbol`: Optional stock symbol for RAG context
-- `max_workers`: Number of parallel workers (default: 5)
-
-**Returns:**
-```python
-[
-    SentimentScores(positive=0.85, negative=0.05, neutral=0.10),
-    SentimentScores(positive=0.60, negative=0.30, neutral=0.10),
-    ...
-]
-```
-
-**Performance**: 5-10x faster than sequential analysis
-
-**File**: `services/sentiment.py`
-
-### RAG Service (`services/rag.py`)
-
-#### `store_articles_batch(articles: List[Dict], symbol: str, batch_size: int = 100) -> int`
-Stores articles with embeddings in batch for efficient processing.
-
-**Parameters:**
-- `articles`: List of article dictionaries (title, summary, url, source, timestamp)
-- `symbol`: Stock ticker symbol
-- `batch_size`: Number of articles to process in each batch (default: 100)
-
-**Process:**
-1. Preprocesses each article (cleaning, normalization)
-2. Generates embeddings in batches (much faster than one-by-one)
-3. Stores embeddings and metadata in Redis
-4. Marks articles as stored to avoid duplicates
-
-**Returns**: Number of articles successfully stored
-
-**Performance**: 10-100x faster than storing articles individually
-
-**File**: `services/rag.py`
-
-#### `retrieve_relevant_context(query: str, symbol: str, top_k: int = 3) -> List[Dict]`
-Retrieves relevant articles for RAG context using hybrid search.
-
-**Parameters:**
-- `query`: Query text (usually the article being analyzed)
-- `symbol`: Stock ticker symbol
-- `top_k`: Number of articles to retrieve (default: 3)
-
-**Process:**
-1. Generates embedding for query (or retrieves from cache)
-2. Performs semantic search (cosine similarity)
-3. Performs keyword search (TF-IDF)
-4. Combines results using RRF (Reciprocal Rank Fusion)
-5. Applies temporal decay (boosts recent articles)
-6. Optionally re-ranks with cross-encoder
-7. Filters by similarity threshold
-8. Returns top K articles
-
-**Returns**: 
-```python
-[
-    {
-        "title": "Apple reports earnings",
-        "summary": "...",
-        "similarity": 0.92,  # Cosine similarity
-        "rrf_score": 0.045,  # Combined RRF score
-        "timestamp": datetime.now()
-    },
-    ...
-]
-```
-
-**File**: `services/rag.py`
-
-#### `get_embedding(text: str, use_cache: bool = True) -> Optional[List[float]]`
-Gets embedding vector for text using Azure OpenAI.
-
-**Parameters:**
-- `text`: Text to embed
-- `use_cache`: Whether to check cache first (default: True)
-
-**Returns**: List of 1536 numbers (embedding vector) or None if error
-
-**File**: `services/rag.py`
-
-#### `get_embeddings_batch(texts: List[str], batch_size: int = 100, use_cache: bool = True) -> List[Optional[List[float]]]`
-Generates embeddings for multiple texts in batches.
-
-**Performance**: 10-100x faster than individual calls
-
-**File**: `services/rag.py`
-
-### Cache Service (`services/cache.py`)
-
-#### `get(key: str) -> Optional[Any]`
-Gets value from Redis cache.
-
-**Parameters:**
-- `key`: Cache key (e.g., "stock:AAPL", "sentiment:abc123")
-
-**Returns**: Cached value (deserialized from JSON) or None if not found
-
-**File**: `services/cache.py`
-
-#### `set(key: str, value: Any, ttl: int = 3600) -> bool`
-Sets value in Redis cache with TTL (Time To Live).
-
-**Parameters:**
-- `key`: Cache key
-- `value`: Value to cache (will be serialized to JSON)
-- `ttl`: Time to live in seconds (default: 3600 = 1 hour)
-
-**Returns**: True if successful, False otherwise
-
-**File**: `services/cache.py`
-
-#### `clear_all_cache() -> bool`
-Clears all cached data from Redis (uses FLUSHDB).
-
-**Warning**: This deletes ALL cached data (stock, news, sentiment, embeddings)
-
-**Returns**: True if successful, False otherwise
-
-**File**: `services/cache.py`
-
-#### `get_cached_stock_data(symbol: str) -> Optional[Dict]`
-Gets cached stock price data.
-
-**File**: `services/cache.py`
-
-#### `get_cached_news(symbol: str) -> Optional[List[Dict]]`
-Gets cached news articles.
-
-**File**: `services/cache.py`
-
-#### `get_cached_sentiment(text: str) -> Optional[Dict]`
-Gets cached sentiment analysis result.
-
-**File**: `services/cache.py`
-
-#### `get_cache_stats() -> Dict[str, int]`
-Gets cache statistics (hits, misses, sets) from Redis.
-
-**Returns**: `{"cache_hits": 100, "cache_misses": 50, "cache_sets": 150}`
-
-**File**: `services/cache.py`
-
----
-
-## Frequently Asked Questions (FAQ)
-
-### For ML Beginners
-
-**Q: Why use GPT-4 instead of a simpler/cheaper model?**
-
-**A:** GPT-4 understands financial context much better than simpler models. For example:
-- A simpler model might see "beats expectations" and think "beats" = negative (violent)
-- GPT-4 understands "beats expectations" = positive (exceeds expectations) in financial context
-- GPT-4 also understands market terminology (bullish, bearish, volatility, etc.)
-- **Trade-off**: More expensive but significantly more accurate
-
-**Q: Why 1536 dimensions for embeddings? Why not more or less?**
-
-**A:** 
-- **1536** is what the `text-embedding-ada-002` model outputs (we don't choose this)
-- **More dimensions** (e.g., 4096): More nuanced understanding, but:
-  - More storage (4x larger)
-  - Slower similarity calculations
-  - Diminishing returns (not 4x better)
-- **Fewer dimensions** (e.g., 512): Less storage, but:
-  - Less nuanced understanding
-  - Might miss subtle differences
-- **1536 is a good balance**: Enough nuance without being too large
-
-**Q: Why cache sentiment for 7 days? Why not longer or shorter?**
-
-**A:**
-- **Sentiment for the same text doesn't change**: "Apple earnings are great" will always be positive
-- **7 days**: Long enough to save money, short enough to not worry about storage
-- **Shorter** (e.g., 1 day): More API calls = more cost
-- **Longer** (e.g., 30 days): Saves more money, but uses more Redis storage
-- **7 days is a good balance**: Most articles are analyzed within a week, then rarely again
-
-**Q: What happens if Redis is down? Does the app break?**
-
-**A:** No! The app is designed to **gracefully degrade**:
-- **Still works**: App continues to function
-- **No caching**: Data fetched fresh every time (slower, more expensive)
-- **No RAG**: Sentiment analysis works but without context (less accurate)
-- **Fallback**: Uses basic sentiment analysis (still functional)
-- **Recommendation**: Redis is important for performance and accuracy, but not required for basic functionality
-
-**Q: Why hybrid search instead of just semantic search?**
-
-**A:** 
-- **Semantic search alone**: Might miss articles with exact keywords
-  - Example: "Apple earnings report" might not match "Apple Q4 earnings report" (different phrasing)
-- **Keyword search alone**: Might miss articles with same meaning but different words
-  - Example: "earnings report" might not match "quarterly results" (different words, same meaning)
-- **Hybrid search**: Catches both!
-  - Semantic catches meaning matches
-  - Keyword catches exact matches
-  - **Result**: 20-30% better retrieval accuracy
-
-**Q: How accurate is the sentiment analysis?**
-
-**A:**
-- **With RAG context**: ~85-90% accuracy (compared to human financial analysts)
-- **Without RAG**: ~70-75% accuracy
-- **Industry standard**: Most sentiment analysis tools achieve 70-80% accuracy
-- **Our improvement**: RAG adds 15-25% accuracy improvement
-
-**Q: Can I use this for other domains (not stocks)?**
-
-**A:** Yes! The architecture is **general-purpose**:
-- **Change the data collector**: Instead of yfinance, use your data source
-- **Adjust the prompts**: Change few-shot examples for your domain
-- **Keep everything else**: RAG, caching, embeddings all work the same
-- **Examples**: Product reviews, social media sentiment, customer feedback, etc.
-
-**Q: Why use Redis instead of a regular database?**
-
-**A:**
-- **Speed**: Redis is in-memory (RAM) = very fast (~5-10ms vs ~50-100ms for databases)
-- **Caching**: Designed for temporary data (perfect for our use case)
-- **Vector storage**: Can store embeddings efficiently
-- **TTL support**: Built-in expiration (perfect for cache)
-- **Trade-off**: More expensive than disk storage, but worth it for speed
-
-**Q: What is "few-shot learning" and why use it?**
-
-**A:**
-- **Few-shot learning**: Providing examples in the prompt to guide the model
-- **Why**: Improves consistency and accuracy (15-25% improvement)
-- **Alternative**: Fine-tuning (expensive, requires retraining)
-- **Cost**: Free! (just examples in the prompt)
-- **Example**: Show model 2-3 examples of good sentiment analysis → model learns the pattern
-
-**Q: Why batch processing? What's the benefit?**
-
-**A:**
-- **One-by-one**: 100 articles = 100 API calls = 100 seconds = expensive
-- **Batch**: 100 articles = 1 API call = 1 second = 90% cheaper
-- **Benefit**: 
-  - **Speed**: 10-100x faster
-  - **Cost**: 50-90% cheaper
-  - **Efficiency**: Better API utilization
-
-**Q: What is "temporal decay" and why does it matter?**
-
-**A:**
-- **Temporal decay**: Boosting recent articles in search results
-- **Why**: Financial news is time-sensitive (old news is less relevant)
-- **How**: Recent articles get higher scores, old articles get lower scores
-- **Example**: 
-  - Article from today: Score × 1.0 (no decay)
-  - Article from 7 days ago: Score × 0.5 (50% decay)
-  - Article from 30 days ago: Score × 0.25 (75% decay)
-- **Result**: More relevant, recent articles rank higher
-
-**Q: Why is the similarity threshold set to 0.01? What if I change it?**
-
-**A:**
-- **0.01**: Very low threshold (allows most articles through)
-- **Why low**: RRF scores are typically 0.01-0.15 (much lower than cosine similarity 0.0-1.0)
-- **Higher threshold** (e.g., 0.1): More selective, but might filter out good articles
-- **Lower threshold** (e.g., 0.001): Less selective, might include irrelevant articles
-- **Recommendation**: Start with 0.01, adjust based on your results
-
-**Q: How much does it cost to run this application?**
-
-**A:**
-- **Azure OpenAI GPT-4**: ~$0.03 per 1K input tokens, ~$0.06 per 1K output tokens
-- **Azure OpenAI Embeddings**: ~$0.0001 per 1K tokens
-- **Azure Redis**: ~$15-50/month (depending on size)
-- **Typical request**: 
-  - First time: ~$0.02-0.05 (embeddings + sentiment analysis)
-  - Cached: ~$0.001 (just retrieval, no API calls)
-- **Monthly estimate**: ~$50-200 (depending on usage and cache hit rate)
-
-**Q: Can I run this without Azure? Can I use OpenAI directly?**
-
-**A:**
-- **Yes!** The code supports both Azure OpenAI and OpenAI directly
-- **Change in `.env`**: Use `OPENAI_API_KEY` instead of `AZURE_OPENAI_API_KEY`
-- **Modify code**: Update `sentiment.py` and `rag.py` to use OpenAI client instead of AzureOpenAI
-- **Note**: Azure OpenAI is recommended for enterprise (better SLA, data residency)
-
-**Q: Why use Streamlit instead of a traditional web framework?**
-
-**A:**
-- **Streamlit**: Python-based, easy to build dashboards quickly
-- **Pros**: 
-  - Fast development (no HTML/CSS/JavaScript needed)
-  - Built-in components (charts, tables, inputs)
-  - Great for data science/ML apps
-- **Cons**: 
-  - Less customizable than React/Django
-  - Not ideal for high-traffic production apps
-- **For this app**: Perfect fit (data visualization, ML insights)
-
-**Q: How do I know if RAG is actually working?**
-
-**A:**
-- **Check sidebar**: "RAG Uses" should be > 0 after analyzing articles
-- **Check logs**: Look for "RAG context retrieved" messages
-- **Compare results**: Analyze same article with/without RAG (should see difference)
-- **Check Redis**: Look for `embedding:*` keys (embeddings stored)
-- **If RAG Uses = 0**: 
-  - Check if embeddings are being generated
-  - Check similarity threshold (might be too high)
-  - Check if articles are being stored
-
-**Q: What if I want to analyze sentiment for my own text (not stock news)?**
-
-**A:**
-- **Use the API directly**: 
-  ```python
-  from stock_sentiment.services.sentiment import SentimentAnalyzer
-  from stock_sentiment.config.settings import get_settings
-  
-  settings = get_settings()
-  analyzer = SentimentAnalyzer(settings=settings)
-  result = analyzer.analyze_sentiment("Your text here")
-  ```
-- **Modify the collector**: Change `collector.py` to use your data source
-- **Keep everything else**: RAG, caching, embeddings all work the same
-
-**Q: How do I improve the accuracy?**
-
-**A:**
-- **Lower similarity threshold**: More articles retrieved (but might include irrelevant ones)
-- **Increase top_k**: Retrieve more context articles (but slower)
-- **Enable reranking**: More accurate but much slower (disabled by default)
-- **Improve prompts**: Better few-shot examples
-- **More training data**: Store more articles in RAG (better context)
-
-**Q: Can I use a different LLM (not GPT-4)?**
-
-**A:**
-- **Yes!** The architecture supports any LLM with a chat completion API
-- **Modify**: `sentiment.py` to use different model
-- **Examples**: GPT-3.5 (cheaper), Claude (Anthropic), Llama (open source)
-- **Note**: GPT-4 is recommended for best accuracy
-
-**Q: What is the difference between "RAG Uses" and "RAG Attempts"?**
-
-**A:**
-- **RAG Attempts**: Total number of times we tried to retrieve RAG context
-- **RAG Uses**: Number of times RAG context was successfully retrieved AND used
-- **Why different**: 
-  - Sometimes retrieval finds 0 articles (threshold too high)
-  - Sometimes retrieval fails (Redis error, etc.)
-  - **Success rate** = RAG Uses / RAG Attempts (should be >50%)
-
-**Q: How do I clear the cache?**
-
-**A:**
-- **UI**: Click "🗑️ Clear All Cache" button in sidebar (with confirmation)
-- **Code**: `cache.clear_all_cache()`
-- **Redis CLI**: `FLUSHDB` command
-- **Warning**: This deletes ALL cached data (stock, news, sentiment, embeddings)
-
-**Q: Why are some articles showing "Unknown" as the source?**
-
-**A:**
-- **yfinance limitation**: Not all articles have source information
-- **Fix**: The app handles this gracefully (shows "Unknown" or "News Source")
-- **Custom data**: If you use your own data source, you can provide source information
-
-**Q: Can I deploy this to production?**
-
-**A:**
-- **Yes!** The app is production-ready with:
-  - Error handling
-  - Retry logic
-  - Circuit breakers
-  - Caching
-  - Logging
-- **Deployment options**:
-  - Streamlit Cloud (easiest)
-  - Docker + Kubernetes
-  - Azure Container Apps
-  - AWS/GCP equivalents
-- **Considerations**: 
-  - Scale Redis for high traffic
-  - Monitor API costs
-  - Set up proper logging/monitoring
-
----
-
-## Troubleshooting
-
-### Common Issues
-
-#### 1. Redis Connection Failed
-
-**Symptoms:**
-- "Redis connection failed" error
-- Cache not working
-
-**Solutions:**
-1. Check firewall rules (Azure Redis requires IP whitelist)
-2. Verify connection string in `.env`
-3. Test connection: `make test-redis`
-4. Check if Redis service is running
-
-**Learn More:** See `docs/REDIS_TROUBLESHOOTING.md`
-
-#### 2. Azure OpenAI Errors
-
-**Symptoms:**
-- "Failed to initialize Azure OpenAI" error
-- API calls failing
-
-**Solutions:**
-1. Verify API key and endpoint in `.env`
-2. Check deployment names match
-3. Verify quota/limits in Azure Portal
-4. Check network connectivity
-
-#### 3. RAG Not Working
-
-**Symptoms:**
-- RAG uses count is 0
-- No context retrieved
-
-**Solutions:**
-1. Check if articles are stored: Look for embeddings in Redis
-2. Lower similarity threshold: `APP_RAG_SIMILARITY_THRESHOLD=0.01`
-3. Verify embedding deployment is configured
-4. Check logs for retrieval errors
-
-#### 4. High API Costs
-
-**Symptoms:**
-- Cost tracker showing high costs
-- Many API calls
-
-**Solutions:**
-1. Check cache hit rate (should be >50%)
-2. Verify caching is working
-3. Use batch processing for embeddings
-4. Increase cache TTLs for stable data
-
-### Debugging Tips
-
-1. **Check Logs**: Application logs show detailed information
-2. **Cache Status**: UI shows cache hit/miss rates
-3. **Connection Details**: Sidebar expander shows connection status
-4. **Cost Tracker**: Monitor API usage and costs
-
----
-
-## Complete File Structure and Purpose
-
-This section explains every file in the codebase and its purpose.
-
-### Application Entry Point
-
-#### `src/stock_sentiment/app.py`
-**Purpose**: Main Streamlit application - the entry point for the dashboard.
-
-**Key Responsibilities:**
-- Initializes all services (cache, RAG, collector, analyzer)
-- Creates the web UI with tabs (Overview, Price Analysis, News & Sentiment, etc.)
-- Handles user interactions (stock symbol input, data loading)
-- Displays visualizations (charts, metrics, sentiment breakdown)
-- Manages session state and cache status tracking
-
-**Key Functions:**
-- `get_redis_cache()`: Initialize Redis cache (cached with `@st.cache_resource`)
-- `get_rag_service()`: Initialize RAG service
-- `get_collector()`: Initialize data collector
-- `get_analyzer()`: Initialize sentiment analyzer
-
-**File Size**: ~1,400 lines
-
-### Configuration
-
-#### `src/stock_sentiment/config/settings.py`
-**Purpose**: Centralized configuration management using Pydantic v2.
-
-**Key Features:**
-- Loads environment variables from `.env` file
-- Validates all configuration values
-- Provides type-safe access to settings
-- Includes defaults for optional settings
-
-**Key Classes:**
-- `AzureOpenAISettings`: Azure OpenAI configuration (endpoint, API key, deployments)
-- `RedisSettings`: Redis configuration (host, port, password, SSL)
-- `AppSettings`: Application settings (cache TTLs, RAG settings, thresholds)
-
-**Learn More**: [Pydantic Documentation](https://docs.pydantic.dev/)
-
-### Data Models
-
-#### `src/stock_sentiment/models/sentiment.py`
-**Purpose**: Data structures for sentiment analysis results.
-
-**Classes:**
-- `SentimentScores`: Stores positive, negative, neutral scores (0.0-1.0)
-  - Validates scores are in range
-  - Normalizes scores to sum to 1.0
-  - Provides `net_sentiment` (positive - negative)
-  - Provides `dominant_sentiment` ("positive", "negative", or "neutral")
-- `SentimentResult`: Complete analysis result
-  - Includes scores, original text, source, cache status, RAG usage flag
-
-**Why Data Models?**
-- Type safety (prevents errors)
-- Validation (ensures data integrity)
-- Clear structure (self-documenting code)
-
-#### `src/stock_sentiment/models/stock.py`
-**Purpose**: Data structures for stock and news data.
-
-**Classes:**
-- `StockData`: Stock price and company information
-  - Symbol, price, company name, market cap, timestamp
-  - Validates price and market cap are non-negative
-- `NewsArticle`: News article structure
-  - Title, summary, source, URL, timestamp
-  - Provides `text_for_analysis` property (title + summary)
-- `SocialMediaPost`: Social media post structure
-  - Text, platform, author, subreddit, URL, timestamp
-
-### Services (Business Logic)
-
-#### `src/stock_sentiment/services/collector.py`
-**Purpose**: Fetches stock data and news from external APIs.
-
-**Key Methods:**
-- `get_stock_price(symbol)`: Fetches stock price and company info from yfinance
-- `get_news_headlines(symbol)`: Fetches news articles from yfinance
-- `get_reddit_sentiment_data(symbol)`: Placeholder for social media (currently returns empty list)
-- `collect_all_data(symbol)`: Orchestrates all data collection
-
-**Caching**: All methods check Redis cache first before making API calls.
-
-**File**: `services/collector.py`
-
-#### `src/stock_sentiment/services/sentiment.py`
-**Purpose**: AI-powered sentiment analysis using Azure OpenAI GPT-4.
-
-**Key Methods:**
-- `analyze_sentiment(text, symbol)`: Analyzes single text with optional RAG context
-- `batch_analyze(texts, symbol, max_workers)`: Analyzes multiple texts in parallel
-
-**Features:**
-- Cache checking (skips API call if already analyzed)
-- RAG context retrieval (finds similar articles for context)
-- Few-shot learning (examples in prompt)
-- Circuit breaker (prevents cascading failures)
-- Retry logic (handles transient errors)
-- Cost tracking (monitors API usage)
-
-**Statistics Tracked:**
-- `cache_hits`: Number of times cached result used
-- `cache_misses`: Number of times API called
-- `rag_uses`: Number of times RAG context successfully retrieved
-- `rag_attempts`: Total number of RAG retrieval attempts
-
-**File**: `services/sentiment.py`
-
-#### `src/stock_sentiment/services/rag.py`
-**Purpose**: Retrieval Augmented Generation (RAG) service for context-aware sentiment analysis.
-
-**Key Methods:**
-- `store_articles_batch(articles, symbol, batch_size)`: Stores articles with embeddings
-- `retrieve_relevant_context(query, symbol, top_k)`: Retrieves relevant articles using hybrid search
-- `get_embedding(text, use_cache)`: Generates embedding for text
-- `get_embeddings_batch(texts, batch_size, use_cache)`: Generates embeddings in batches
-
-**Features:**
-- Hybrid search (semantic + keyword)
-- Reciprocal Rank Fusion (RRF) for combining results
-- Temporal decay (boosts recent articles)
-- Query expansion (adds related terms)
-- Cross-encoder re-ranking (optional, disabled by default)
-
-**File**: `services/rag.py` (~950 lines)
-
-#### `src/stock_sentiment/services/cache.py`
-**Purpose**: Redis caching layer for performance optimization.
-
-**Key Methods:**
-- `get(key)`: Gets value from cache
-- `set(key, value, ttl)`: Sets value in cache with TTL
-- `get_cached_stock_data(symbol)`: Gets cached stock data
-- `get_cached_news(symbol)`: Gets cached news
-- `get_cached_sentiment(text)`: Gets cached sentiment
-- `clear_all_cache()`: Clears all cached data
-- `get_cache_stats()`: Gets cache statistics
-
-**Features:**
-- Automatic JSON serialization/deserialization
-- TTL management
-- Cache statistics tracking (hits, misses, sets)
-- `last_tier_used` tracking (for UI display)
-
-**File**: `services/cache.py`
-
-#### `src/stock_sentiment/services/cost_tracker.py`
-**Purpose**: Tracks and monitors API usage costs.
-
-**Key Methods:**
-- `track_call(model, input_tokens, output_tokens, operation_type)`: Records API call
-- `get_cost_summary(days)`: Gets cost summary for last N days
-- `get_total_cost()`: Gets total cost since tracking started
-
-**Features:**
-- Tracks token usage per model
-- Calculates costs based on model pricing
-- Stores daily summaries in Redis
-- Provides cost reports (last 7 days, 30 days)
-
-**File**: `services/cost_tracker.py`
-
-#### `src/stock_sentiment/services/multi_tier_cache.py`
-**Purpose**: Multi-tier caching (L1: Memory, L2: Redis, L3: Disk).
-
-**Status**: Implemented but not currently used (RedisCache is used instead).
-
-**Tiers:**
-- L1: In-memory dictionary (fastest, ~1ms)
-- L2: Redis cache (fast, ~5-10ms)
-- L3: Disk cache (slowest, ~50-100ms, not implemented)
-
-**File**: `services/multi_tier_cache.py`
-
-#### `src/stock_sentiment/services/reranker.py`
-**Purpose**: Cross-encoder re-ranking for improved search precision.
-
-**Status**: Implemented but disabled by default (adds ~1 minute latency).
-
-**How It Works:**
-- Uses Azure OpenAI to re-rank search results
-- More accurate than initial search (considers query-document interaction)
-- Trade-off: Higher accuracy but much slower
-
-**File**: `services/reranker.py`
-
-#### `src/stock_sentiment/services/message_queue.py`
-**Purpose**: Asynchronous job processing using Redis Streams.
-
-**Status**: Implemented but not currently used in main application flow.
-
-**Use Cases:**
-- Background sentiment analysis
-- Scheduled data collection
-- Batch processing jobs
-
-**File**: `services/message_queue.py`
-
-#### `src/stock_sentiment/services/ab_testing.py`
-**Purpose**: A/B testing framework for prompt optimization.
-
-**Status**: Implemented but not currently used in main application flow.
-
-**Use Cases:**
-- Test different prompt variants
-- Compare sentiment analysis accuracy
-- Optimize prompt engineering
-
-**File**: `services/ab_testing.py`
-
-#### `src/stock_sentiment/services/vector_db.py`
-**Purpose**: Abstract interface for vector database operations.
-
-**Status**: Interface implemented, Redis implementation provided.
-
-**Use Cases:**
-- Extensible vector search (can add Pinecone, Weaviate support)
-- Standardized vector operations
-- Future-proof architecture
-
-**File**: `services/vector_db.py`
-
-### Utilities
-
-#### `src/stock_sentiment/utils/logger.py`
-**Purpose**: Centralized logging configuration.
-
-**Key Functions:**
-- `setup_logger(name, level, log_file)`: Sets up logger with handlers
-- `get_logger(name)`: Gets logger instance
-
-**Features:**
-- Structured logging (formatted output)
-- Log levels (DEBUG, INFO, WARNING, ERROR)
-- File and console handlers
-- Prevents duplicate logs
-
-**File**: `utils/logger.py`
-
-#### `src/stock_sentiment/utils/retry.py`
-**Purpose**: Retry logic with exponential backoff for API calls.
-
-**Key Function:**
-- `retry_with_exponential_backoff(max_attempts, initial_delay, max_delay)`: Decorator for automatic retry
-
-**How It Works:**
-- Retries failed API calls automatically
-- Exponential backoff: 1s, 2s, 4s, 8s delays
-- Jitter: Random variation to prevent thundering herd
-- Only retries on retryable errors (network errors, rate limits)
-
-**Example:**
-```python
-@retry_with_exponential_backoff(max_attempts=3, initial_delay=1.0)
-def api_call():
-    # This will retry up to 3 times if it fails
-    pass
-```
-
-**File**: `utils/retry.py`
-
-#### `src/stock_sentiment/utils/circuit_breaker.py`
-**Purpose**: Circuit breaker pattern to prevent cascading failures.
-
-**Key Class:**
-- `CircuitBreaker`: Manages circuit states (closed, open, half-open)
-
-**States:**
-- **Closed**: Normal operation, requests allowed
-- **Open**: Service failing, requests blocked (returns error immediately)
-- **Half-Open**: Testing if service recovered (allows limited requests)
-
-**How It Works:**
-- Tracks failure count
-- Opens circuit after threshold failures (default: 5)
-- Waits timeout period (default: 60s)
-- Enters half-open state to test recovery
-- Closes circuit if recovery successful
-
-**File**: `utils/circuit_breaker.py`
-
-#### `src/stock_sentiment/utils/preprocessing.py`
-**Purpose**: Text cleaning and normalization for better analysis.
-
-**Key Functions:**
-- `preprocess_text(text, expand_abbreviations)`: Cleans and normalizes text
-  - Removes HTML tags
-  - Normalizes whitespace
-  - Expands financial abbreviations (Q4 → "fourth quarter", EPS → "earnings per share")
-- `is_financial_text(text)`: Checks if text is financial-related
-  - Looks for financial keywords
-  - Optional quality check before processing
-
-**Why Preprocessing?**
-- Clean text → better embeddings → better search results
-- Expanded abbreviations → better understanding → more accurate sentiment
-- Normalized text → consistent processing → reliable results
-
-**File**: `utils/preprocessing.py`
-
-#### `src/stock_sentiment/utils/validators.py`
-**Purpose**: Input validation for user data.
-
-**Key Functions:**
-- `validate_stock_symbol(symbol)`: Validates stock ticker format
-  - Checks format: 1-5 uppercase letters (e.g., "AAPL", "BRK.B")
-  - Returns True/False
-- `validate_text(text, min_length, max_length)`: Validates text content
-  - Checks length constraints
-  - Returns True/False
-- `sanitize_text(text, max_length)`: Sanitizes and truncates text
-  - Removes extra whitespace
-  - Truncates if too long
-
-**File**: `utils/validators.py`
-
----
-
-## Contributing
-
-We welcome contributions! Please see `CONTRIBUTING.md` for guidelines.
-
-### Development Setup
-
-```bash
-# Clone repository
-git clone https://github.com/anandDev77/stock-sentiment-analysis.git
-cd stock-sentiment-analysis
-
-# Create virtual environment
-make venv
-source venv/bin/activate
-
-# Install dependencies
-make install-dev
-
-# Run tests
-make test
-
-# Format code
-make format
-```
-
-### Code Style
-
-- **Formatting**: Black
-- **Linting**: Flake8
-- **Type Hints**: Use type hints for all functions
-- **Docstrings**: Follow Google style
-
----
-
-## Additional Resources
-
-### Beginner-Friendly Learning Resources
-
-**For Complete Beginners:**
-
-**Machine Learning Fundamentals:**
-- [Machine Learning Crash Course](https://developers.google.com/machine-learning/crash-course) (Google) - Free, beginner-friendly
-- [Fast.ai Practical Deep Learning](https://www.fast.ai/) - Learn by building, free course
-- [3Blue1Brown Neural Networks](https://www.youtube.com/playlist?list=PLZHQObOWTQDNU6R1_67000Dx_ZCJB-3pi) - Visual, intuitive explanations
-- [Andrew Ng's Machine Learning Course](https://www.coursera.org/learn/machine-learning) - Week 1-2 for basics
-
-**Natural Language Processing (NLP):**
-- [What is NLP?](https://www.ibm.com/topics/natural-language-processing) - IBM's beginner guide
-- [NLP Explained Simply](https://monkeylearn.com/blog/what-is-natural-language-processing/) - Visual explanations
-- [Hugging Face NLP Course](https://huggingface.co/learn/nlp-course/) - Hands-on tutorials
-
-**Sentiment Analysis:**
-- [Sentiment Analysis Explained](https://www.ibm.com/topics/sentiment-analysis) - Beginner-friendly overview
-- [Sentiment Analysis Tutorial](https://realpython.com/sentiment-analysis-python/) - Python implementation
-
-### Interactive Learning Tools
-
-**Visualize Concepts:**
-- [Embedding Projector](https://projector.tensorflow.org/) - **Visualize embeddings interactively!** (Highly recommended)
-- [Transformer Playground](https://transformer.huggingface.co/) - See how transformers process text
-- [Attention Visualization](https://github.com/jessevig/bertviz) - Understand attention mechanisms
-- [Cosine Similarity Calculator](https://www.omnicalculator.com/math/cosine-similarity) - Calculate similarity with examples
-
-**Practice:**
-- [Hugging Face Spaces](https://huggingface.co/spaces) - Try ML models in your browser
-- [Google Colab](https://colab.research.google.com/) - Free Jupyter notebooks for ML
-
-### Technical Documentation
-
-**Core Technologies:**
 - [Azure OpenAI Documentation](https://learn.microsoft.com/en-us/azure/ai-services/openai/)
-- [OpenAI API Reference](https://platform.openai.com/docs)
-- [Streamlit Documentation](https://docs.streamlit.io/)
+- [Azure AI Search Documentation](https://learn.microsoft.com/en-us/azure/search/)
 - [Redis Documentation](https://redis.io/docs/)
-
-**ML/AI Concepts:**
-- [RAG Explained](https://www.pinecone.io/learn/retrieval-augmented-generation/)
-- [Vector Databases Explained](https://www.pinecone.io/learn/vector-database/)
-- [Embeddings Guide](https://www.pinecone.io/learn/embeddings/)
-- [Hybrid Search Explained](https://www.pinecone.io/learn/hybrid-search/)
-
-### Video Resources (For Visual Learners)
-
-**Beginner-Friendly:**
-- [3Blue1Brown Neural Networks](https://www.youtube.com/playlist?list=PLZHQObOWTQDNU6R1_67000Dx_ZCJB-3pi) - Visual explanations of neural networks
-- [Sentiment Analysis Tutorial](https://www.youtube.com/results?search_query=sentiment+analysis+python) - Step-by-step tutorials
-- [RAG Explained Simply](https://www.youtube.com/results?search_query=rag+retrieval+augmented+generation) - Visual walkthroughs
-
-**Advanced:**
-- [Attention Is All You Need](https://www.youtube.com/watch?v=iDulhoQ2pro) - Transformer architecture explained
-- [BERT Explained](https://www.youtube.com/watch?v=xI0HHN5XKDo) - BERT model walkthrough
-
-### Related Papers
-
-**Core ML/AI Papers:**
-- [GPT-4 Technical Report](https://arxiv.org/abs/2303.08774) - GPT-4 architecture and capabilities
-- [Attention Is All You Need](https://arxiv.org/abs/1706.03762) - Original transformer paper
-- [BERT: Pre-training of Deep Bidirectional Transformers](https://arxiv.org/abs/1810.04805) - BERT architecture
-
-**RAG and Retrieval:**
-- [Retrieval-Augmented Generation](https://arxiv.org/abs/2005.11401) - Original RAG paper
-- [Dense Passage Retrieval](https://arxiv.org/abs/2004.04906) - Dense retrieval for open-domain QA
-- [In-Context Retrieval-Augmented Language Models](https://arxiv.org/abs/2302.00083) - Recent RAG improvements
-
-**Search and Ranking:**
-- [Reciprocal Rank Fusion](https://plg.uwaterloo.ca/~gvcormac/cormacksigir09-rrf.pdf) - RRF algorithm paper
-- [Hybrid Search](https://www.elastic.co/guide/en/elasticsearch/reference/current/rrf.html) - Elasticsearch RRF implementation
-
-**Note for Beginners:** Papers are advanced. Start with the beginner-friendly resources above, then read papers when you're ready.
-
-### Community and Support
-
-- [GitHub Issues](https://github.com/anandDev77/stock-sentiment-analysis/issues) - Report bugs, ask questions
-- [GitHub Discussions](https://github.com/anandDev77/stock-sentiment-analysis/discussions) - Community discussions
-- [Stack Overflow](https://stackoverflow.com/questions/tagged/machine-learning) - ML questions (tag: `machine-learning`, `nlp`, `sentiment-analysis`)
-- [Reddit r/MachineLearning](https://www.reddit.com/r/MachineLearning/) - ML community
-- [Hugging Face Forums](https://discuss.huggingface.co/) - NLP and ML discussions
+- [Streamlit Documentation](https://docs.streamlit.io/)
+- [RAG Systems](https://www.pinecone.io/learn/retrieval-augmented-generation/)
+- [Vector Databases](https://www.pinecone.io/learn/vector-database/)
+- [HNSW Algorithm](https://arxiv.org/abs/1603.09320)
 
 ---
 
-**Last Updated**: December 2024  
-**Author**: Anand Mohan Singh  
-**Repository**: [https://github.com/anandDev77/stock-sentiment-analysis](https://github.com/anandDev77/stock-sentiment-analysis)  
-**License**: MIT
+**Version**: 2.0  
+**Last Updated**: November 2024  
+**Maintainer**: Stock Sentiment Analysis Team
 

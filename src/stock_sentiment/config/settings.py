@@ -129,6 +129,77 @@ class RedisSettings(BaseSettings):
             case_sensitive = False
 
 
+class AzureAISearchSettings(BaseSettings):
+    """Azure AI Search configuration settings."""
+    
+    endpoint: str = Field(..., description="Azure AI Search endpoint URL")
+    api_key: str = Field(..., description="Azure AI Search API key")
+    index_name: str = Field(default="stock-articles", description="Index name")
+    semantic_config_name: Optional[str] = Field(
+        default=None,
+        description="Semantic configuration name (optional, requires Standard tier)"
+    )
+    vector_dimension: int = Field(default=1536, description="Embedding vector dimension")
+    
+    if PYDANTIC_V2:
+        model_config = SettingsConfigDict(
+            env_prefix="AZURE_AI_SEARCH_",
+            case_sensitive=False,
+            extra="ignore"
+        )
+        
+        @field_validator("endpoint")
+        @classmethod
+        def validate_endpoint(cls, v):
+            """Validate that endpoint is a valid URL."""
+            if not v.startswith("http"):
+                raise ValueError("Azure AI Search endpoint must be a valid URL")
+            return v.rstrip("/")
+    else:
+        @validator("endpoint")
+        def validate_endpoint(cls, v):
+            """Validate that endpoint is a valid URL."""
+            if not v.startswith("http"):
+                raise ValueError("Azure AI Search endpoint must be a valid URL")
+            return v.rstrip("/")
+        
+        class Config:
+            """Pydantic v1 configuration."""
+            env_prefix = "AZURE_AI_SEARCH_"
+            case_sensitive = False
+
+
+class DataSourceSettings(BaseSettings):
+    """Data source configuration settings."""
+    
+    # Reddit (PRAW) - Free, requires app registration at https://www.reddit.com/prefs/apps
+    reddit_client_id: Optional[str] = Field(default=None, description="Reddit client ID")
+    reddit_client_secret: Optional[str] = Field(default=None, description="Reddit client secret")
+    reddit_user_agent: Optional[str] = Field(default="stock-sentiment-analysis/1.0", description="Reddit user agent")
+    reddit_enabled: bool = Field(default=False, description="Enable Reddit data collection")
+    reddit_limit: int = Field(default=20, description="Number of Reddit posts to fetch")
+    
+    # Alpha Vantage - Free tier: 500 calls/day
+    alpha_vantage_api_key: Optional[str] = Field(default=None, description="Alpha Vantage API key")
+    alpha_vantage_enabled: bool = Field(default=False, description="Enable Alpha Vantage news")
+    
+    # Finnhub - Free tier: 60 calls/minute
+    finnhub_api_key: Optional[str] = Field(default=None, description="Finnhub API key")
+    finnhub_enabled: bool = Field(default=False, description="Enable Finnhub news")
+    
+    if PYDANTIC_V2:
+        model_config = SettingsConfigDict(
+            env_prefix="DATA_SOURCE_",
+            case_sensitive=False,
+            extra="ignore"
+        )
+    else:
+        class Config:
+            """Pydantic v1 configuration."""
+            env_prefix = "DATA_SOURCE_"
+            case_sensitive = False
+
+
 class AppSettings(BaseSettings):
     """Application-wide settings."""
     
@@ -138,12 +209,54 @@ class AppSettings(BaseSettings):
     
     # Cache TTLs (in seconds)
     cache_ttl_sentiment: int = Field(default=86400, description="Sentiment cache TTL")  # 24 hours
-    cache_ttl_stock: int = Field(default=3600, description="Stock data cache TTL")  # 1 hour (increased from 5 min)
-    cache_ttl_news: int = Field(default=7200, description="News cache TTL")  # 2 hours (increased from 30 min)
+    cache_ttl_stock: int = Field(default=3600, description="Stock data cache TTL")  # 1 hour
+    cache_ttl_news: int = Field(default=7200, description="News cache TTL")  # 2 hours
+    cache_ttl_rag_articles: int = Field(default=604800, description="RAG article cache TTL (7 days in seconds)")
+    cache_sentiment_enabled: bool = Field(default=True, description="Enable sentiment caching (disable to force RAG usage)")
+    
+    # Redis connection settings
+    redis_connect_timeout: int = Field(default=5, description="Redis connection timeout in seconds")
+    redis_socket_timeout: int = Field(default=5, description="Redis socket timeout in seconds")
     
     # RAG settings
     rag_top_k: int = Field(default=3, description="Number of similar articles to retrieve")
     rag_similarity_threshold: float = Field(default=0.01, description="Minimum similarity score for RAG retrieval (0.0-1.0). Lower values return more articles but may include less relevant ones. For RRF scores, use 0.01-0.03. For cosine similarity, use 0.3-0.7.")
+    rag_batch_size: int = Field(default=100, description="Batch size for RAG embedding generation (max 2048 for Azure OpenAI)")
+    rag_similarity_auto_adjust_multiplier: float = Field(default=0.8, description="Multiplier for auto-adjusting similarity threshold when too high (0.0-1.0)")
+    rag_temporal_decay_days: int = Field(default=7, description="Number of days for temporal decay calculation in RAG")
+    
+    # Sentiment analysis settings
+    sentiment_temperature: float = Field(default=0.2, description="Temperature for sentiment analysis model (0.0-2.0, lower = more consistent)")
+    sentiment_max_tokens: int = Field(default=200, description="Maximum tokens for sentiment analysis response")
+    sentiment_batch_size: int = Field(default=100, description="Batch size for parallel sentiment analysis")
+    sentiment_max_workers: int = Field(default=5, description="Maximum parallel workers for batch sentiment analysis")
+    
+    # Retry settings
+    retry_max_attempts: int = Field(default=3, description="Maximum retry attempts for API calls")
+    retry_initial_delay: float = Field(default=1.0, description="Initial retry delay in seconds")
+    retry_max_delay: float = Field(default=10.0, description="Maximum retry delay in seconds")
+    retry_exponential_base: float = Field(default=2.0, description="Exponential base for retry backoff")
+    
+    # Circuit breaker settings
+    circuit_breaker_failure_threshold: int = Field(default=5, description="Number of failures before opening circuit breaker")
+    circuit_breaker_timeout: int = Field(default=60, description="Seconds to wait before trying half-open state")
+    
+    # API timeout settings
+    api_timeout: int = Field(default=10, description="Default timeout for external API calls in seconds")
+    
+    # Data collection limits
+    news_limit_default: int = Field(default=10, description="Default limit for news articles per source")
+    news_title_max_length: int = Field(default=200, description="Maximum length for news article titles")
+    news_summary_max_length: int = Field(default=500, description="Maximum length for news article summaries")
+    
+    # UI display settings
+    ui_articles_per_page: int = Field(default=10, description="Number of articles to display per page in UI")
+    ui_show_all_articles: bool = Field(default=False, description="Show all articles by default (overrides pagination)")
+    
+    # Vector search settings (Azure AI Search)
+    vector_search_m: int = Field(default=4, description="HNSW parameter m (number of bi-directional links)")
+    vector_search_ef_construction: int = Field(default=400, description="HNSW parameter efConstruction (size of dynamic candidate list)")
+    vector_search_ef_search: int = Field(default=500, description="HNSW parameter efSearch (size of dynamic candidate list for search)")
     
     if PYDANTIC_V2:
         # Pydantic v2 reads from os.environ (already loaded by dotenv above)
@@ -228,6 +341,49 @@ class Settings:
             # Redis is optional, so we allow it to fail
             self.redis = None
         
+        try:
+            import os
+            if PYDANTIC_V2:
+                # Azure AI Search is optional
+                search_endpoint = os.getenv("AZURE_AI_SEARCH_ENDPOINT")
+                search_api_key = os.getenv("AZURE_AI_SEARCH_API_KEY")
+                if search_endpoint and search_api_key:
+                    self.azure_ai_search = AzureAISearchSettings(
+                        endpoint=search_endpoint,
+                        api_key=search_api_key,
+                        index_name=os.getenv("AZURE_AI_SEARCH_INDEX_NAME", "stock-articles"),
+                        semantic_config_name=os.getenv("AZURE_AI_SEARCH_SEMANTIC_CONFIG_NAME"),
+                        vector_dimension=int(os.getenv("AZURE_AI_SEARCH_VECTOR_DIMENSION", "1536"))
+                    )
+                else:
+                    self.azure_ai_search = None
+            else:
+                self.azure_ai_search = AzureAISearchSettings()
+        except Exception as e:
+            # Azure AI Search is optional, so we allow it to fail
+                self.azure_ai_search = None
+        
+        try:
+            import os
+            if PYDANTIC_V2:
+                self.data_sources = DataSourceSettings(
+                    reddit_client_id=os.getenv("DATA_SOURCE_REDDIT_CLIENT_ID"),
+                    reddit_client_secret=os.getenv("DATA_SOURCE_REDDIT_CLIENT_SECRET"),
+                    reddit_user_agent=os.getenv("DATA_SOURCE_REDDIT_USER_AGENT", "stock-sentiment-analysis/1.0"),
+                    reddit_enabled=os.getenv("DATA_SOURCE_REDDIT_ENABLED", "false").lower() in ("true", "1", "yes"),
+                    reddit_limit=int(os.getenv("DATA_SOURCE_REDDIT_LIMIT", "20")),
+                    alpha_vantage_api_key=os.getenv("DATA_SOURCE_ALPHA_VANTAGE_API_KEY"),
+                    alpha_vantage_enabled=os.getenv("DATA_SOURCE_ALPHA_VANTAGE_ENABLED", "false").lower() in ("true", "1", "yes"),
+                    finnhub_api_key=os.getenv("DATA_SOURCE_FINNHUB_API_KEY"),
+                    finnhub_enabled=os.getenv("DATA_SOURCE_FINNHUB_ENABLED", "false").lower() in ("true", "1", "yes")
+                )
+            else:
+                self.data_sources = DataSourceSettings()
+        except Exception as e:
+            # Data sources are optional
+            # Note: logger not available here, use print or skip logging
+            self.data_sources = DataSourceSettings()
+        
         self.app = AppSettings()
     
     def is_redis_available(self) -> bool:
@@ -250,6 +406,16 @@ class Settings:
             and self.azure_openai.api_key != ""
             and self.azure_openai.deployment_name is not None
             and self.azure_openai.deployment_name != ""
+        )
+    
+    def is_azure_ai_search_available(self) -> bool:
+        """Check if Azure AI Search is configured and available."""
+        return (
+            self.azure_ai_search is not None
+            and self.azure_ai_search.endpoint is not None
+            and self.azure_ai_search.endpoint != ""
+            and self.azure_ai_search.api_key is not None
+            and self.azure_ai_search.api_key != ""
         )
 
 

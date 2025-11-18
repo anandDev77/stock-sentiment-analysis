@@ -15,14 +15,13 @@ from openai import AzureOpenAI
 from textblob import TextBlob
 
 from ..config.settings import Settings, get_settings
-from ..models.sentiment import SentimentScores, SentimentResult
+from ..models.sentiment import SentimentScores
 from ..utils.logger import get_logger
 from ..utils.preprocessing import preprocess_text, is_financial_text
 from ..utils.retry import retry_with_exponential_backoff
 from ..utils.circuit_breaker import CircuitBreaker, CircuitBreakerOpenError
 from .cache import RedisCache
 from .rag import RAGService
-from .cost_tracker import CostTracker
 
 logger = get_logger(__name__)
 
@@ -57,8 +56,7 @@ class SentimentAnalyzer:
         self,
         settings: Optional[Settings] = None,
         redis_cache: Optional[RedisCache] = None,
-        rag_service: Optional[RAGService] = None,
-        cost_tracker: Optional[CostTracker] = None
+        rag_service: Optional[RAGService] = None
     ):
         """
         Initialize the sentiment analyzer.
@@ -67,7 +65,6 @@ class SentimentAnalyzer:
             settings: Application settings (uses global if not provided)
             redis_cache: Redis cache instance for caching results
             rag_service: RAG service for context retrieval
-            cost_tracker: Cost tracker for monitoring API usage
             
         Raises:
             ValueError: If Azure OpenAI configuration is invalid
@@ -75,7 +72,6 @@ class SentimentAnalyzer:
         self.settings = settings or get_settings()
         self.cache = redis_cache
         self.rag_service = rag_service
-        self.cost_tracker = cost_tracker or (CostTracker(cache=redis_cache) if redis_cache else None)
         
         # Initialize Azure OpenAI client
         azure_config = self.settings.azure_openai
@@ -95,10 +91,13 @@ class SentimentAnalyzer:
         # Circuit breaker for Azure OpenAI API calls
         # Prevents cascading failures if API is down
         self.circuit_breaker = CircuitBreaker(
-            failure_threshold=5,  # Open after 5 failures
-            timeout=60,  # Wait 60s before trying again
+            failure_threshold=self.settings.app.circuit_breaker_failure_threshold,
+            timeout=self.settings.app.circuit_breaker_timeout,
             name="azure_openai_sentiment"
         )
+        
+        # Initialize RAG filters (can be set via set_rag_filters)
+        self._rag_filters = {}
         
         logger.info(
             f"SentimentAnalyzer initialized with deployment: {self.deployment_name}"
@@ -140,9 +139,11 @@ class SentimentAnalyzer:
             cached_result = self.cache.get_cached_sentiment(text)
             if cached_result:
                 self.cache_hits += 1
+                logger.info(f"Sentiment Analysis: Cache HIT for text '{text[:50]}...' (skipping RAG and API call)")
                 return cached_result
             else:
                 self.cache_misses += 1
+                logger.info(f"Sentiment Analysis: Cache MISS for text '{text[:50]}...' (proceeding with analysis)")
         
         # Retrieve relevant context using RAG if available
         rag_context = ""
@@ -151,17 +152,43 @@ class SentimentAnalyzer:
             # Track RAG attempt (even if no articles found)
             self.rag_attempts += 1
             
+            # Get filter parameters if provided (from UI)
+            filter_params = getattr(self, '_rag_filters', {})
+            
+            # Log filter application
+            if filter_params:
+                filter_info = []
+                if filter_params.get('date_range'):
+                    start, end = filter_params.get('date_range', (None, None))
+                    filter_info.append(f"date_range={start.strftime('%Y-%m-%d') if start else 'any'} to {end.strftime('%Y-%m-%d') if end else 'any'}")
+                if filter_params.get('days_back'):
+                    filter_info.append(f"days_back={filter_params.get('days_back')}")
+                if filter_params.get('sources'):
+                    filter_info.append(f"sources={', '.join(filter_params.get('sources', []))}")
+                if filter_params.get('exclude_sources'):
+                    filter_info.append(f"exclude={', '.join(filter_params.get('exclude_sources', []))}")
+                
+                if filter_info:
+                    logger.info(f"Sentiment Analysis: Applying RAG filters - {', '.join(filter_info)}")
+            
+            logger.info(f"Sentiment Analysis: Retrieving RAG context for '{text[:50]}...' (symbol={symbol})")
+            
             relevant_articles = self.rag_service.retrieve_relevant_context(
                 query=text,
                 symbol=symbol,
-                top_k=self.settings.app.rag_top_k
+                top_k=self.settings.app.rag_top_k,
+                date_range=filter_params.get('date_range'),
+                sources=filter_params.get('sources'),
+                exclude_sources=filter_params.get('exclude_sources'),
+                days_back=filter_params.get('days_back')
             )
             
             if relevant_articles:
                 rag_used = True
                 self.rag_uses += 1
+                logger.info(f"Sentiment Analysis: RAG provided {len(relevant_articles)} context articles for analysis")
             else:
-                logger.warning(f"RAG found 0 articles for {symbol}")
+                logger.warning(f"Sentiment Analysis: RAG found 0 articles for {symbol} - proceeding without context")
         
         # Format RAG context with better structure and metadata
         if rag_used and relevant_articles:
@@ -259,7 +286,12 @@ Analyze the sentiment following these examples. Consider:
 
 Respond ONLY with valid JSON. No explanations, no markdown, just the JSON object."""
         
-        @retry_with_exponential_backoff(max_attempts=3, initial_delay=1.0, max_delay=10.0)
+        @retry_with_exponential_backoff(
+            max_attempts=self.settings.app.retry_max_attempts,
+            initial_delay=self.settings.app.retry_initial_delay,
+            max_delay=self.settings.app.retry_max_delay,
+            exponential_base=self.settings.app.retry_exponential_base
+        )
         def _call_openai_internal():
             return self.client.chat.completions.create(
                 model=self.deployment_name,
@@ -267,8 +299,8 @@ Respond ONLY with valid JSON. No explanations, no markdown, just the JSON object
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": prompt}
                 ],
-                temperature=0.2,  # Lower temperature for more consistent results
-                max_tokens=200,  # Increased for better responses
+                temperature=self.settings.app.sentiment_temperature,
+                max_tokens=self.settings.app.sentiment_max_tokens,
                 response_format={"type": "json_object"}  # Use structured output if supported
             )
         
@@ -283,17 +315,6 @@ Respond ONLY with valid JSON. No explanations, no markdown, just the JSON object
                     "Using TextBlob fallback to prevent cascading failures."
                 )
                 return self._textblob_fallback(text)
-            
-            # Track costs
-            if self.cost_tracker:
-                input_tokens = response.usage.prompt_tokens if hasattr(response.usage, 'prompt_tokens') else 0
-                output_tokens = response.usage.completion_tokens if hasattr(response.usage, 'completion_tokens') else 0
-                self.cost_tracker.track_api_call(
-                    model=self.deployment_name,
-                    input_tokens=input_tokens,
-                    output_tokens=output_tokens,
-                    operation_type="completion"
-                )
             
             # Extract JSON from response
             content = response.choices[0].message.content.strip()
@@ -323,11 +344,13 @@ Respond ONLY with valid JSON. No explanations, no markdown, just the JSON object
                         sentiment_scores.to_dict(),
                         ttl=self.settings.app.cache_ttl_sentiment
                     )
+                    logger.info(f"Sentiment Analysis: Cached result (TTL: {self.settings.app.cache_ttl_sentiment}s)")
                 
                 logger.info(
-                    f"Sentiment analyzed - Positive: {sentiment_scores.positive:.2f}, "
+                    f"Sentiment Analysis: Result - Positive: {sentiment_scores.positive:.2f}, "
                     f"Negative: {sentiment_scores.negative:.2f}, "
-                    f"Neutral: {sentiment_scores.neutral:.2f}"
+                    f"Neutral: {sentiment_scores.neutral:.2f}, "
+                    f"RAG used: {rag_used}, Dominant: {sentiment_scores.dominant_sentiment}"
                 )
                 return sentiment_scores.to_dict()
             else:
@@ -375,6 +398,29 @@ Respond ONLY with valid JSON. No explanations, no markdown, just the JSON object
             logger.error(f"TextBlob fallback error: {e}")
             return {'positive': 0.0, 'negative': 0.0, 'neutral': 1.0}
     
+    def set_rag_filters(
+        self,
+        date_range: Optional[tuple] = None,
+        sources: Optional[List[str]] = None,
+        exclude_sources: Optional[List[str]] = None,
+        days_back: Optional[int] = None
+    ):
+        """
+        Set RAG filter parameters for context retrieval.
+        
+        Args:
+            date_range: Optional tuple of (start_date, end_date) as datetime objects
+            sources: Optional list of source names to include
+            exclude_sources: Optional list of source names to exclude
+            days_back: Optional number of days to look back
+        """
+        self._rag_filters = {
+            'date_range': date_range,
+            'sources': sources,
+            'exclude_sources': exclude_sources,
+            'days_back': days_back
+        }
+    
     def get_stats(self) -> Dict[str, int]:
         """
         Get statistics about cache and RAG usage.
@@ -399,7 +445,7 @@ Respond ONLY with valid JSON. No explanations, no markdown, just the JSON object
         self,
         texts: List[str],
         symbol: Optional[str] = None,
-        max_workers: int = 5
+        max_workers: Optional[int] = None
     ) -> List[Dict[str, float]]:
         """
         Analyze sentiment for multiple texts in parallel (industry best practice).
@@ -410,7 +456,7 @@ Respond ONLY with valid JSON. No explanations, no markdown, just the JSON object
         Args:
             texts: List of texts to analyze
             symbol: Optional stock symbol for RAG context
-            max_workers: Maximum number of parallel workers (default: 5)
+            max_workers: Maximum number of parallel workers (default: from settings)
             
         Returns:
             List of sentiment score dictionaries in same order as input
@@ -419,6 +465,10 @@ Respond ONLY with valid JSON. No explanations, no markdown, just the JSON object
         
         if not texts:
             return []
+        
+        # Use configured max_workers if not provided
+        if max_workers is None:
+            max_workers = self.settings.app.sentiment_max_workers
         
         # For small batches, sequential might be faster (avoid overhead)
         if len(texts) <= 2:

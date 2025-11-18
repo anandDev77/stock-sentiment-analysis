@@ -4,16 +4,19 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
-A professional-grade stock sentiment analysis application that leverages Azure OpenAI, Redis caching, and RAG (Retrieval Augmented Generation) to provide real-time sentiment insights for stock market analysis.
+A production-grade stock sentiment analysis application that leverages Azure OpenAI, Azure AI Search, Redis caching, and RAG (Retrieval Augmented Generation) with hybrid search to provide real-time sentiment insights for stock market analysis.
 
 ## 🚀 Features
 
 - **AI-Powered Sentiment Analysis**: Uses Azure OpenAI GPT-4 for accurate financial sentiment analysis
-- **RAG Enhancement**: Retrieval Augmented Generation provides context-aware sentiment analysis
-- **Redis Caching**: Reduces API calls and improves performance with intelligent caching
-- **Real-Time Stock Data**: Fetches live stock prices and news from free APIs (yfinance)
+- **RAG with Hybrid Search**: Retrieval Augmented Generation with semantic + keyword search using Reciprocal Rank Fusion (RRF)
+- **Azure AI Search**: High-performance vector database for 10-100× faster search than traditional methods
+- **Redis Caching**: Multi-tier caching reduces API calls by 50-90% and improves performance
+- **Multi-Source Data Collection**: Aggregates news from Yahoo Finance, Alpha Vantage, Finnhub, and Reddit
+- **Modular Architecture**: Clean separation of concerns with presentation, service, and infrastructure layers
 - **Interactive Dashboard**: Beautiful Streamlit-based web interface with multiple analysis views
 - **Comprehensive Analytics**: Price charts, sentiment trends, news analysis, and technical indicators
+- **Demo-Ready**: Operation summaries, detailed logging, and configurable cache controls
 
 ## 📋 Table of Contents
 
@@ -31,9 +34,10 @@ A professional-grade stock sentiment analysis application that leverages Azure O
 
 - Python 3.8 or higher
 - Azure account with:
-  - Azure OpenAI service (with GPT-4 deployment)
-  - Azure Cache for Redis
-- Azure CLI installed and configured
+  - Azure OpenAI service (with GPT-4 and text-embedding-ada-002 deployments)
+  - Azure Cache for Redis (optional but recommended)
+  - Azure AI Search (optional but recommended for RAG)
+- Azure CLI installed and configured (optional, for automated setup)
 - Git
 
 ## Installation
@@ -85,20 +89,23 @@ Edit `.env` and fill in your actual values. The `.env.example` file contains det
 **Required Configuration:**
 - `AZURE_OPENAI_ENDPOINT` - Your Azure OpenAI endpoint URL
 - `AZURE_OPENAI_API_KEY` - Your Azure OpenAI API key
-- `AZURE_OPENAI_DEPLOYMENT_NAME` - Your GPT-4 deployment name
+- `AZURE_OPENAI_DEPLOYMENT_NAME` - Your GPT-4 deployment name (default: gpt-4)
+- `AZURE_OPENAI_EMBEDDING_DEPLOYMENT` - Embedding model deployment (required for RAG)
 
 **Optional but Recommended:**
-- `REDIS_HOST` - Redis host for caching
+- `REDIS_HOST` - Redis host for caching (recommended for performance)
 - `REDIS_PASSWORD` - Redis password
-- `AZURE_OPENAI_EMBEDDING_DEPLOYMENT` - Required for RAG functionality
+- `AZURE_AI_SEARCH_ENDPOINT` - Azure AI Search endpoint (recommended for RAG)
+- `AZURE_AI_SEARCH_API_KEY` - Azure AI Search API key
 
-**Optional Application Settings:**
-- `APP_LOG_LEVEL` - Logging level (default: INFO)
-- `APP_RAG_TOP_K` - Number of articles for RAG context (default: 3)
-- `APP_RAG_SIMILARITY_THRESHOLD` - Minimum similarity for RAG (default: 0.3)
-- Cache TTL settings for performance tuning
+**Optional Data Sources:**
+- **Reddit** (Free, requires app registration at https://www.reddit.com/prefs/apps)
+- **Alpha Vantage** (Free tier: 500 calls/day, get key at https://www.alphavantage.co/support/#api-key)
+- **Finnhub** (Free tier: 60 calls/minute, get key at https://finnhub.io/register)
 
-See `.env.example` for complete documentation of all available settings.
+**Note**: yfinance is always enabled (no API key needed). All other settings have sensible defaults and can be adjusted through the application UI.
+
+See `.env.example` for detailed configuration options.
 
 ## Azure Setup
 
@@ -135,7 +142,7 @@ This script will:
 - Deploy text-embedding-ada-002 for RAG
 - Output configuration for your `.env` file
 
-#### 4. Setup Azure Redis
+#### 4. Setup Azure Redis (Optional but Recommended)
 
 ```bash
 # Using the setup script
@@ -145,7 +152,15 @@ This script will:
 make setup-redis RG=stock-sentiment-rg
 ```
 
-#### 5. Setup Everything at Once
+#### 5. Setup Azure AI Search (Optional but Recommended for RAG)
+
+```bash
+# Manual setup recommended - see Azure Portal
+# Create Azure AI Search service and configure index
+# See docs/ARCHITECTURE.md for index schema details
+```
+
+#### 6. Setup Everything at Once
 
 ```bash
 make setup-all RG=stock-sentiment-rg
@@ -156,14 +171,20 @@ make setup-all RG=stock-sentiment-rg
 If you prefer to set up resources manually:
 
 1. **Azure OpenAI**:
-   - Create Cognitive Services resource
+   - Create Azure OpenAI resource
    - Deploy GPT-4 model
    - Deploy text-embedding-ada-002 model (for RAG)
    - Get API key and endpoint
 
-2. **Azure Redis**:
+2. **Azure Redis** (Optional):
    - Create Azure Cache for Redis
    - Get connection details (host, port, password)
+
+3. **Azure AI Search** (Optional but Recommended):
+   - Create Azure AI Search service
+   - Create index with vector search capability
+   - See `docs/ARCHITECTURE.md` for index schema
+   - Get API key and endpoint
 
 ## Running the Application
 
@@ -184,13 +205,17 @@ The application will be available at `http://localhost:8501`
 ### Using the Dashboard
 
 1. **Enter Stock Symbol**: Type a stock ticker (e.g., AAPL, MSFT, GOOGL)
-2. **Load Data**: Click "Load Data" to fetch stock information and news
-3. **Explore Tabs**:
+2. **Configure Data Sources**: Enable/disable data sources in the sidebar (yfinance, Alpha Vantage, Finnhub, Reddit)
+3. **Configure Cache**: Adjust sentiment cache TTL or disable it to force RAG usage
+4. **Load Data**: Click "Load Data" to fetch stock information and news from enabled sources
+5. **View Operation Summary**: Check the sidebar for Redis and RAG usage statistics
+6. **Explore Tabs**:
    - **Overview**: Summary of stock data and overall sentiment
    - **Price Analysis**: Historical price charts and trends
-   - **News & Sentiment**: News articles with sentiment analysis
+   - **News & Sentiment**: News articles with sentiment analysis from multiple sources
    - **Technical Analysis**: Technical indicators and metrics
-   - **AI Insights**: AI-generated insights using RAG
+   - **AI Insights**: AI-generated insights using RAG with hybrid search
+   - **Comparison**: Compare multiple stocks side-by-side
 
 ## Project Structure
 
@@ -199,31 +224,51 @@ stock-sentiment-analysis/
 ├── src/
 │   └── stock_sentiment/          # Main application package
 │       ├── __init__.py
-│       ├── app.py                # Streamlit dashboard
+│       ├── app.py                # Streamlit dashboard (thin orchestrator)
 │       ├── config/               # Configuration management
 │       │   ├── __init__.py
 │       │   └── settings.py       # Settings and environment validation
+│       ├── presentation/         # Presentation layer
+│       │   ├── styles.py         # Custom CSS styling
+│       │   ├── initialization.py # App setup and service initialization
+│       │   ├── data_loader.py    # Data loading orchestration
+│       │   ├── components/       # Reusable UI components
+│       │   │   ├── sidebar.py   # Sidebar with controls and summary
+│       │   │   └── empty_state.py
+│       │   └── tabs/             # Tab modules
+│       │       ├── overview_tab.py
+│       │       ├── price_analysis_tab.py
+│       │       ├── news_sentiment_tab.py
+│       │       ├── technical_analysis_tab.py
+│       │       ├── ai_insights_tab.py
+│       │       └── comparison_tab.py
+│       ├── services/             # Business logic services
+│       │   ├── __init__.py
+│       │   ├── cache.py          # Redis cache service
+│       │   ├── collector.py      # Multi-source data collector
+│       │   ├── rag.py            # RAG service with hybrid search
+│       │   ├── sentiment.py      # Sentiment analyzer
+│       │   └── vector_db.py     # Azure AI Search integration
 │       ├── models/               # Data models
 │       │   ├── __init__.py
 │       │   ├── sentiment.py      # Sentiment data models
-│       │   └── stock.py           # Stock data models
-│       ├── services/             # Business logic services
-│       │   ├── __init__.py
-│       │   ├── cache.py           # Redis cache service
-│       │   ├── collector.py      # Stock data collector
-│       │   ├── rag.py             # RAG service
-│       │   └── sentiment.py      # Sentiment analyzer
-│       └── utils/                 # Utility functions
+│       │   └── stock.py          # Stock data models
+│       └── utils/                # Utility functions
 │           ├── __init__.py
-│           ├── logger.py          # Logging configuration
-│           └── validators.py      # Input validation
+│           ├── logger.py         # Logging configuration
+│           ├── retry.py          # Retry logic
+│           ├── circuit_breaker.py
+│           └── preprocessing.py
 ├── scripts/                      # Deployment and setup scripts
 │   ├── setup-azure-openai.sh
 │   ├── setup-azure-redis.sh
-│   ├── add-embedding-model.sh
-│   └── README.md
-├── tests/                        # Test files
+│   ├── setup-azure-ai-search.sh
+│   └── add-embedding-model.sh
 ├── docs/                         # Documentation
+│   ├── index.md                  # Complete documentation
+│   ├── ARCHITECTURE.md           # Architecture documentation
+│   └── diagrams/                 # Architecture diagrams
+├── tests/                        # Test files
 ├── .env.example                  # Example environment file
 ├── .gitignore                    # Git ignore rules
 ├── Makefile                      # Common commands
@@ -307,27 +352,40 @@ make clean-all     # Clean everything including venv
 
 ### Components
 
-1. **Sentiment Analyzer**: Uses Azure OpenAI to analyze sentiment with optional RAG context
-2. **Data Collector**: Fetches stock data and news from yfinance API
-3. **RAG Service**: Manages embeddings and retrieves relevant context for sentiment analysis
-4. **Redis Cache**: Caches API responses to reduce costs and improve performance
-5. **Streamlit Dashboard**: Interactive web interface for visualization and analysis
+1. **Sentiment Analyzer**: Uses Azure OpenAI GPT-4 to analyze sentiment with RAG context
+2. **Data Collector**: Fetches stock data and news from multiple sources (yfinance, Alpha Vantage, Finnhub, Reddit)
+3. **RAG Service**: Manages embeddings, hybrid search (semantic + keyword), and retrieves relevant context
+4. **Vector Database**: Azure AI Search for high-performance vector search (10-100× faster)
+5. **Redis Cache**: Multi-tier caching reduces API calls by 50-90% and improves performance
+6. **Streamlit Dashboard**: Interactive web interface with modular architecture
 
 ### Data Flow
 
 ```
 User Input (Stock Symbol)
     ↓
-Data Collector → Fetch Stock Data & News
+Data Collector → Fetch from Multiple Sources (yfinance, Alpha Vantage, Finnhub, Reddit)
     ↓
-RAG Service → Store Articles & Generate Embeddings
+RAG Service → Store Articles in Azure AI Search (with embeddings)
     ↓
-Sentiment Analyzer → Analyze with RAG Context
+Sentiment Analyzer → Retrieve Context via Hybrid Search (RRF)
+    ↓
+Sentiment Analyzer → Analyze with RAG Context using GPT-4
     ↓
 Redis Cache → Store Results
     ↓
-Streamlit Dashboard → Display Results
+Streamlit Dashboard → Display Results with Operation Summary
 ```
+
+### Key Technologies
+
+- **Hybrid Search**: Combines semantic (vector) and keyword search using Reciprocal Rank Fusion (RRF)
+- **Azure AI Search**: HNSW algorithm for fast approximate nearest neighbor search
+- **Temporal Decay**: Boosts recent articles in search results
+- **Batch Processing**: Efficient embedding generation (100 articles per API call)
+- **Parallel Processing**: Concurrent sentiment analysis for throughput
+
+For detailed architecture documentation, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and [docs/index.md](docs/index.md).
 
 ## Configuration Options
 
@@ -338,15 +396,16 @@ Streamlit Dashboard → Display Results
 | `AZURE_OPENAI_ENDPOINT` | Azure OpenAI service endpoint | - | Yes |
 | `AZURE_OPENAI_API_KEY` | Azure OpenAI API key | - | Yes |
 | `AZURE_OPENAI_DEPLOYMENT_NAME` | Chat model deployment name | `gpt-4` | No |
-| `AZURE_OPENAI_EMBEDDING_DEPLOYMENT` | Embedding model deployment | - | No (for RAG) |
-| `REDIS_HOST` | Redis host address | - | Yes |
+| `AZURE_OPENAI_EMBEDDING_DEPLOYMENT` | Embedding model deployment | - | Yes (for RAG) |
+| `REDIS_HOST` | Redis host address | - | No (recommended) |
+| `REDIS_PASSWORD` | Redis password | - | No (if Redis enabled) |
 | `REDIS_PORT` | Redis port | `6380` | No |
-| `REDIS_PASSWORD` | Redis password | - | Yes |
 | `REDIS_SSL` | Enable SSL | `true` | No |
-| `APP_LOG_LEVEL` | Logging level | `INFO` | No |
-| `APP_CACHE_TTL_SENTIMENT` | Sentiment cache TTL (seconds) | `86400` | No |
-| `APP_CACHE_TTL_STOCK` | Stock data cache TTL (seconds) | `300` | No |
-| `APP_CACHE_TTL_NEWS` | News cache TTL (seconds) | `1800` | No |
+| `AZURE_AI_SEARCH_ENDPOINT` | Azure AI Search endpoint | - | No (recommended for RAG) |
+| `AZURE_AI_SEARCH_API_KEY` | Azure AI Search API key | - | No (if Azure AI Search enabled) |
+| `AZURE_AI_SEARCH_INDEX_NAME` | Index name | `stock-articles` | No |
+
+All other settings have sensible defaults and can be adjusted through the application UI. See `.env.example` for a complete list.
 
 ## Troubleshooting
 
@@ -366,7 +425,10 @@ Streamlit Dashboard → Display Results
 
 - Verify embedding model is deployed: `AZURE_OPENAI_EMBEDDING_DEPLOYMENT`
 - Check deployment name matches your Azure resource
+- Verify Azure AI Search is configured (optional but recommended)
+- Check operation summary in sidebar for RAG usage statistics
 - Run `./scripts/add-embedding-model.sh` to add embedding model
+- Disable sentiment cache in sidebar to force RAG usage for testing
 
 ### Import Errors
 
@@ -395,10 +457,17 @@ Contributions are welcome! Please follow these steps:
 
 This project is licensed under the MIT License - see the LICENSE file for details.
 
+## Documentation
+
+- **[Complete Documentation](docs/index.md)**: Comprehensive guide with examples, algorithms, and mathematical formulas
+- **[Architecture Documentation](docs/ARCHITECTURE.md)**: Detailed architecture, components, and data flows
+- **[Diagrams](docs/diagrams/)**: High-quality architecture diagrams
+
 ## Acknowledgments
 
 - [Streamlit](https://streamlit.io/) for the dashboard framework
 - [Azure OpenAI](https://azure.microsoft.com/en-us/products/cognitive-services/openai-service/) for AI capabilities
+- [Azure AI Search](https://azure.microsoft.com/en-us/products/ai-services/ai-search/) for vector search
 - [yfinance](https://github.com/ranaroussi/yfinance) for stock data
 - [Plotly](https://plotly.com/) for interactive visualizations
 

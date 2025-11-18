@@ -154,8 +154,8 @@ class RedisCache:
                 ssl=redis_config.ssl,
                 ssl_cert_reqs=None,
                 decode_responses=True,
-                socket_connect_timeout=5,
-                socket_timeout=5
+                socket_connect_timeout=self.settings.app.redis_connect_timeout,
+                socket_timeout=self.settings.app.redis_socket_timeout
             )
             
             # Test connection
@@ -321,8 +321,12 @@ class RedisCache:
             ttl: Time to live in seconds (default: from settings)
             
         Returns:
-            True if cached successfully
+            True if cached successfully, False if caching is disabled
         """
+        # Check if sentiment caching is enabled
+        if not self.settings.app.cache_sentiment_enabled:
+            return False
+        
         if ttl is None:
             ttl = self.settings.app.cache_ttl_sentiment
         
@@ -337,8 +341,12 @@ class RedisCache:
             text: Original text that was analyzed
             
         Returns:
-            Cached sentiment scores or None
+            Cached sentiment scores or None (or None if sentiment caching is disabled)
         """
+        # Check if sentiment caching is enabled
+        if not self.settings.app.cache_sentiment_enabled:
+            return None
+        
         key = self._generate_key("sentiment", text)
         return self.get(key)
     

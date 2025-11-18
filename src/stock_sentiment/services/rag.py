@@ -16,7 +16,7 @@ from ..utils.logger import get_logger
 from ..utils.retry import retry_with_exponential_backoff
 from ..utils.preprocessing import preprocess_text, is_financial_text
 from .cache import RedisCache
-from .reranker import CrossEncoderReranker
+from .vector_db import AzureAISearchVectorDB
 
 logger = get_logger(__name__)
 
@@ -48,7 +48,7 @@ class RAGService:
         self,
         settings: Optional[Settings] = None,
         redis_cache: Optional[RedisCache] = None,
-        reranker: Optional[CrossEncoderReranker] = None
+        vector_db: Optional[AzureAISearchVectorDB] = None
     ):
         """
         Initialize RAG service with Azure OpenAI and Redis cache.
@@ -56,6 +56,7 @@ class RAGService:
         Args:
             settings: Application settings (uses global if not provided)
             redis_cache: Redis cache instance for storing embeddings
+            vector_db: Optional Azure AI Search vector database (replaces Redis SCAN for vector search)
             
         Raises:
             ValueError: If Azure OpenAI configuration is invalid
@@ -64,8 +65,19 @@ class RAGService:
         self.cache = redis_cache
         self.embeddings_enabled = False
         self.embedding_deployment = None
-        # Reranker disabled by default due to performance impact
-        self.reranker = reranker or CrossEncoderReranker(settings=self.settings, enabled=False)
+        
+        # Initialize Azure AI Search vector database if available
+        if vector_db is None and self.settings.is_azure_ai_search_available():
+            try:
+                self.vector_db = AzureAISearchVectorDB(
+                    settings=self.settings,
+                    redis_cache=redis_cache
+                )
+            except Exception as e:
+                logger.warning(f"Failed to initialize Azure AI Search vector DB: {e}")
+                self.vector_db = None
+        else:
+            self.vector_db = vector_db
         
         # Initialize Azure OpenAI for embeddings
         azure_config = self.settings.azure_openai
@@ -107,7 +119,7 @@ class RAGService:
     def get_embeddings_batch(
         self, 
         texts: List[str], 
-        batch_size: int = 100,
+        batch_size: Optional[int] = None,
         use_cache: bool = True
     ) -> List[Optional[List[float]]]:
         """
@@ -130,6 +142,10 @@ class RAGService:
         """
         if not texts:
             return []
+        
+        # Use configured batch_size if not provided
+        if batch_size is None:
+            batch_size = self.settings.app.rag_batch_size
         
         if not self.embedding_deployment:
             logger.warning("No embedding deployment configured")
@@ -179,7 +195,12 @@ class RAGService:
                 batch = texts_to_fetch[i:i + batch_size]
                 batch_indices = fetch_indices[i:i + batch_size]
                 
-                @retry_with_exponential_backoff(max_attempts=3, initial_delay=1.0, max_delay=10.0)
+                @retry_with_exponential_backoff(
+                    max_attempts=self.settings.app.retry_max_attempts,
+                    initial_delay=self.settings.app.retry_initial_delay,
+                    max_delay=self.settings.app.retry_max_delay,
+                    exponential_base=self.settings.app.retry_exponential_base
+                )
                 def _get_batch_embeddings_internal():
                     return self.client.embeddings.create(
                         model=self.embedding_deployment,
@@ -247,7 +268,12 @@ class RAGService:
                 except Exception as e:
                     logger.warning(f"Error loading cached embedding: {e}")
         
-        @retry_with_exponential_backoff(max_attempts=3, initial_delay=1.0, max_delay=10.0)
+        @retry_with_exponential_backoff(
+            max_attempts=self.settings.app.retry_max_attempts,
+            initial_delay=self.settings.app.retry_initial_delay,
+            max_delay=self.settings.app.retry_max_delay,
+            exponential_base=self.settings.app.retry_exponential_base
+        )
         def _get_embedding_internal():
             return self.client.embeddings.create(
                 model=self.embedding_deployment,
@@ -277,7 +303,7 @@ class RAGService:
         self, 
         articles: List[Dict], 
         symbol: str,
-        batch_size: int = 100
+        batch_size: Optional[int] = None
     ) -> int:
         """
         Store multiple articles with batch embedding generation (industry best practice).
@@ -304,6 +330,10 @@ class RAGService:
         if not articles:
             logger.warning(f"Cannot store articles: empty articles list provided for {symbol}")
             return 0
+        
+        # Use configured batch_size if not provided
+        if batch_size is None:
+            batch_size = self.settings.app.rag_batch_size
         
         stored_count = 0
         
@@ -356,47 +386,126 @@ class RAGService:
             return 0
         
         # Generate embeddings in batches
+        logger.info(f"RAG Storage: Generating embeddings for {len(article_texts)} articles (symbol={symbol}, batch_size={batch_size})")
         embeddings = self.get_embeddings_batch(article_texts, batch_size=batch_size, use_cache=False)
         
-        # Store articles with their embeddings
-        ttl = 86400 * 7  # 7 days
+        # Count successful embeddings
+        valid_embeddings = sum(1 for e in embeddings if e is not None)
+        logger.info(f"RAG Storage: Generated {valid_embeddings}/{len(article_texts)} embeddings successfully")
         
-        for metadata, embedding in zip(article_metadata, embeddings):
-            if embedding is None:
-                logger.warning(f"Failed to generate embedding for article: {metadata['article_id'][:8]}")
-                continue
+        # Use Azure AI Search if available, otherwise fallback to Redis
+        if self.vector_db and self.vector_db.is_available():
+            logger.info(f"RAG Storage: Using Azure AI Search for {len(article_texts)} articles (symbol={symbol})")
             
-            try:
+            # Store in Azure AI Search
+            vectors_to_store = []
+            for metadata, embedding in zip(article_metadata, embeddings):
+                if embedding is None:
+                    logger.warning(f"RAG Storage: Skipping article (no embedding): {metadata['article_id'][:8]}")
+                    continue
+                
                 article = metadata['article']
                 article_id = metadata['article_id']
+                
+                # Create vector ID (must be unique across all symbols)
+                vector_id = f"{symbol}:{article_id}"
+                
+                # Prepare metadata with proper timestamp handling
+                timestamp = article.get('timestamp', '')
+                if timestamp:
+                    # Convert datetime to ISO format string if needed
+                    if hasattr(timestamp, 'isoformat'):
+                        timestamp_str = timestamp.isoformat()
+                    else:
+                        timestamp_str = str(timestamp)
+                else:
+                    timestamp_str = ''
                 
                 # Prepare metadata
                 article_meta = {
                     'article_id': article_id,
                     'symbol': symbol,
-                    'title': article.get('title', ''),
-                    'summary': article.get('summary', ''),
-                    'source': article.get('source', ''),
-                    'url': article.get('url', ''),
-                    'timestamp': str(article.get('timestamp', ''))
+                    'title': article.get('title', '') or '',
+                    'summary': article.get('summary', '') or '',
+                    'source': article.get('source', '') or 'Unknown',
+                    'url': article.get('url', '') or '',
+                    'timestamp': timestamp_str
                 }
                 
-                # Store embedding and metadata
-                embedding_key = f"embedding:{symbol}:{article_id}"
-                metadata_key = f"article:{symbol}:{article_id}"
+                # Log article being stored with full details
+                title_preview = article_meta['title'][:50] if article_meta['title'] else 'No title'
+                logger.info(
+                    f"RAG Storage: Preparing article [{article_id[:8]}] for {symbol} - "
+                    f"'{title_preview}...' | Source: {article_meta['source']} | "
+                    f"Timestamp: {timestamp_str[:19] if timestamp_str else 'None'} | "
+                    f"Vector ID: {vector_id[:20]}..."
+                )
                 
-                # Use pipeline for atomic operations
-                pipe = self.cache.client.pipeline()
-                pipe.setex(embedding_key, ttl, json.dumps(embedding))
-                pipe.setex(metadata_key, ttl, json.dumps(article_meta, default=str))
-                pipe.setex(metadata['duplicate_key'], ttl, "1")  # Mark as stored
-                pipe.execute()
+                vectors_to_store.append({
+                    'vector_id': vector_id,
+                    'vector': embedding,
+                    'metadata': article_meta
+                })
+            
+            # Batch store in Azure AI Search
+            logger.info(f"RAG Storage: Batch storing {len(vectors_to_store)} vectors in Azure AI Search for {symbol}")
+            stored_count = self.vector_db.batch_store_vectors(vectors_to_store)
+            logger.info(f"RAG Storage: ✅ Successfully stored {stored_count}/{len(vectors_to_store)} articles in Azure AI Search for {symbol}")
+            
+            if stored_count < len(vectors_to_store):
+                logger.warning(f"RAG Storage: ⚠️ Only {stored_count}/{len(vectors_to_store)} articles stored successfully")
+            
+            # Also mark as stored in Redis for duplicate checking (if Redis available)
+            if self.cache and self.cache.client:
+                ttl = self.settings.app.cache_ttl_rag_articles
+                for metadata in article_metadata:
+                    try:
+                        self.cache.client.setex(metadata['duplicate_key'], ttl, "1")
+                    except Exception:
+                        pass  # Non-critical
+        else:
+            # Fallback to Redis storage (original implementation)
+            logger.info(f"RAG Storage: Using Redis fallback for {len(article_texts)} articles (symbol={symbol}, Azure AI Search not available)")
+            ttl = self.settings.app.cache_ttl_rag_articles
+            
+            for metadata, embedding in zip(article_metadata, embeddings):
+                if embedding is None:
+                    logger.warning(f"Failed to generate embedding for article: {metadata['article_id'][:8]}")
+                    continue
                 
-                stored_count += 1
-                
-            except Exception as e:
-                logger.error(f"Error storing article in batch: {e}")
-                continue
+                try:
+                    article = metadata['article']
+                    article_id = metadata['article_id']
+                    
+                    # Prepare metadata
+                    article_meta = {
+                        'article_id': article_id,
+                        'symbol': symbol,
+                        'title': article.get('title', ''),
+                        'summary': article.get('summary', ''),
+                        'source': article.get('source', ''),
+                        'url': article.get('url', ''),
+                        'timestamp': str(article.get('timestamp', ''))
+                    }
+                    
+                    # Store embedding and metadata
+                    embedding_key = f"embedding:{symbol}:{article_id}"
+                    metadata_key = f"article:{symbol}:{article_id}"
+                    
+                    # Use pipeline for atomic operations
+                    pipe = self.cache.client.pipeline()
+                    pipe.setex(embedding_key, ttl, json.dumps(embedding))
+                    pipe.setex(metadata_key, ttl, json.dumps(article_meta, default=str))
+                    pipe.setex(metadata['duplicate_key'], ttl, "1")  # Mark as stored
+                    pipe.execute()
+                    
+                    stored_count += 1
+                    
+                except Exception as e:
+                    logger.error(f"Error storing article in batch: {e}")
+                    continue
+            
+            logger.info(f"RAG Storage: Stored {stored_count}/{len(article_texts)} articles in Redis")
         
         if stored_count == 0:
             logger.error(
@@ -618,6 +727,105 @@ class RAGService:
         expanded_query = " ".join(unique_terms)
         return expanded_query
     
+    def _build_filter_string(
+        self,
+        symbol: str,
+        date_range: Optional[tuple] = None,
+        sources: Optional[List[str]] = None,
+        exclude_sources: Optional[List[str]] = None,
+        days_back: Optional[int] = None
+    ) -> Optional[str]:
+        """
+        Build OData filter string for Azure AI Search.
+        
+        Args:
+            symbol: Stock ticker symbol
+            date_range: Optional tuple of (start_date, end_date) as datetime objects
+            sources: Optional list of source names to include
+            exclude_sources: Optional list of source names to exclude
+            days_back: Optional number of days to look back (convenience parameter)
+            
+        Returns:
+            OData filter string or None if no filters needed
+        """
+        if not self.vector_db or not self.vector_db.is_available():
+            return None
+        
+        filters = []
+        filter_details = []
+        
+        # Always filter by symbol (safely escape)
+        escaped_symbol = str(symbol).replace("'", "''")
+        filters.append(f"symbol eq '{escaped_symbol}'")
+        filter_details.append(f"symbol={symbol}")
+        
+        # Date range filter
+        if days_back:
+            from datetime import datetime, timedelta
+            end_date = datetime.now()
+            start_date = end_date - timedelta(days=days_back)
+            try:
+                filters.append(f"timestamp ge {start_date.isoformat()}Z")
+                filters.append(f"timestamp le {end_date.isoformat()}Z")
+                filter_details.append(f"date_range=last_{days_back}_days")
+                logger.info(f"RAG Filter: Applying date filter - last {days_back} days")
+            except Exception as e:
+                logger.error(f"RAG Filter: Error building date filter: {e}")
+        elif date_range:
+            start_date, end_date = date_range
+            if start_date:
+                try:
+                    if hasattr(start_date, 'isoformat'):
+                        filters.append(f"timestamp ge {start_date.isoformat()}Z")
+                        filter_details.append(f"start_date={start_date.strftime('%Y-%m-%d')}")
+                    else:
+                        logger.warning(f"RAG Filter: Invalid start_date type: {type(start_date)}")
+                except Exception as e:
+                    logger.error(f"RAG Filter: Error formatting start_date: {e}")
+            if end_date:
+                try:
+                    if hasattr(end_date, 'isoformat'):
+                        filters.append(f"timestamp le {end_date.isoformat()}Z")
+                        filter_details.append(f"end_date={end_date.strftime('%Y-%m-%d')}")
+                    else:
+                        logger.warning(f"RAG Filter: Invalid end_date type: {type(end_date)}")
+                except Exception as e:
+                    logger.error(f"RAG Filter: Error formatting end_date: {e}")
+            if start_date or end_date:
+                start_str = start_date.strftime('%Y-%m-%d') if start_date and hasattr(start_date, 'strftime') else 'any'
+                end_str = end_date.strftime('%Y-%m-%d') if end_date and hasattr(end_date, 'strftime') else 'any'
+                logger.info(f"RAG Filter: Applying custom date range - {start_str} to {end_str}")
+        
+        # Source filters (safely escape source names)
+        if sources:
+            source_filters = []
+            for s in sources:
+                if s:  # Only add non-empty sources
+                    escaped_source = str(s).replace("'", "''")
+                    source_filters.append(f"source eq '{escaped_source}'")
+            if source_filters:
+                filters.append(f"({' or '.join(source_filters)})")
+                filter_details.append(f"sources={', '.join(sources)}")
+                logger.info(f"RAG Filter: Including sources - {', '.join(sources)}")
+        
+        if exclude_sources:
+            exclude_filters = []
+            for s in exclude_sources:
+                if s:  # Only add non-empty sources
+                    escaped_source = str(s).replace("'", "''")
+                    exclude_filters.append(f"source ne '{escaped_source}'")
+            if exclude_filters:
+                filters.extend(exclude_filters)
+                filter_details.append(f"exclude_sources={', '.join(exclude_sources)}")
+                logger.info(f"RAG Filter: Excluding sources - {', '.join(exclude_sources)}")
+        
+        filter_string = " and ".join(filters) if filters else None
+        if filter_string:
+            logger.info(f"RAG Filter: Built OData filter for {symbol} - {', '.join(filter_details)}")
+            logger.debug(f"RAG Filter: Full OData filter string: {filter_string}")
+        
+        return filter_string
+    
     def retrieve_relevant_context(
         self,
         query: str,
@@ -625,7 +833,11 @@ class RAGService:
         top_k: Optional[int] = None,
         use_hybrid: bool = True,
         apply_temporal_decay: bool = True,
-        expand_query: bool = True
+        expand_query: bool = True,
+        date_range: Optional[tuple] = None,
+        sources: Optional[List[str]] = None,
+        exclude_sources: Optional[List[str]] = None,
+        days_back: Optional[int] = None
     ) -> List[Dict]:
         """
         Retrieve relevant articles for RAG context using hybrid search.
@@ -643,6 +855,10 @@ class RAGService:
             use_hybrid: Whether to use hybrid search (default: True)
             apply_temporal_decay: Whether to boost recent articles (default: True)
             expand_query: Whether to expand query with related terms (default: True)
+            date_range: Optional tuple of (start_date, end_date) as datetime objects
+            sources: Optional list of source names to include
+            exclude_sources: Optional list of source names to exclude
+            days_back: Optional number of days to look back (convenience parameter)
             
         Returns:
             List of article metadata dictionaries with similarity scores
@@ -652,9 +868,11 @@ class RAGService:
             logger.warning("RAG retrieval skipped: embeddings not enabled and hybrid search disabled")
             return []
         
-        if not self.cache or not self.cache.client:
-            logger.warning("RAG retrieval skipped: Redis cache not available for context retrieval")
-            return []
+        # Check if Azure AI Search is available, otherwise check Redis
+        if not self.vector_db or not self.vector_db.is_available():
+            if not self.cache or not self.cache.client:
+                logger.warning("RAG retrieval skipped: No vector database or Redis cache available")
+                return []
         
         if top_k is None:
             top_k = self.settings.app.rag_top_k
@@ -665,7 +883,109 @@ class RAGService:
         else:
             expanded_query = query
         
+        # Build filter string for Azure AI Search
+        filter_string = None
+        if self.vector_db and self.vector_db.is_available():
+            filter_string = self._build_filter_string(
+                symbol=symbol,
+                date_range=date_range,
+                sources=sources,
+                exclude_sources=exclude_sources,
+                days_back=days_back
+            )
+        
         try:
+            # Use Azure AI Search if available
+            if self.vector_db and self.vector_db.is_available():
+                logger.info(f"RAG Retrieval: Using Azure AI Search for retrieval (symbol={symbol}, top_k={top_k}, hybrid={use_hybrid})")
+                logger.info(f"RAG Retrieval: Query: '{query[:100] if query else 'empty'}...'")
+                logger.info(f"RAG Retrieval: Expanded query: '{expanded_query[:100] if expanded_query else 'empty'}...'")
+                
+                # Get query embedding
+                logger.info(f"RAG Retrieval: Generating embedding for query...")
+                query_embedding = self.get_embedding(expanded_query)
+                if not query_embedding:
+                    logger.warning("RAG Retrieval: ❌ Failed - Could not get query embedding")
+                    return []
+                logger.info(f"RAG Retrieval: ✅ Query embedding generated (dimension: {len(query_embedding) if query_embedding else 0})")
+                
+                # Use hybrid search if enabled, otherwise pure vector search
+                if use_hybrid:
+                    query_preview = query[:50] if query and len(query) > 50 else query
+                    logger.info(f"RAG Retrieval: Performing hybrid search (vector + keyword) for query: '{query_preview}...' (symbol={symbol})")
+                    if filter_string:
+                        logger.info(f"RAG Retrieval: Filter applied - {filter_string[:100]}...")
+                    results = self.vector_db.hybrid_search(
+                        query_text=query,
+                        query_vector=query_embedding,
+                        top_k=top_k * 2,  # Get more for filtering
+                        filter=filter_string
+                    )
+                    logger.info(f"RAG Retrieval: Hybrid search returned {len(results)} raw results for {symbol}")
+                    
+                    # Log details of retrieved articles
+                    if results:
+                        logger.info(f"RAG Retrieval: ✅ Retrieved {len(results)} articles for {symbol}:")
+                        for i, result in enumerate(results[:5], 1):  # Log top 5
+                            title = result.get('title') or 'No title'
+                            score = result.get('rrf_score') or result.get('similarity') or 0.0
+                            source = result.get('source') or 'Unknown'
+                            article_id = result.get('article_id') or 'Unknown'
+                            symbol_found = result.get('symbol') or 'Unknown'
+                            logger.info(f"  [{i}] Score: {score:.3f} | Symbol: {symbol_found} | Source: {source} | ID: {article_id[:8]} | Title: {title[:60]}")
+                    else:
+                        logger.warning(f"RAG Retrieval: ⚠️ No articles found for {symbol} with query '{query_preview}...'")
+                        logger.warning(f"RAG Retrieval: Possible reasons:")
+                        logger.warning(f"  1. Articles may not be indexed yet (Azure AI Search indexing delay)")
+                        logger.warning(f"  2. Filter may be too restrictive")
+                        logger.warning(f"  3. Query may not match stored articles")
+                        if filter_string:
+                            logger.warning(f"RAG Retrieval: Current filter: {filter_string}")
+                        logger.warning(f"RAG Retrieval: Try searching without filters or wait a few seconds for indexing")
+                else:
+                    logger.info(f"RAG: Performing vector search for query: '{query[:50]}...'")
+                    results = self.vector_db.search_vectors(
+                        query_vector=query_embedding,
+                        top_k=top_k * 2,
+                        filter=filter_string
+                    )
+                    logger.info(f"RAG: Vector search returned {len(results)} results")
+                
+                # Apply similarity threshold
+                similarity_threshold = self.settings.app.rag_similarity_threshold
+                filtered_results = []
+                for r in results:
+                    score = r.get('rrf_score') or r.get('similarity') or 0.0
+                    if score >= similarity_threshold:
+                        filtered_results.append(r)
+                    else:
+                        title = r.get('title') or 'No title'
+                        logger.debug(f"RAG Filter: Excluded article (score {score:.3f} < threshold {similarity_threshold}): '{title[:50]}...'")
+                
+                if len(results) > len(filtered_results):
+                    logger.info(f"RAG Filter: Similarity threshold ({similarity_threshold}) filtered {len(results) - len(filtered_results)} results, {len(filtered_results)} remaining")
+                
+                # Apply temporal decay if enabled (for Redis fallback compatibility)
+                if apply_temporal_decay and filtered_results:
+                    logger.info(f"RAG Filter: Applying temporal decay to {len(filtered_results)} results")
+                    filtered_results = self._apply_temporal_decay(filtered_results)
+                
+                # Return top_k
+                final_results = filtered_results[:top_k]
+                logger.info(f"RAG Retrieval: ✅ Returning {len(final_results)} articles for context (requested: {top_k}, symbol={symbol})")
+                if final_results:
+                    top_title = final_results[0].get('title') or 'N/A'
+                    top_score = final_results[0].get('rrf_score') or final_results[0].get('similarity') or 0.0
+                    top_source = final_results[0].get('source') or 'Unknown'
+                    logger.info(f"RAG Retrieval: Top article - '{top_title[:60]}...' (score: {top_score:.3f}, source: {top_source})")
+                else:
+                    logger.warning(f"RAG Retrieval: ⚠️ No articles returned after filtering (symbol={symbol}, threshold={similarity_threshold})")
+                
+                return final_results
+            
+            # Fallback to Redis SCAN-based search (original implementation)
+            logger.info(f"RAG: Using Redis SCAN fallback for retrieval (symbol={symbol}, top_k={top_k}, Azure AI Search not available)")
+            
             # Hybrid search: combine semantic and keyword search
             if use_hybrid and self.embeddings_enabled:
                 # Perform both semantic and keyword search
@@ -697,7 +1017,7 @@ class RAGService:
                         # RRF scores are typically 0.01-0.15, so if threshold > max_score, auto-lower it
                         if similarity_threshold > max_score and max_score > 0:
                             # Use a threshold slightly below the max score to allow some results through
-                            adjusted_threshold = max(0.01, max_score * 0.8)  # 80% of max score
+                            adjusted_threshold = max(0.01, max_score * self.settings.app.rag_similarity_auto_adjust_multiplier)
                             logger.warning(
                                 f"Similarity threshold {similarity_threshold} too high (max score: {max_score:.3f}). "
                                 f"Auto-adjusting to {adjusted_threshold:.3f}"
@@ -713,15 +1033,11 @@ class RAGService:
                                 f"(max score: {max_score:.3f}). Consider lowering threshold in .env file."
                             )
                     
-                    results = filtered_results[:top_k * 2]  # Get more for reranking
+                    results = filtered_results[:top_k]
                     
                     # Apply temporal decay (boost recent articles) - improves relevance for time-sensitive financial news
                     if apply_temporal_decay and results:
                         results = self._apply_temporal_decay(results)
-                    
-                    # Re-rank using cross-encoder for better precision (disabled by default due to performance)
-                    if self.reranker and self.reranker.enabled and len(results) > top_k:
-                        results = self.reranker.rerank(query, results, top_k=top_k)
                     
                     # Ensure we only return top_k
                     results = results[:top_k]
@@ -929,8 +1245,9 @@ class RAGService:
                 age_days = (now - article_time.replace(tzinfo=None)).days
                 
                 # Apply decay: 1.0 for today, 0.5 for 7 days ago, 0.1 for 30+ days
-                # Formula: decay = 1.0 / (1 + age_days / 7)
-                decay = max(0.1, 1.0 / (1 + age_days / 7))
+                # Formula: decay = 1.0 / (1 + age_days / decay_days)
+                decay_days = self.settings.app.rag_temporal_decay_days
+                decay = max(0.1, 1.0 / (1 + age_days / decay_days))
                 
                 # Boost score by 20% for recency (weighted by decay)
                 current_score = result.get('rrf_score', result.get('similarity', 0))
