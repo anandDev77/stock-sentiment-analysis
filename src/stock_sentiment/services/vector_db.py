@@ -580,6 +580,48 @@ class AzureAISearchVectorDB(VectorDatabase):
             logger.error(f"Error performing hybrid search in Azure AI Search: {e}")
             return []
     
+    def document_exists(self, vector_id: str) -> bool:
+        """
+        Check if a document exists in Azure AI Search by ID.
+        
+        Args:
+            vector_id: Document ID to check
+            
+        Returns:
+            True if document exists, False otherwise
+        """
+        if not self._client or not self._index_created:
+            return False
+        
+        try:
+            # Try to get the document by ID
+            result = self._client.get_document(key=vector_id)
+            return result is not None
+        except Exception:
+            # Document doesn't exist if get_document raises an exception
+            return False
+    
+    def batch_check_documents_exist(self, vector_ids: List[str]) -> Dict[str, bool]:
+        """
+        Check if multiple documents exist in Azure AI Search.
+        
+        Args:
+            vector_ids: List of document IDs to check
+            
+        Returns:
+            Dictionary mapping vector_id to existence status
+        """
+        if not self._client or not self._index_created:
+            return {vid: False for vid in vector_ids}
+        
+        results = {}
+        # Azure AI Search doesn't have batch get, so we check individually
+        # But we can optimize by checking in parallel if needed
+        for vector_id in vector_ids:
+            results[vector_id] = self.document_exists(vector_id)
+        
+        return results
+    
     def delete_vector(self, vector_id: str) -> bool:
         """Delete a vector by ID from Azure AI Search."""
         if not self._client or not self._index_created:

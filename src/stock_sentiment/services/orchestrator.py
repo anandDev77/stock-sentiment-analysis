@@ -113,38 +113,48 @@ def get_aggregated_sentiment(
         step1_start = time.time()
         logger.info(f"📊 STEP 1: Collecting stock data and news for {symbol}...")
         
+        # Check cache status BEFORE collection for accurate tracking
         if redis_cache:
-            redis_cache.last_tier_used = None
-            logger.info(f"   🔍 Checking Redis cache for stock data...")
-        
-        # Collect data with source filters
-        data = collector.collect_all_data(symbol, data_source_filters=data_source_filters)
-        
-        step1_time = time.time() - step1_start
-        logger.info(f"   ✅ Collected {len(data.get('news', []))} news articles in {step1_time:.2f}s")
-        
-        # Track cache status for stock data
-        if redis_cache:
+            logger.info(f"   🔍 Checking Redis cache for stock and news data...")
+            
+            # Check stock data cache
             redis_cache.last_tier_used = None
             cached_stock = redis_cache.get_cached_stock_data(symbol)
             if redis_cache.last_tier_used == "Redis":
                 operation_summary['redis_used'] = True
                 operation_summary['stock_cached'] = True
-                logger.info(f"[{symbol}] ✅ Stock data retrieved from Redis cache")
+                logger.info(f"   ✅ Stock data found in cache")
             else:
                 operation_summary['redis_used'] = True  # Redis was checked
                 operation_summary['stock_cached'] = False
-                logger.info(f"[{symbol}] 🔄 Stock data fetched fresh (cache miss)")
-        
-        # Track cache status for news data
-        if redis_cache:
+                logger.info(f"   🔄 Stock data not in cache (will fetch)")
+            
+            # Check news data cache
             redis_cache.last_tier_used = None
             cached_news = redis_cache.get_cached_news(symbol)
             if redis_cache.last_tier_used == "Redis":
                 operation_summary['news_cached'] = True
-                logger.info(f"[{symbol}] ✅ News data retrieved from Redis cache")
+                logger.info(f"   ✅ News data found in cache")
             else:
                 operation_summary['news_cached'] = False
+                logger.info(f"   🔄 News data not in cache (will fetch)")
+        
+        # Collect data with source filters (collector will use cache if available)
+        data = collector.collect_all_data(symbol, data_source_filters=data_source_filters)
+        
+        step1_time = time.time() - step1_start
+        logger.info(f"   ✅ Collected {len(data.get('news', []))} news articles in {step1_time:.2f}s")
+        
+        # Log final cache status
+        if redis_cache:
+            if operation_summary['stock_cached']:
+                logger.info(f"[{symbol}] ✅ Stock data retrieved from Redis cache")
+            else:
+                logger.info(f"[{symbol}] 🔄 Stock data fetched fresh (cache miss)")
+            
+            if operation_summary['news_cached']:
+                logger.info(f"[{symbol}] ✅ News data retrieved from Redis cache")
+            else:
                 logger.info(f"[{symbol}] 🔄 News data fetched fresh (cache miss)")
         
         # Show data source breakdown
@@ -173,10 +183,11 @@ def get_aggregated_sentiment(
         if rag_service and data['news']:
             article_count = len(data['news'])
             logger.info(f"   📝 Preparing {article_count} articles for RAG storage...")
-            stored = rag_service.store_articles_batch(data['news'], symbol)
-            operation_summary['articles_stored'] += stored
+            total_in_rag = rag_service.store_articles_batch(data['news'], symbol)
+            operation_summary['articles_stored'] += total_in_rag
             step2_time = time.time() - step2_start
-            logger.info(f"   ✅ Stored {stored}/{article_count} articles in RAG ({step2_time:.2f}s)")
+            # total_in_rag includes both existing and newly stored articles
+            logger.info(f"   ✅ Total articles in RAG: {total_in_rag}/{article_count} ({step2_time:.2f}s)")
         else:
             if not rag_service:
                 logger.info(f"   ⚠️ RAG service not available - skipping storage")
@@ -197,9 +208,9 @@ def get_aggregated_sentiment(
                     'url': post.get('url', ''),
                     'timestamp': post.get('timestamp', datetime.now())
                 })
-            stored_reddit = rag_service.store_articles_batch(reddit_articles, symbol)
-            operation_summary['articles_stored'] += stored_reddit
-            logger.info(f"   ✅ Stored {stored_reddit}/{reddit_count} Reddit posts in RAG")
+            total_reddit_in_rag = rag_service.store_articles_batch(reddit_articles, symbol)
+            operation_summary['articles_stored'] += total_reddit_in_rag
+            logger.info(f"   ✅ Total Reddit posts in RAG: {total_reddit_in_rag}/{reddit_count}")
         
         # Step 3: Analyze sentiment
         step3_start = time.time()

@@ -668,11 +668,20 @@ class StockDataCollector:
         
         # Primary source: yfinance (always enabled)
         if data_source_filters.get("yfinance", True):
-            logger.info(f"   📰 Fetching from Yahoo Finance (yfinance)...")
+            # Track cache status before calling get_news_headlines
+            # (it checks cache internally, but we want to know the result)
+            if self.cache:
+                self.cache.last_tier_used = None
+            
             yf_news = self.get_news_headlines(symbol)
             all_news.extend(yf_news)
             source_counts["yfinance"] = len(yf_news)
-            logger.info(f"   ✅ Yahoo Finance: fetched {len(yf_news)} articles")
+            
+            # Log summary based on whether cache was used
+            if self.cache and self.cache.last_tier_used == "Redis":
+                logger.info(f"   ✅ Yahoo Finance: Retrieved {len(yf_news)} articles (from cache)")
+            else:
+                logger.info(f"   ✅ Yahoo Finance: Fetched {len(yf_news)} articles (from API)")
         else:
             source_counts["yfinance"] = 0
             logger.info("   ❌ Yahoo Finance: disabled by filter")
@@ -680,11 +689,12 @@ class StockDataCollector:
         # Additional sources if enabled in both settings and filters
         av_news = []
         if data_source_filters.get("alpha_vantage", False) and self.settings.data_sources.alpha_vantage_enabled:
-            logger.info(f"   📰 Fetching from Alpha Vantage...")
+            # Alpha Vantage doesn't have cache check in get_alpha_vantage_news, so always fetch
+            logger.info(f"   📰 Alpha Vantage: Fetching from API...")
             av_news = self.get_alpha_vantage_news(symbol)
             all_news.extend(av_news)
             source_counts["alpha_vantage"] = len(av_news)
-            logger.info(f"   ✅ Alpha Vantage: fetched {len(av_news)} articles")
+            logger.info(f"   ✅ Alpha Vantage: Fetched {len(av_news)} articles")
         else:
             source_counts["alpha_vantage"] = 0
             if not data_source_filters.get("alpha_vantage", False):
@@ -694,11 +704,12 @@ class StockDataCollector:
         
         fh_news = []
         if data_source_filters.get("finnhub", False) and self.settings.data_sources.finnhub_enabled:
-            logger.info(f"   📰 Fetching from Finnhub...")
+            # Finnhub doesn't have cache check in get_finnhub_news, so always fetch
+            logger.info(f"   📰 Finnhub: Fetching from API...")
             fh_news = self.get_finnhub_news(symbol)
             all_news.extend(fh_news)
             source_counts["finnhub"] = len(fh_news)
-            logger.info(f"   ✅ Finnhub: fetched {len(fh_news)} articles")
+            logger.info(f"   ✅ Finnhub: Fetched {len(fh_news)} articles")
         else:
             source_counts["finnhub"] = 0
             if not data_source_filters.get("finnhub", False):
@@ -737,9 +748,10 @@ class StockDataCollector:
         # Get Reddit data if enabled
         reddit_posts = []
         if data_source_filters.get("reddit", False) and self.settings.data_sources.reddit_enabled:
-            logger.info(f"   📰 Fetching from Reddit...")
+            # Reddit doesn't have cache check in get_reddit_sentiment_data, so always fetch
+            logger.info(f"   📰 Reddit: Fetching from API...")
             reddit_posts = self.get_reddit_sentiment_data(symbol)
-            logger.info(f"   ✅ Reddit: fetched {len(reddit_posts)} posts")
+            logger.info(f"   ✅ Reddit: Fetched {len(reddit_posts)} posts")
         else:
             if not data_source_filters.get("reddit", False):
                 logger.info("   ❌ Reddit: disabled by filter")

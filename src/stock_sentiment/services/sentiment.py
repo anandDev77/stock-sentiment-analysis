@@ -356,7 +356,8 @@ Respond ONLY with valid JSON. No explanations, no markdown, just the JSON object
                         sentiment_scores.to_dict(),
                         ttl=self.settings.app.cache_ttl_sentiment
                     )
-                    logger.info(f"Sentiment Analysis: Cached result (TTL: {self.settings.app.cache_ttl_sentiment}s)")
+                    if cached:
+                        logger.info(f"   💾 Result cached (TTL: {self.settings.app.cache_ttl_sentiment}s)")
                 
                 logger.info(
                     f"Sentiment Analysis: Result - Positive: {sentiment_scores.positive:.2f}, "
