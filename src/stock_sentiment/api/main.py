@@ -44,7 +44,7 @@ app = FastAPI(
     - **Caching**: Redis caching for improved performance
     - **Hybrid search**: Semantic + keyword search for better context retrieval
     """,
-    version="2.0.0",
+    version="1.0.0",
     docs_url="/docs",
     redoc_url="/redoc",
     openapi_url="/openapi.json"

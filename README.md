@@ -188,19 +188,43 @@ If you prefer to set up resources manually:
 
 ## Running the Application
 
+The application consists of two components:
+1. **FastAPI Backend Server** - REST API for sentiment analysis
+2. **Streamlit Dashboard** - Web interface for visualization
+
+### Start the API Server
+
+The API server must be running before starting the dashboard:
+
+```bash
+# Using uvicorn directly
+cd src/stock_sentiment
+uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
+
+# Or using make (if available)
+make run-api
+```
+
+The API server will be available at:
+- **API**: `http://localhost:8000`
+- **API Docs**: `http://localhost:8000/docs`
+- **ReDoc**: `http://localhost:8000/redoc`
+
+**Note**: The dashboard requires the API server to be running. If the API is not available, the dashboard will show an error.
+
 ### Start the Dashboard
 
 ```bash
-# Using streamlit directly (recommended)
+# Using streamlit directly
 streamlit run src/stock_sentiment/app.py
 
 # Or using make
 make run
 ```
 
-**Note**: The application is now located in `src/stock_sentiment/app.py` as part of the refactored structure.
+The dashboard will be available at `http://localhost:8501`
 
-The application will be available at `http://localhost:8501`
+**Note**: The application is now located in `src/stock_sentiment/app.py` as part of the refactored structure.
 
 ### Using the Dashboard
 
@@ -461,6 +485,7 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 - **[Complete Documentation](docs/index.md)**: Comprehensive guide with examples, algorithms, and mathematical formulas
 - **[Architecture Documentation](docs/ARCHITECTURE.md)**: Detailed architecture, components, and data flows
+- **[API Documentation](docs/API.md)**: REST API reference and examples
 - **[Diagrams](docs/diagrams/)**: High-quality architecture diagrams
 
 ## Acknowledgments
