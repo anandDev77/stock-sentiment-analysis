@@ -59,21 +59,28 @@ app.add_middleware(
 # Request logging middleware
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
-    """Log all API requests."""
+    """Log all API requests with timing."""
     start_time = time.time()
     
+    # Skip logging for health checks and docs (too noisy)
+    if request.url.path in ["/health", "/docs", "/redoc", "/openapi.json", "/favicon.ico"]:
+        response = await call_next(request)
+        return response
+    
     # Log request
-    logger.info(f"API Request: {request.method} {request.url.path}")
+    logger.info(f"🌐 API Request: {request.method} {request.url.path}")
     if request.query_params:
-        logger.debug(f"Query params: {request.query_params}")
+        params_str = "&".join([f"{k}={v}" for k, v in request.query_params.items()])
+        logger.info(f"   📋 Query params: {params_str}")
     
     # Process request
     response = await call_next(request)
     
     # Log response
     process_time = time.time() - start_time
+    status_emoji = "✅" if 200 <= response.status_code < 300 else "⚠️" if 300 <= response.status_code < 400 else "❌"
     logger.info(
-        f"API Response: {request.method} {request.url.path} - "
+        f"{status_emoji} API Response: {request.method} {request.url.path} - "
         f"Status: {response.status_code} - Time: {process_time:.3f}s"
     )
     

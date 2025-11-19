@@ -380,18 +380,29 @@ class RAGService:
         if not article_texts:
             if duplicates_count != len(articles):
                 logger.warning(
-                    f"No articles to store for {symbol}: "
+                    f"   ⚠️ No articles to store for {symbol}: "
                     f"{duplicates_count} duplicates, {empty_text_count} empty, {len(article_texts)} valid"
                 )
             return 0
         
+        # Log preparation summary
+        logger.info(f"   📊 Article Preparation Summary:")
+        logger.info(f"      • Total articles: {len(articles)}")
+        logger.info(f"      • Duplicates skipped: {duplicates_count}")
+        logger.info(f"      • Empty texts skipped: {empty_text_count}")
+        logger.info(f"      • Valid articles to store: {len(article_texts)}")
+        
         # Generate embeddings in batches
-        logger.info(f"RAG Storage: Generating embeddings for {len(article_texts)} articles (symbol={symbol}, batch_size={batch_size})")
+        logger.info(f"   🔄 Generating embeddings for {len(article_texts)} articles (batch_size={batch_size})...")
         embeddings = self.get_embeddings_batch(article_texts, batch_size=batch_size, use_cache=False)
         
         # Count successful embeddings
         valid_embeddings = sum(1 for e in embeddings if e is not None)
-        logger.info(f"RAG Storage: Generated {valid_embeddings}/{len(article_texts)} embeddings successfully")
+        failed_embeddings = len(article_texts) - valid_embeddings
+        logger.info(f"   ✅ Embedding Generation Complete:")
+        logger.info(f"      • Successful: {valid_embeddings}/{len(article_texts)}")
+        if failed_embeddings > 0:
+            logger.warning(f"      • Failed: {failed_embeddings}")
         
         # Use Azure AI Search if available, otherwise fallback to Redis
         if self.vector_db and self.vector_db.is_available():
@@ -432,13 +443,11 @@ class RAGService:
                     'timestamp': timestamp_str
                 }
                 
-                # Log article being stored with full details
+                # Log article being stored (debug level to avoid too much noise)
                 title_preview = article_meta['title'][:50] if article_meta['title'] else 'No title'
-                logger.info(
-                    f"RAG Storage: Preparing article [{article_id[:8]}] for {symbol} - "
-                    f"'{title_preview}...' | Source: {article_meta['source']} | "
-                    f"Timestamp: {timestamp_str[:19] if timestamp_str else 'None'} | "
-                    f"Vector ID: {vector_id[:20]}..."
+                logger.debug(
+                    f"      • Preparing article [{article_id[:8]}] - "
+                    f"'{title_preview}...' (source: {article_meta['source']})"
                 )
                 
                 vectors_to_store.append({
@@ -448,12 +457,15 @@ class RAGService:
                 })
             
             # Batch store in Azure AI Search
-            logger.info(f"RAG Storage: Batch storing {len(vectors_to_store)} vectors in Azure AI Search for {symbol}")
+            logger.info(f"   💾 Storing {len(vectors_to_store)} vectors in Azure AI Search...")
             stored_count = self.vector_db.batch_store_vectors(vectors_to_store)
-            logger.info(f"RAG Storage: ✅ Successfully stored {stored_count}/{len(vectors_to_store)} articles in Azure AI Search for {symbol}")
             
-            if stored_count < len(vectors_to_store):
-                logger.warning(f"RAG Storage: ⚠️ Only {stored_count}/{len(vectors_to_store)} articles stored successfully")
+            if stored_count == len(vectors_to_store):
+                logger.info(f"   ✅ Successfully stored all {stored_count} articles in Azure AI Search")
+            elif stored_count > 0:
+                logger.warning(f"   ⚠️ Partially stored: {stored_count}/{len(vectors_to_store)} articles")
+            else:
+                logger.error(f"   ❌ Failed to store any articles in Azure AI Search")
             
             # Also mark as stored in Redis for duplicate checking (if Redis available)
             if self.cache and self.cache.client:

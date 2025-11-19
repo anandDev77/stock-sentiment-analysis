@@ -125,10 +125,18 @@ async def get_sentiment(
             detail=f"Invalid stock symbol: {symbol}. {str(e)}"
         )
     
-    logger.info(f"API: Sentiment analysis request for {symbol}")
-    logger.info(f"API: Sources filter: {sources}")
-    logger.info(f"API: Cache enabled: {cache_enabled}")
-    logger.info(f"API: Detailed response: {detailed}")
+    import time
+    request_start = time.time()
+    
+    logger.info("=" * 80)
+    logger.info(f"🌐 API REQUEST: GET /sentiment/{symbol}")
+    logger.info("-" * 80)
+    logger.info(f"📋 Request Parameters:")
+    logger.info(f"   • Symbol: {symbol}")
+    logger.info(f"   • Sources filter: {sources or 'all enabled sources'}")
+    logger.info(f"   • Cache enabled: {'✅ YES' if cache_enabled else '❌ NO (RAG will be used)'}")
+    logger.info(f"   • Detailed response: {'✅ YES' if detailed else '❌ NO'}")
+    logger.info("-" * 80)
     
     try:
         # Get all services
@@ -163,8 +171,13 @@ async def get_sentiment(
                 return_detailed=detailed
             )
             
-            logger.info(f"API: Successfully analyzed {symbol} - {result['dominant_sentiment']} sentiment")
-            logger.info(f"API: Analyzed {result['sources_analyzed']} articles")
+            request_time = time.time() - request_start
+            logger.info("-" * 80)
+            logger.info(f"✅ API RESPONSE: Successfully analyzed {symbol}")
+            logger.info(f"   • Dominant sentiment: {result['dominant_sentiment'].upper()}")
+            logger.info(f"   • Articles analyzed: {result['sources_analyzed']}")
+            logger.info(f"   • Request time: {request_time:.2f}s")
+            logger.info("=" * 80)
             
             # Return detailed or simple response based on parameter
             if detailed:

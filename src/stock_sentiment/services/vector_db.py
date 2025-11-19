@@ -351,7 +351,9 @@ class AzureAISearchVectorDB(VectorDatabase):
                 logger.debug(f"Azure AI Search: Prepared document [{vector_id[:8]}] - '{title[:40]}...' (symbol: {symbol_val}, source: {source})")
             
             # Upload in batch
-            logger.info(f"Azure AI Search: Uploading {len(documents)} documents to index '{self._index_name}'")
+            search_config = self.settings.azure_ai_search
+            index_name = search_config.index_name
+            logger.info(f"Azure AI Search: Uploading {len(documents)} documents to index '{index_name}'")
             result = self._client.upload_documents(documents=documents)
             
             # Count successful uploads
@@ -359,7 +361,9 @@ class AzureAISearchVectorDB(VectorDatabase):
             failed_count = len(documents) - success_count
             
             if success_count > 0:
-                logger.info(f"Azure AI Search: ✅ Successfully stored {success_count}/{len(documents)} vectors in index '{self._index_name}'")
+                search_config = self.settings.azure_ai_search
+                index_name = search_config.index_name
+                logger.info(f"Azure AI Search: ✅ Successfully stored {success_count}/{len(documents)} vectors in index '{index_name}'")
             if failed_count > 0:
                 logger.warning(f"Azure AI Search: ⚠️ Failed to store {failed_count}/{len(documents)} vectors")
                 # Log first few failures for debugging

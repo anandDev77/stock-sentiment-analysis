@@ -7,6 +7,7 @@ making it reusable for both the Streamlit dashboard and REST API.
 
 from datetime import datetime
 from typing import Dict, List, Optional, Any
+import time
 from ..config.settings import Settings
 from ..services.collector import StockDataCollector
 from ..services.sentiment import SentimentAnalyzer
@@ -80,22 +81,47 @@ def get_aggregated_sentiment(
         'articles_stored': 0
     }
     
-    logger.info(f"=== Starting sentiment analysis for {symbol} ===")
-    logger.info(f"Sentiment cache enabled: {settings.app.cache_sentiment_enabled}")
-    logger.info(f"Sentiment cache TTL: {settings.app.cache_ttl_sentiment}s ({settings.app.cache_ttl_sentiment/3600:.1f} hours)")
+    start_time = time.time()
+    logger.info("=" * 80)
+    logger.info(f"🚀 DEMO: Starting sentiment analysis for {symbol}")
+    logger.info("=" * 80)
+    
+    # Log configuration
+    logger.info(f"📋 Configuration:")
+    logger.info(f"   • Sentiment cache: {'✅ ENABLED' if settings.app.cache_sentiment_enabled else '❌ DISABLED (RAG will be used)'}")
+    if settings.app.cache_sentiment_enabled:
+        logger.info(f"   • Cache TTL: {settings.app.cache_ttl_sentiment}s ({settings.app.cache_ttl_sentiment/3600:.1f} hours)")
+    logger.info(f"   • Parallel workers: {settings.app.analysis_parallel_workers}")
+    logger.info(f"   • Worker timeout: {settings.app.analysis_worker_timeout}s")
+    
+    # Log data source filters
+    if data_source_filters:
+        enabled_sources = [k for k, v in data_source_filters.items() if v]
+        disabled_sources = [k for k, v in data_source_filters.items() if not v]
+        logger.info(f"📡 Data Sources:")
+        if enabled_sources:
+            logger.info(f"   • ✅ Enabled: {', '.join(enabled_sources)}")
+        if disabled_sources:
+            logger.info(f"   • ❌ Disabled: {', '.join(disabled_sources)}")
+    else:
+        logger.info(f"📡 Data Sources: Using all enabled sources from settings")
+    
+    logger.info("-" * 80)
     
     try:
         # Step 1: Collect stock data and news
-        logger.info(f"[{symbol}] Step 1: Collecting stock data and news...")
+        step1_start = time.time()
+        logger.info(f"📊 STEP 1: Collecting stock data and news for {symbol}...")
         
         if redis_cache:
             redis_cache.last_tier_used = None
-            logger.info(f"[{symbol}] Checking Redis for stock data...")
+            logger.info(f"   🔍 Checking Redis cache for stock data...")
         
         # Collect data with source filters
         data = collector.collect_all_data(symbol, data_source_filters=data_source_filters)
         
-        logger.info(f"[{symbol}] Collected {len(data.get('news', []))} news articles")
+        step1_time = time.time() - step1_start
+        logger.info(f"   ✅ Collected {len(data.get('news', []))} news articles in {step1_time:.2f}s")
         
         # Track cache status for stock data
         if redis_cache:
@@ -136,23 +162,32 @@ def get_aggregated_sentiment(
                     source_breakdown['Yahoo Finance'] = source_breakdown.get('Yahoo Finance', 0) + 1
             
             if source_breakdown:
-                breakdown_text = " | ".join([f"{k}: {v}" for k, v in source_breakdown.items()])
-                logger.info(f"API: Data source breakdown - {breakdown_text}")
+                logger.info(f"   📈 Articles by source:")
+                for source_name, count in source_breakdown.items():
+                    logger.info(f"      • {source_name}: {count} articles")
         
         # Step 2: Store articles in RAG
-        logger.info(f"[{symbol}] Step 2: Storing articles in RAG...")
+        step2_start = time.time()
+        logger.info(f"💾 STEP 2: Storing articles in RAG vector database...")
         
         if rag_service and data['news']:
             article_count = len(data['news'])
-            logger.info(f"[{symbol}] Storing {article_count} articles in RAG...")
-            rag_service.store_articles_batch(data['news'], symbol)
-            operation_summary['articles_stored'] += article_count
-            logger.info(f"[{symbol}] ✅ Stored {article_count} articles in RAG")
+            logger.info(f"   📝 Preparing {article_count} articles for RAG storage...")
+            stored = rag_service.store_articles_batch(data['news'], symbol)
+            operation_summary['articles_stored'] += stored
+            step2_time = time.time() - step2_start
+            logger.info(f"   ✅ Stored {stored}/{article_count} articles in RAG ({step2_time:.2f}s)")
+        else:
+            if not rag_service:
+                logger.info(f"   ⚠️ RAG service not available - skipping storage")
+            elif not data['news']:
+                logger.info(f"   ⚠️ No articles to store")
+            step2_time = time.time() - step2_start
         
         # Also store Reddit posts in RAG if available
         if rag_service and data.get('social_media'):
             reddit_count = len(data['social_media'])
-            logger.info(f"[{symbol}] Storing {reddit_count} Reddit posts in RAG...")
+            logger.info(f"   📝 Preparing {reddit_count} Reddit posts for RAG storage...")
             reddit_articles = []
             for post in data['social_media']:
                 reddit_articles.append({
@@ -162,23 +197,25 @@ def get_aggregated_sentiment(
                     'url': post.get('url', ''),
                     'timestamp': post.get('timestamp', datetime.now())
                 })
-            rag_service.store_articles_batch(reddit_articles, symbol)
-            operation_summary['articles_stored'] += reddit_count
-            logger.info(f"[{symbol}] ✅ Stored {reddit_count} Reddit posts in RAG")
+            stored_reddit = rag_service.store_articles_batch(reddit_articles, symbol)
+            operation_summary['articles_stored'] += stored_reddit
+            logger.info(f"   ✅ Stored {stored_reddit}/{reddit_count} Reddit posts in RAG")
         
         # Step 3: Analyze sentiment
-        logger.info(f"[{symbol}] Step 3: Analyzing sentiment...")
+        step3_start = time.time()
+        logger.info(f"🤖 STEP 3: Analyzing sentiment with AI...")
         
         news_texts = [
             article.get('summary', article.get('title', ''))
             for article in data['news']
         ]
         
-        logger.info(f"[{symbol}] Analyzing sentiment for {len(news_texts)} articles...")
+        logger.info(f"   📄 Analyzing sentiment for {len(news_texts)} articles...")
         
         # Track sentiment cache status
         if redis_cache and settings.app.cache_sentiment_enabled:
-            logger.info(f"[{symbol}] Checking sentiment cache for {len(news_texts)} articles...")
+            logger.info(f"   🔍 Checking sentiment cache for {len(news_texts)} articles...")
+            cache_check_start = time.time()
             for text in news_texts:
                 if text:
                     redis_cache.last_tier_used = None
@@ -187,10 +224,16 @@ def get_aggregated_sentiment(
                         operation_summary['sentiment_cache_hits'] += 1
                     else:
                         operation_summary['sentiment_cache_misses'] += 1
-            logger.info(f"[{symbol}] Sentiment cache: {operation_summary['sentiment_cache_hits']} hits, {operation_summary['sentiment_cache_misses']} misses")
+            cache_check_time = time.time() - cache_check_start
+            hit_rate = (operation_summary['sentiment_cache_hits'] / len(news_texts) * 100) if news_texts else 0
+            logger.info(f"   📊 Cache check complete ({cache_check_time:.2f}s):")
+            logger.info(f"      • ✅ Cache HITS: {operation_summary['sentiment_cache_hits']} ({hit_rate:.1f}%)")
+            logger.info(f"      • 🔄 Cache MISSES: {operation_summary['sentiment_cache_misses']} ({100-hit_rate:.1f}%)")
+            if operation_summary['sentiment_cache_misses'] > 0:
+                logger.info(f"      • 💡 {operation_summary['sentiment_cache_misses']} articles will use RAG + LLM analysis")
         else:
             if not settings.app.cache_sentiment_enabled:
-                logger.info(f"[{symbol}] Sentiment cache is disabled - all analyses will use RAG")
+                logger.info(f"   ⚠️ Sentiment cache is DISABLED - all {len(news_texts)} analyses will use RAG + LLM")
             operation_summary['sentiment_cache_misses'] = len(news_texts)
         
         # Track RAG usage before analysis
@@ -200,16 +243,18 @@ def get_aggregated_sentiment(
         # Batch analyze with parallel processing
         worker_count = settings.app.analysis_parallel_workers or settings.app.sentiment_max_workers
         worker_timeout = settings.app.analysis_worker_timeout
-        logger.info(
-            f"[{symbol}] Starting batch sentiment analysis "
-            f"(workers={worker_count}, timeout={worker_timeout}s)..."
-        )
+        logger.info(f"   ⚡ Starting parallel batch analysis ({worker_count} workers, {worker_timeout}s timeout per task)...")
+        analysis_start = time.time()
+        
         news_sentiments = analyzer.batch_analyze(
             texts=news_texts,
             symbol=symbol,
             max_workers=worker_count,
             worker_timeout=worker_timeout
         )
+        
+        analysis_time = time.time() - analysis_start
+        logger.info(f"   ✅ Completed sentiment analysis for {len(news_texts)} articles in {analysis_time:.2f}s")
         
         # Track RAG usage after analysis
         final_rag_uses = getattr(analyzer, 'rag_uses', 0) if hasattr(analyzer, 'rag_uses') else 0
@@ -222,9 +267,15 @@ def get_aggregated_sentiment(
             operation_summary['rag_used'] = True
             operation_summary['rag_queries'] = rag_queries_made
             operation_summary['rag_articles_found'] = rag_successful
-            logger.info(f"[{symbol}] ✅ RAG was used: {rag_queries_made} queries made, {rag_successful} successful")
+            logger.info(f"   🎯 RAG Usage Summary:")
+            logger.info(f"      • RAG queries made: {rag_queries_made}")
+            logger.info(f"      • Articles found via RAG: {rag_successful}")
+            logger.info(f"      • Success rate: {(rag_successful/rag_queries_made*100) if rag_queries_made > 0 else 0:.1f}%")
         else:
-            logger.info(f"[{symbol}] ℹ️ RAG was not used (sentiment was cached or cache enabled)")
+            logger.info(f"   ℹ️ RAG was not used (all sentiment was cached)")
+        
+        step3_time = time.time() - step3_start
+        logger.info(f"   ⏱️ Step 3 total time: {step3_time:.2f}s")
         
         # Handle empty texts
         for i, text in enumerate(news_texts):
@@ -235,7 +286,7 @@ def get_aggregated_sentiment(
         social_texts = [post.get('text', '') for post in data.get('social_media', [])]
         social_sentiments = []
         if social_texts:
-            logger.info(f"[{symbol}] Analyzing sentiment for {len(social_texts)} social media posts...")
+            logger.info(f"   📱 Analyzing sentiment for {len(social_texts)} social media posts...")
             social_sentiments = analyzer.batch_analyze(
                 texts=social_texts,
                 symbol=symbol,
@@ -246,16 +297,17 @@ def get_aggregated_sentiment(
             for i, text in enumerate(social_texts):
                 if not text:
                     social_sentiments[i] = {'positive': 0, 'negative': 0, 'neutral': 1}
-            logger.info(f"[{symbol}] Analyzed {len(social_sentiments)} social media posts")
+            logger.info(f"   ✅ Analyzed {len(social_sentiments)} social media posts")
         
         # Combine for aggregation (but keep separate for detailed return)
         all_sentiments = news_sentiments + social_sentiments
         
         # Step 4: Aggregate sentiment scores
-        logger.info(f"[{symbol}] Step 4: Aggregating sentiment scores...")
+        step4_start = time.time()
+        logger.info(f"📊 STEP 4: Aggregating sentiment scores...")
         
         if not all_sentiments:
-            logger.warning(f"[{symbol}] No sentiment results to aggregate")
+            logger.warning(f"   ⚠️ No sentiment results to aggregate")
             result = {
                 'symbol': symbol,
                 'positive': 0.0,
@@ -300,18 +352,40 @@ def get_aggregated_sentiment(
         else:
             dominant_sentiment = 'neutral'
         
+        step4_time = time.time() - step4_start
+        total_time = time.time() - start_time
+        
         # Log final summary
-        logger.info(f"[{symbol}] === Operation Summary ===")
-        logger.info(f"[{symbol}] Redis used: {operation_summary['redis_used']}")
-        logger.info(f"[{symbol}]   - Stock cached: {operation_summary['stock_cached']}")
-        logger.info(f"[{symbol}]   - News cached: {operation_summary['news_cached']}")
-        logger.info(f"[{symbol}]   - Sentiment: {operation_summary['sentiment_cache_hits']} hits, {operation_summary['sentiment_cache_misses']} misses")
-        logger.info(f"[{symbol}] RAG used: {operation_summary['rag_used']}")
+        logger.info("-" * 80)
+        logger.info(f"📋 DEMO SUMMARY for {symbol}")
+        logger.info("-" * 80)
+        logger.info(f"⏱️  Performance:")
+        logger.info(f"   • Total time: {total_time:.2f}s")
+        logger.info(f"   • Step 1 (Data Collection): {step1_time:.2f}s")
+        logger.info(f"   • Step 2 (RAG Storage): {step2_time:.2f}s")
+        logger.info(f"   • Step 3 (Sentiment Analysis): {step3_time:.2f}s")
+        logger.info(f"   • Step 4 (Aggregation): {step4_time:.2f}s")
+        logger.info("")
+        logger.info(f"💾 Redis Cache:")
+        logger.info(f"   • Redis used: {'✅ YES' if operation_summary['redis_used'] else '❌ NO'}")
+        if operation_summary['redis_used']:
+            logger.info(f"   • Stock data: {'✅ CACHED' if operation_summary['stock_cached'] else '🔄 FRESH'}")
+            logger.info(f"   • News data: {'✅ CACHED' if operation_summary['news_cached'] else '🔄 FRESH'}")
+            logger.info(f"   • Sentiment cache: {operation_summary['sentiment_cache_hits']} hits, {operation_summary['sentiment_cache_misses']} misses")
+        logger.info("")
+        logger.info(f"🎯 RAG (Retrieval Augmented Generation):")
+        logger.info(f"   • RAG used: {'✅ YES' if operation_summary['rag_used'] else '❌ NO'}")
         if operation_summary['rag_used']:
-            logger.info(f"[{symbol}]   - RAG queries: {operation_summary['rag_queries']}")
-            logger.info(f"[{symbol}]   - Articles found: {operation_summary['rag_articles_found']}")
-        logger.info(f"[{symbol}] Articles stored in RAG: {operation_summary['articles_stored']}")
-        logger.info(f"[{symbol}] === End Summary ===")
+            logger.info(f"   • RAG queries made: {operation_summary['rag_queries']}")
+            logger.info(f"   • Articles found via RAG: {operation_summary['rag_articles_found']}")
+        logger.info(f"   • Articles stored in RAG: {operation_summary['articles_stored']}")
+        logger.info("")
+        logger.info(f"📈 Results:")
+        logger.info(f"   • Articles analyzed: {count}")
+        logger.info(f"   • Dominant sentiment: {dominant_sentiment.upper()}")
+        logger.info(f"   • Net sentiment: {net_sentiment:+.3f} ({'positive' if net_sentiment > 0 else 'negative' if net_sentiment < 0 else 'neutral'})")
+        logger.info(f"   • Positive: {avg_positive:.1%} | Negative: {avg_negative:.1%} | Neutral: {avg_neutral:.1%}")
+        logger.info("=" * 80)
         
         # Base result with aggregated sentiment
         result = {

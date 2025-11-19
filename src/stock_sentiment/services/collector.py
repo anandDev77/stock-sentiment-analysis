@@ -653,42 +653,58 @@ class StockDataCollector:
                 "reddit": self.settings.data_sources.reddit_enabled
             }
         
+        # Log data source filter summary
+        enabled_sources = [k for k, v in data_source_filters.items() if v]
+        disabled_sources = [k for k, v in data_source_filters.items() if not v]
+        logger.info(f"   📡 Data Source Filters Applied:")
+        if enabled_sources:
+            logger.info(f"      • ✅ Enabled: {', '.join(enabled_sources)}")
+        if disabled_sources:
+            logger.info(f"      • ❌ Disabled: {', '.join(disabled_sources)}")
+        
         # Collect news from multiple sources based on filters
         all_news = []
         source_counts = {}
         
         # Primary source: yfinance (always enabled)
         if data_source_filters.get("yfinance", True):
+            logger.info(f"   📰 Fetching from Yahoo Finance (yfinance)...")
             yf_news = self.get_news_headlines(symbol)
             all_news.extend(yf_news)
             source_counts["yfinance"] = len(yf_news)
-            logger.info(f"Data Collection: yfinance enabled - fetched {len(yf_news)} articles")
+            logger.info(f"   ✅ Yahoo Finance: fetched {len(yf_news)} articles")
         else:
             source_counts["yfinance"] = 0
-            logger.info("Data Collection: yfinance disabled by filter")
+            logger.info("   ❌ Yahoo Finance: disabled by filter")
         
         # Additional sources if enabled in both settings and filters
         av_news = []
         if data_source_filters.get("alpha_vantage", False) and self.settings.data_sources.alpha_vantage_enabled:
+            logger.info(f"   📰 Fetching from Alpha Vantage...")
             av_news = self.get_alpha_vantage_news(symbol)
             all_news.extend(av_news)
             source_counts["alpha_vantage"] = len(av_news)
-            logger.info(f"Data Collection: Alpha Vantage enabled - fetched {len(av_news)} articles")
+            logger.info(f"   ✅ Alpha Vantage: fetched {len(av_news)} articles")
         else:
             source_counts["alpha_vantage"] = 0
             if not data_source_filters.get("alpha_vantage", False):
-                logger.info("Data Collection: Alpha Vantage disabled by filter")
+                logger.info("   ❌ Alpha Vantage: disabled by filter")
+            elif not self.settings.data_sources.alpha_vantage_enabled:
+                logger.info("   ⚠️ Alpha Vantage: not configured in settings")
         
         fh_news = []
         if data_source_filters.get("finnhub", False) and self.settings.data_sources.finnhub_enabled:
+            logger.info(f"   📰 Fetching from Finnhub...")
             fh_news = self.get_finnhub_news(symbol)
             all_news.extend(fh_news)
             source_counts["finnhub"] = len(fh_news)
-            logger.info(f"Data Collection: Finnhub enabled - fetched {len(fh_news)} articles")
+            logger.info(f"   ✅ Finnhub: fetched {len(fh_news)} articles")
         else:
             source_counts["finnhub"] = 0
             if not data_source_filters.get("finnhub", False):
-                logger.info("Data Collection: Finnhub disabled by filter")
+                logger.info("   ❌ Finnhub: disabled by filter")
+            elif not self.settings.data_sources.finnhub_enabled:
+                logger.info("   ⚠️ Finnhub: not configured in settings")
         
         # Remove duplicates by URL
         seen_urls = set()
@@ -709,20 +725,26 @@ class StockDataCollector:
         # Sort by timestamp (most recent first)
         unique_news.sort(key=lambda x: x.get('timestamp', datetime.min), reverse=True)
         
-        logger.info(
-            f"Data Collection: Collected {len(unique_news)} unique articles from {len(all_news)} total "
-            f"(yfinance: {source_counts['yfinance']}, Alpha Vantage: {source_counts['alpha_vantage']}, "
-            f"Finnhub: {source_counts['finnhub']})"
-        )
+        duplicates_removed = len(all_news) - len(unique_news)
+        if duplicates_removed > 0:
+            logger.info(f"   🔄 Removed {duplicates_removed} duplicate articles (by URL)")
+        
+        logger.info(f"   📊 Collection Summary:")
+        logger.info(f"      • Total articles collected: {len(all_news)}")
+        logger.info(f"      • Unique articles: {len(unique_news)}")
+        logger.info(f"      • By source: yfinance={source_counts['yfinance']}, Alpha Vantage={source_counts['alpha_vantage']}, Finnhub={source_counts['finnhub']}")
         
         # Get Reddit data if enabled
         reddit_posts = []
         if data_source_filters.get("reddit", False) and self.settings.data_sources.reddit_enabled:
+            logger.info(f"   📰 Fetching from Reddit...")
             reddit_posts = self.get_reddit_sentiment_data(symbol)
-            logger.info(f"Data Collection: Reddit enabled - fetched {len(reddit_posts)} posts")
+            logger.info(f"   ✅ Reddit: fetched {len(reddit_posts)} posts")
         else:
             if not data_source_filters.get("reddit", False):
-                logger.info("Data Collection: Reddit disabled by filter")
+                logger.info("   ❌ Reddit: disabled by filter")
+            elif not self.settings.data_sources.reddit_enabled:
+                logger.info("   ⚠️ Reddit: not configured in settings")
         
         return {
             'price_data': self.get_stock_price(symbol),

@@ -140,11 +140,16 @@ class SentimentAnalyzer:
             cached_result = self.cache.get_cached_sentiment(text)
             if cached_result:
                 self.cache_hits += 1
-                logger.info(f"Sentiment Analysis: Cache HIT for text '{text[:50]}...' (skipping RAG and API call)")
+                pos = cached_result.get('positive', 0)
+                neg = cached_result.get('negative', 0)
+                neu = cached_result.get('neutral', 0)
+                dominant = 'positive' if pos > neg and pos > neu else 'negative' if neg > pos and neg > neu else 'neutral'
+                logger.info(f"   ✅ Cached result (TTL: {self.settings.app.cache_ttl_sentiment}s)")
+                logger.info(f"      • Result - Positive: {pos:.2f}, Negative: {neg:.2f}, Neutral: {neu:.2f}, RAG used: False, Dominant: {dominant}")
                 return cached_result
             else:
                 self.cache_misses += 1
-                logger.info(f"Sentiment Analysis: Cache MISS for text '{text[:50]}...' (proceeding with analysis)")
+                logger.info(f"   🔄 Cache MISS for text '{text[:50]}...' (proceeding with analysis)")
         
         # Retrieve relevant context using RAG if available
         rag_context = ""
@@ -172,7 +177,7 @@ class SentimentAnalyzer:
                 if filter_info:
                     logger.info(f"Sentiment Analysis: Applying RAG filters - {', '.join(filter_info)}")
             
-            logger.info(f"Sentiment Analysis: Retrieving RAG context for '{text[:50]}...' (symbol={symbol})")
+            logger.info(f"   🔍 Retrieving RAG context for '{text[:50]}...' (symbol={symbol})")
             
             relevant_articles = self.rag_service.retrieve_relevant_context(
                 query=text,
@@ -187,9 +192,15 @@ class SentimentAnalyzer:
             if relevant_articles:
                 rag_used = True
                 self.rag_uses += 1
-                logger.info(f"Sentiment Analysis: RAG provided {len(relevant_articles)} context articles for analysis")
+                logger.info(f"   ✅ RAG provided {len(relevant_articles)} context articles for analysis")
+                # Log top article for demo visibility
+                if relevant_articles:
+                    top_article = relevant_articles[0]
+                    top_title = top_article.get('title', 'N/A')[:60]
+                    top_score = top_article.get('rrf_score') or top_article.get('similarity', 0.0)
+                    logger.info(f"      • Top article: '{top_title}...' (relevance: {top_score:.3f})")
             else:
-                logger.warning(f"Sentiment Analysis: RAG found 0 articles for {symbol} - proceeding without context")
+                logger.warning(f"   ⚠️ RAG found 0 articles for {symbol} - proceeding without context")
         
         # Format RAG context with better structure and metadata
         if rag_used and relevant_articles:
@@ -481,11 +492,17 @@ Respond ONLY with valid JSON. No explanations, no markdown, just the JSON object
             return [self.analyze_sentiment(text, symbol) for text in texts]
         
         results = [None] * len(texts)
+        import time
+        batch_start = time.time()
         
-        logger.info(
-            f"Sentiment Analysis: batch size={len(texts)}, "
-            f"max_workers={max_workers}, worker_timeout={worker_timeout}s"
-        )
+        logger.info(f"   ⚡ Batch Analysis Configuration:")
+        logger.info(f"      • Batch size: {len(texts)} articles")
+        logger.info(f"      • Parallel workers: {max_workers}")
+        logger.info(f"      • Worker timeout: {worker_timeout}s per task")
+        
+        completed_count = 0
+        error_count = 0
+        timeout_count = 0
         
         # Use ThreadPoolExecutor for parallel processing
         # ThreadPoolExecutor works well with I/O-bound operations like API calls
@@ -501,16 +518,30 @@ Respond ONLY with valid JSON. No explanations, no markdown, just the JSON object
                 index = future_to_index[future]
                 try:
                     results[index] = future.result(timeout=worker_timeout)
+                    completed_count += 1
+                    # Log progress every 5 completions for demo visibility
+                    if completed_count % 5 == 0 or completed_count == len(texts):
+                        logger.info(f"      • Progress: {completed_count}/{len(texts)} completed")
                 except FuturesTimeoutError:
+                    timeout_count += 1
                     logger.error(
-                        f"Sentiment Analysis: Timeout after {worker_timeout}s "
-                        f"for text at index {index}"
+                        f"      ⚠️ Timeout after {worker_timeout}s for text at index {index}"
                     )
                     results[index] = {'positive': 0.0, 'negative': 0.0, 'neutral': 1.0}
                 except Exception as e:
-                    logger.error(f"Error analyzing sentiment for text at index {index}: {e}")
+                    error_count += 1
+                    logger.error(f"      ❌ Error analyzing text at index {index}: {e}")
                     # Fallback to neutral sentiment on error
                     results[index] = {'positive': 0.0, 'negative': 0.0, 'neutral': 1.0}
+        
+        batch_time = time.time() - batch_start
+        logger.info(f"   ✅ Batch Analysis Complete:")
+        logger.info(f"      • Completed: {completed_count}/{len(texts)}")
+        if timeout_count > 0:
+            logger.info(f"      • Timeouts: {timeout_count}")
+        if error_count > 0:
+            logger.info(f"      • Errors: {error_count}")
+        logger.info(f"      • Total time: {batch_time:.2f}s ({batch_time/len(texts):.2f}s per article avg)")
         
         return results
 
