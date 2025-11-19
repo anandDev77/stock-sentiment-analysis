@@ -175,7 +175,7 @@ This comprehensive diagram shows the entire application architecture with all co
 
 
 <div align="center">
-  <img src="diagrams/high-level_architecture_complete_system_overview_user_interface.png" alt="Complete System Overview" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
+  <img src="diagrams/01__high_level_architecture_complete_system_overview.png" alt="Complete System Overview" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
 </div>
 
 **Key Architectural Patterns**:
@@ -191,7 +191,7 @@ The application is built with an API-driven architecture where the Streamlit fro
 
 
 <div align="center">
-  <img src="diagrams/system_architecture_overview_frontend_layer.png" alt="system_architecture_overview_frontend_layer" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
+  <img src="diagrams/02__system_architecture_overview.png" alt="system_architecture_overview_frontend_layer" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
 </div>
 
 ### Component Interaction Flow
@@ -200,7 +200,7 @@ This diagram shows how components interact during a typical request:
 
 
 <div align="center">
-  <img src="diagrams/component_interaction_flow_user_streamlit.png" alt="component_interaction_flow_user_streamlit" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
+  <img src="diagrams/03__component_interaction_flow.png" alt="component_interaction_flow_user_streamlit" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
 </div>
 
 ### API-Driven Architecture Flow
@@ -209,7 +209,7 @@ The application uses a clean API-driven architecture where the frontend never di
 
 
 <div align="center">
-  <img src="diagrams/api-driven_architecture_flow_frontend_streamlit.png" alt="api-driven_architecture_flow_frontend_streamlit" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
+  <img src="diagrams/04__api_driven_architecture_flow.png" alt="api-driven_architecture_flow_frontend_streamlit" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
 </div>
 
 ### Deployment Architecture
@@ -218,7 +218,7 @@ The application can be deployed as separate services:
 
 
 <div align="center">
-  <img src="diagrams/deployment_architecture_user_browser.png" alt="deployment_architecture_user_browser" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
+  <img src="diagrams/05__deployment_architecture.png" alt="deployment_architecture_user_browser" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
 </div>
 
 ---
@@ -285,7 +285,7 @@ This diagram shows how different components interact and depend on each other:
 
 
 <div align="center">
-  <img src="diagrams/component_relationship_diagram_presentation_layer.png" alt="component_relationship_diagram_presentation_layer" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
+  <img src="diagrams/06__component_relationship_diagram.png" alt="component_relationship_diagram_presentation_layer" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
 </div>
 
 **Key Relationships**:
@@ -2644,7 +2644,7 @@ When a user clicks "Load Data" in the Streamlit dashboard:
 
 
 <div align="center">
-  <img src="diagrams/user_request_flow_diagram_user_streamlit.png" alt="user_request_flow_diagram_user_streamlit" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
+  <img src="diagrams/07__user_request_flow_diagram.png" alt="user_request_flow_diagram_user_streamlit" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
 </div>
 
 ---
@@ -2686,7 +2686,7 @@ The data collection flow is handled by `services/collector.py`:
 
 
 <div align="center">
-  <img src="diagrams/data_collection_flow_diagram_user_load.png" alt="data_collection_flow_diagram_user_load" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
+  <img src="diagrams/08__data_collection_flow_diagram.png" alt="data_collection_flow_diagram_user_load" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
 </div>
 
 ---
@@ -2730,7 +2730,7 @@ The RAG storage flow is handled by `services/rag.py` in the `store_articles_batc
 
 
 <div align="center">
-  <img src="diagrams/rag_storage_flow_diagram_orchestrator_orchestrator.png" alt="rag_storage_flow_diagram_orchestrator_orchestrator" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
+  <img src="diagrams/09__rag_storage_flow_diagram.png" alt="rag_storage_flow_diagram_orchestrator_orchestrator" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
 </div>
 
 ---
@@ -2778,14 +2778,14 @@ The sentiment analysis flow is handled by `services/sentiment.py` in the `analyz
 
 
 <div align="center">
-  <img src="diagrams/sentiment_analysis_flow_diagram_orchestrator_orchestrator.png" alt="sentiment_analysis_flow_diagram_orchestrator_orchestrator" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
+  <img src="diagrams/10__sentiment_analysis_flow_diagram.png" alt="sentiment_analysis_flow_diagram_orchestrator_orchestrator" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
 </div>
 
 **Parallel Processing Flow** (for multiple articles):
 
 
 <div align="center">
-  <img src="diagrams/diagram_11_batch_analyze.png" alt="diagram_11_batch_analyze" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
+  <img src="diagrams/11_diagram_11.png" alt="diagram_11_batch_analyze" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
 </div>
 
 ---
@@ -2828,14 +2828,14 @@ The RAG retrieval flow is handled by `services/rag.py` in the `retrieve_relevant
 
 
 <div align="center">
-  <img src="diagrams/rag_retrieval_flow_diagram_query_apple.png" alt="rag_retrieval_flow_diagram_query_apple" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
+  <img src="diagrams/12__rag_retrieval_flow_diagram.png" alt="rag_retrieval_flow_diagram_query_apple" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
 </div>
 
 **Detailed Hybrid Search Combination**:
 
 
 <div align="center">
-  <img src="diagrams/diagram_13_semantic_search.png" alt="diagram_13_semantic_search" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
+  <img src="diagrams/13_diagram_13.png" alt="diagram_13_semantic_search" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
 </div>
 
 ---
@@ -2923,7 +2923,7 @@ cos(θ) = 1.69 / (1.353 × 1.277)
 
 
 <div align="center">
-  <img src="diagrams/cosine_similarity_visualization_vector_space.png" alt="cosine_similarity_visualization_vector_space" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
+  <img src="diagrams/14__cosine_similarity_visualization.png" alt="cosine_similarity_visualization_vector_space" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
 </div>
 
 **Real-World Example**:
@@ -3031,7 +3031,7 @@ Article E: RRF_total = 0 + 0.0159 = 0.0159
 
 
 <div align="center">
-  <img src="diagrams/rrf_calculation_flow_diagram_two_ranked.png" alt="rrf_calculation_flow_diagram_two_ranked" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
+  <img src="diagrams/15__rrf_calculation_flow_diagram.png" alt="rrf_calculation_flow_diagram_two_ranked" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
 </div>
 
 ---
@@ -3126,7 +3126,7 @@ Article C: boosted = 0.0330 × (1 + 0.259 × 0.2) = 0.0330 × 1.052 = 0.0347
 
 
 <div align="center">
-  <img src="diagrams/temporal_decay_curve_visualization_decay_function.png" alt="temporal_decay_curve_visualization_decay_function" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
+  <img src="diagrams/16__temporal_decay_curve_visualization.png" alt="temporal_decay_curve_visualization_decay_function" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
 </div>
 
 **Real-World Impact**:
@@ -3264,7 +3264,7 @@ normalized_neutral = 1.0 (default to neutral)
 
 
 <div align="center">
-  <img src="diagrams/normalization_process_diagram_returns_raw.png" alt="normalization_process_diagram_returns_raw" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
+  <img src="diagrams/17__normalization_process_diagram.png" alt="normalization_process_diagram_returns_raw" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
 </div>
 
 **Real-World Example**:
@@ -3366,7 +3366,7 @@ Cost reduction = $0.025 - $0.0003 = $0.0247 (98.8% cheaper)
 
 
 <div align="center">
-  <img src="diagrams/batch_processing_flow_diagram_articles_embed.png" alt="batch_processing_flow_diagram_articles_embed" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
+  <img src="diagrams/18__batch_processing_flow_diagram.png" alt="batch_processing_flow_diagram_articles_embed" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
 </div>
 
 **Real-World Performance**:
@@ -3446,14 +3446,14 @@ HNSW (Hierarchical Navigable Small World) is an approximate nearest neighbor sea
 
 
 <div align="center">
-  <img src="diagrams/hnsw_graph_structure_visualization_layer_sparse.png" alt="hnsw_graph_structure_visualization_layer_sparse" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
+  <img src="diagrams/19__hnsw_graph_structure_visualization.png" alt="hnsw_graph_structure_visualization_layer_sparse" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
 </div>
 
 **Search Process Example**:
 
 
 <div align="center">
-  <img src="diagrams/diagram_20_query_query.png" alt="diagram_20_query_query" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
+  <img src="diagrams/20_diagram_20.png" alt="diagram_20_query_query" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
 </div>
 
 **Real-World Performance** (Azure AI Search with HNSW):
@@ -3496,7 +3496,7 @@ The following diagram shows how all data sources integrate into the application:
 
 
 <div align="center">
-  <img src="diagrams/611_data_source_integration_architecture_user_request.png" alt="611_data_source_integration_architecture_user_request" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
+  <img src="diagrams/21__611_data_source_integration_architecture.png" alt="611_data_source_integration_architecture_user_request" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
 </div>
 
 **Integration Points**:
@@ -3663,7 +3663,7 @@ GET /sentiment/AAPL?sources=yfinance,alpha_vantage
 **Filtering Flow**:
 
 <div align="center">
-  <img src="diagrams/diagram_22_user_request.png" alt="diagram_22_user_request" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
+  <img src="diagrams/22_diagram_22.png" alt="diagram_22_user_request" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
 </div>
 
 ### 6.7 Data Deduplication
@@ -3686,7 +3686,7 @@ All articles from different sources are normalized to a standard format:
 
 
 <div align="center">
-  <img src="diagrams/68_data_normalization_flow_source_specific.png" alt="68_data_normalization_flow_source_specific" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
+  <img src="diagrams/23__68_data_normalization_flow.png" alt="68_data_normalization_flow_source_specific" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
 </div>
 
 **Normalization Rules**:
@@ -3722,7 +3722,7 @@ The application uses a single-tier Redis cache architecture optimized for Stream
 
 
 <div align="center">
-  <img src="diagrams/72_cache_architecture_cache_types.png" alt="72_cache_architecture_cache_types" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
+  <img src="diagrams/24__72_cache_architecture.png" alt="72_cache_architecture_cache_types" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
 </div>
 
 **Cache Strategy**:
@@ -3798,7 +3798,7 @@ cache_key = f"sentiment:{text_hash}"
 
 
 <div align="center">
-  <img src="diagrams/76_cache_flow_diagram_data_request.png" alt="76_cache_flow_diagram_data_request" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
+  <img src="diagrams/25__76_cache_flow_diagram.png" alt="76_cache_flow_diagram_data_request" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
 </div>
 
 ### 7.7 Cache Performance Impact
@@ -3857,7 +3857,7 @@ The following diagram shows how API requests flow through the system:
 
 
 <div align="center">
-  <img src="diagrams/82_authentication_821_api_requestresponse_flow_client_client.png" alt="82_authentication_821_api_requestresponse_flow_client_client" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
+  <img src="diagrams/26__82_authentication_821_api_requestresponse_flow.png" alt="82_authentication_821_api_requestresponse_flow_client_client" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
 </div>
 
 **Key Flow Points**:
@@ -4167,14 +4167,14 @@ The application loads configuration in a specific order to ensure proper initial
 
 
 <div align="center">
-  <img src="diagrams/configuration_guide_91_configuration_loading_flow_application_start.png" alt="configuration_guide_91_configuration_loading_flow_application_start" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
+  <img src="diagrams/27__configuration_guide_91_configuration_loading_flow.png" alt="configuration_guide_91_configuration_loading_flow_application_start" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
 </div>
 
 **Configuration Hierarchy**:
 
 
 <div align="center">
-  <img src="diagrams/diagram_28_settings_main.png" alt="diagram_28_settings_main" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
+  <img src="diagrams/28_diagram_28.png" alt="diagram_28_settings_main" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
 </div>
 
 **Loading Order**:
@@ -4421,7 +4421,7 @@ Use this decision tree to quickly identify and resolve common issues:
 
 
 <div align="center">
-  <img src="diagrams/troubleshooting_faq_101_troubleshooting_decision_application_issue.png" alt="troubleshooting_faq_101_troubleshooting_decision_application_issue" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
+  <img src="diagrams/29__troubleshooting_faq_101_troubleshooting_decision_tree.png" alt="troubleshooting_faq_101_troubleshooting_decision_application_issue" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
 </div>
 
 ### 10.2 Common Issues
