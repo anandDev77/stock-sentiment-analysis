@@ -52,7 +52,7 @@ if st.session_state.load_data and symbol:
         load_stock_data(symbol, api_client, settings)
     else:
         # Fallback to direct service calls if API not available
-if analyzer is None:
+        if analyzer is None:
             st.error("❌ Sentiment analyzer not available. Please check your configuration or enable API mode.")
             st.stop()
         # For now, we'll show a message that API mode is required
@@ -122,7 +122,7 @@ tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
 # Get data from session state
 news_sentiments = st.session_state.news_sentiments
 social_sentiments = st.session_state.social_sentiments
-    current_symbol = st.session_state.get('symbol', symbol)
+current_symbol = st.session_state.get('symbol', symbol)
 
 # Render tabs based on data availability
 if data is None:
@@ -149,5 +149,5 @@ else:
         # For now, pass None for services if using API mode
         if api_client and settings.app.api_enabled:
             render_comparison_tab(None, None, None)  # Comparison tab needs to be updated to use API
-                else:
+        else:
             render_comparison_tab(collector, analyzer, rag_service)
