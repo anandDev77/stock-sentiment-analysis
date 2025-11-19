@@ -80,7 +80,7 @@ def render_sidebar(
         _render_summary_log()
         
         # Cache management
-        _render_cache_management(redis_cache)
+        _render_cache_management(api_client, redis_cache, settings)
         
         st.markdown("---")
         st.markdown(
@@ -105,112 +105,156 @@ def _render_system_status(
     """Render system status indicators."""
     st.markdown("### 🔌 System Status")
     
-    # Always show Redis and RAG status prominently
-    status_col1, status_col2 = st.columns(2)
-    
-    with status_col1:
-        # Check Redis connection
-        redis_connected = False
-        redis_error = None
-        if redis_cache:
-            if redis_cache.client:
+    # Use API client if available, otherwise fall back to direct service checks
+    if api_client and settings.app.api_enabled:
+        try:
+            status_info = api_client.get_system_status()
+            
+            # Always show Redis and RAG status prominently
+            status_col1, status_col2 = st.columns(2)
+            
+            with status_col1:
+                redis_info = status_info.get('redis', {})
+                redis_connected = redis_info.get('connected', False)
+                
+                if redis_connected:
+                    st.markdown(
+                        """
+                        <div style='background: #d4edda; color: #155724; padding: 0.75rem; 
+                                    border-radius: 8px; text-align: center; font-weight: 600;'>
+                            ✅ Redis
+                        </div>
+                        """,
+                        unsafe_allow_html=True
+                    )
+                else:
+                    st.markdown(
+                        """
+                        <div style='background: #f8d7da; color: #721c24; padding: 0.75rem; 
+                                    border-radius: 8px; text-align: center; font-weight: 600;'>
+                            ⚠️ Redis
+                        </div>
+                        """,
+                        unsafe_allow_html=True
+                    )
+            
+            with status_col2:
+                rag_info = status_info.get('rag', {})
+                rag_enabled = rag_info.get('embeddings_enabled', False)
+                
+                if rag_enabled:
+                    st.markdown(
+                        """
+                        <div style='background: #d4edda; color: #155724; padding: 0.75rem; 
+                                    border-radius: 8px; text-align: center; font-weight: 600;'>
+                            ✅ RAG
+                        </div>
+                        """,
+                        unsafe_allow_html=True
+                    )
+                else:
+                    st.markdown(
+                        """
+                        <div style='background: #fff3cd; color: #856404; padding: 0.75rem; 
+                                    border-radius: 8px; text-align: center; font-weight: 600;'>
+                            ⚠️ RAG
+                        </div>
+                        """,
+                        unsafe_allow_html=True
+                    )
+            
+            # Show API health status
+            try:
+                health = api_client.get_health()
+                status = health.get('status', 'unknown')
+                
+                if status == 'healthy':
+                    st.success("✅ API: Healthy")
+                elif status == 'degraded':
+                    st.warning("⚠️ API: Degraded")
+                else:
+                    st.error("❌ API: Unhealthy")
+                
+                # Show service details in expander
+                with st.expander("Service Details"):
+                    services = health.get('services', {})
+                    for service_name, service_status in services.items():
+                        if service_status == 'available':
+                            st.success(f"✅ {service_name.title()}")
+                        elif service_status == 'not_configured':
+                            st.info(f"ℹ️ {service_name.title()} (not configured)")
+                        else:
+                            st.error(f"❌ {service_name.title()}: {service_status}")
+            except Exception as e:
+                logger.error(f"Error checking API health: {e}")
+                st.error("❌ API: Unreachable")
+                st.warning("Please ensure the API server is running")
+                
+        except Exception as e:
+            logger.error(f"Error getting system status: {e}")
+            st.error("❌ Failed to get system status")
+    else:
+        # Fallback to direct service checks (non-API mode)
+        status_col1, status_col2 = st.columns(2)
+        
+        with status_col1:
+            redis_connected = False
+            if redis_cache and redis_cache.client:
                 try:
                     redis_cache.client.ping()
                     redis_connected = True
-                except Exception as e:
-                    redis_error = str(e)
-                    logger.warning(f"Redis ping failed: {e}")
-            else:
-                redis_error = "Redis client not initialized"
-        else:
-            redis_error = "Redis cache not available"
-        
-        if redis_connected:
-            st.markdown(
-                """
-                <div style='background: #d4edda; color: #155724; padding: 0.75rem; 
-                            border-radius: 8px; text-align: center; font-weight: 600;'>
-                    ✅ Redis
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
-        else:
-            st.markdown(
-                f"""
-                <div style='background: #f8d7da; color: #721c24; padding: 0.75rem; 
-                            border-radius: 8px; text-align: center; font-weight: 600;'
-                            title='{redis_error or "Redis not configured"}'>
-                    ⚠️ Redis
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
-    
-    with status_col2:
-        # Check RAG service
-        rag_enabled = False
-        rag_error = None
-        if rag_service:
-            try:
-                rag_enabled = rag_service.embeddings_enabled
-                if not rag_enabled:
-                    rag_error = "Embeddings not enabled (check embedding deployment)"
-            except Exception as e:
-                rag_error = str(e)
-                logger.warning(f"RAG check failed: {e}")
-        else:
-            rag_error = "RAG service not initialized"
-        
-        if rag_enabled:
-            st.markdown(
-                """
-                <div style='background: #d4edda; color: #155724; padding: 0.75rem; 
-                            border-radius: 8px; text-align: center; font-weight: 600;'>
-                    ✅ RAG
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
-        else:
-            st.markdown(
-                f"""
-                <div style='background: #fff3cd; color: #856404; padding: 0.75rem; 
-                            border-radius: 8px; text-align: center; font-weight: 600;'
-                            title='{rag_error or "RAG not configured"}'>
-                    ⚠️ RAG
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
-    
-    # Show API status if API mode is enabled
-    if api_client and settings.app.api_enabled:
-        try:
-            health = api_client.get_health()
-            status = health.get('status', 'unknown')
+                except Exception:
+                    pass
             
-            if status == 'healthy':
-                st.success("✅ API: Healthy")
-            elif status == 'degraded':
-                st.warning("⚠️ API: Degraded")
+            if redis_connected:
+                st.markdown(
+                    """
+                    <div style='background: #d4edda; color: #155724; padding: 0.75rem; 
+                                border-radius: 8px; text-align: center; font-weight: 600;'>
+                        ✅ Redis
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
             else:
-                st.error("❌ API: Unhealthy")
+                st.markdown(
+                    """
+                    <div style='background: #f8d7da; color: #721c24; padding: 0.75rem; 
+                                border-radius: 8px; text-align: center; font-weight: 600;'>
+                        ⚠️ Redis
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+        
+        with status_col2:
+            rag_enabled = False
+            if rag_service:
+                try:
+                    rag_enabled = rag_service.embeddings_enabled
+                except Exception:
+                    pass
             
-            # Show service details in expander
-            with st.expander("Service Details"):
-                services = health.get('services', {})
-                for service_name, service_status in services.items():
-                    if service_status == 'available':
-                        st.success(f"✅ {service_name.title()}")
-                    elif service_status == 'not_configured':
-                        st.info(f"ℹ️ {service_name.title()} (not configured)")
-                    else:
-                        st.error(f"❌ {service_name.title()}: {service_status}")
-        except Exception as e:
-            logger.error(f"Error checking API health: {e}")
-            st.error("❌ API: Unreachable")
-            st.warning("Please ensure the API server is running")
+            if rag_enabled:
+                st.markdown(
+                    """
+                    <div style='background: #d4edda; color: #155724; padding: 0.75rem; 
+                                border-radius: 8px; text-align: center; font-weight: 600;'>
+                        ✅ RAG
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+            else:
+                st.markdown(
+                    """
+                    <div style='background: #fff3cd; color: #856404; padding: 0.75rem; 
+                                border-radius: 8px; text-align: center; font-weight: 600;'>
+                        ⚠️ RAG
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
 
 
 def _render_search_filters(settings):
@@ -432,11 +476,16 @@ def _render_connection_details(
                 health = api_client.get_health()
                 st.success(f"✅ API Status: {health.get('status', 'unknown')}")
                 st.json(health.get('services', {}))
+                
+                # Show system status details
+                status_info = api_client.get_system_status()
+                st.markdown("### System Status Details")
+                st.json(status_info)
             except Exception as e:
                 st.error(f"❌ API: Connection failed - {e}")
                 st.info("Please ensure the API server is running at the configured URL")
         else:
-            # Show direct service connections
+            # Show direct service connections (fallback for non-API mode)
             st.markdown("### Redis Connection")
             if redis_cache:
                 if redis_cache.client:
@@ -526,15 +575,31 @@ def _render_summary_log():
                 st.warning("⚠️ Neither Redis nor RAG was used")
 
 
-def _render_cache_management(redis_cache: Optional[Any]):
+def _render_cache_management(
+    api_client: Optional[SentimentAPIClient],
+    redis_cache: Optional[Any],
+    settings
+):
     """Render cache management buttons."""
     cache_col1, cache_col2 = st.columns(2)
     with cache_col1:
         if st.button("🔄 Reset Cache Stats", width='stretch', help="Reset cache statistics counters (hits/misses)"):
-            if redis_cache:
+            if api_client and settings.app.api_enabled:
+                try:
+                    success = api_client.reset_cache_stats()
+                    if success:
+                        st.success("Cache statistics reset!")
+                        st.rerun()
+                    else:
+                        st.error("Failed to reset cache statistics")
+                except Exception as e:
+                    st.error(f"Error resetting cache stats: {e}")
+            elif redis_cache:
                 redis_cache.reset_cache_stats()
                 st.success("Cache statistics reset!")
                 st.rerun()
+            else:
+                st.warning("Cache management not available")
     
     with cache_col2:
         if 'confirm_clear_cache' not in st.session_state:
@@ -544,7 +609,20 @@ def _render_cache_management(redis_cache: Optional[Any]):
             confirm_col1, confirm_col2 = st.columns(2)
             with confirm_col1:
                 if st.button("✅ Confirm", width='stretch', type="primary"):
-                    if redis_cache and redis_cache.client:
+                    if api_client and settings.app.api_enabled:
+                        try:
+                            result = api_client.clear_cache(confirm=True)
+                            if result.get('success'):
+                                st.success("All cache data cleared!")
+                                st.session_state.confirm_clear_cache = False
+                                st.rerun()
+                            else:
+                                st.error("Failed to clear cache. Check logs for details.")
+                                st.session_state.confirm_clear_cache = False
+                        except Exception as e:
+                            st.error(f"Error clearing cache: {e}")
+                            st.session_state.confirm_clear_cache = False
+                    elif redis_cache and redis_cache.client:
                         if redis_cache.clear_all_cache():
                             st.success("All cache data cleared!")
                             st.session_state.confirm_clear_cache = False
@@ -553,7 +631,7 @@ def _render_cache_management(redis_cache: Optional[Any]):
                             st.error("Failed to clear cache. Check logs for details.")
                             st.session_state.confirm_clear_cache = False
                     else:
-                        st.warning("Redis cache not available")
+                        st.warning("Cache management not available")
                         st.session_state.confirm_clear_cache = False
             with confirm_col2:
                 if st.button("❌ Cancel", width='stretch'):
@@ -561,10 +639,10 @@ def _render_cache_management(redis_cache: Optional[Any]):
                     st.rerun()
         else:
             if st.button("🗑️ Clear All Cache", width='stretch', help="Clear all cached data from Redis"):
-                if redis_cache and redis_cache.client:
+                if (api_client and settings.app.api_enabled) or (redis_cache and redis_cache.client):
                     st.session_state.confirm_clear_cache = True
                     st.warning("⚠️ This will delete ALL cached data. Please confirm.")
                     st.rerun()
                 else:
-                    st.warning("Redis cache not available")
+                    st.warning("Cache management not available")
 

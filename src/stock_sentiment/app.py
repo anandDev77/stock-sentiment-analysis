@@ -133,21 +133,16 @@ else:
         render_overview_tab(data, news_sentiments, social_sentiments, current_symbol)
     
     with tab2:
-        render_price_analysis_tab(current_symbol)
+        render_price_analysis_tab(current_symbol, api_client)
     
     with tab3:
         render_news_sentiment_tab(data, news_sentiments, current_symbol)
     
     with tab4:
-        render_technical_analysis_tab(current_symbol)
+        render_technical_analysis_tab(current_symbol, api_client)
     
     with tab5:
         render_ai_insights_tab(news_sentiments, current_symbol)
     
     with tab6:
-        # Comparison tab may need API client or services
-        # For now, pass None for services if using API mode
-        if api_client and settings.app.api_enabled:
-            render_comparison_tab(None, None, None)  # Comparison tab needs to be updated to use API
-        else:
-            render_comparison_tab(collector, analyzer, rag_service)
+        render_comparison_tab(api_client)

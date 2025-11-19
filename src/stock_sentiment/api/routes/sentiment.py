@@ -3,7 +3,8 @@ Sentiment analysis API routes.
 """
 
 from fastapi import APIRouter, HTTPException, Query, Depends
-from typing import Optional, Dict, Union
+from typing import Optional, Dict, Union, List
+from pydantic import BaseModel, Field
 
 from ..models.response import SentimentResponse, DetailedSentimentResponse, ErrorResponse
 from ..dependencies import get_all_services
@@ -209,5 +210,152 @@ async def get_sentiment(
         raise HTTPException(
             status_code=500,
             detail=f"Failed to analyze sentiment for {symbol}: {str(e)}"
+        )
+
+
+class BatchSentimentRequest(BaseModel):
+    """Request model for batch sentiment analysis."""
+    symbols: List[str] = Field(..., description="List of stock symbols to analyze", min_items=1)
+    sources: Optional[str] = Field(None, description="Comma-separated list of data sources")
+    cache_enabled: Optional[bool] = Field(True, description="Enable sentiment caching")
+    detailed: Optional[bool] = Field(False, description="Return detailed response")
+
+
+@router.post(
+    "/batch",
+    response_model=List[Union[SentimentResponse, DetailedSentimentResponse]],
+    responses={
+        200: {"description": "Successful response"},
+        400: {"model": ErrorResponse, "description": "Bad request"},
+        500: {"model": ErrorResponse, "description": "Internal server error"}
+    },
+    summary="Batch sentiment analysis for multiple symbols",
+    description="""
+    Analyze sentiment for multiple stock symbols in a single request.
+    
+    - **symbols**: List of stock symbols to analyze (required, minimum 1)
+    - **sources**: Optional comma-separated list of data sources
+    - **cache_enabled**: Optional flag to enable/disable sentiment caching (default: true)
+    - **detailed**: Optional flag to return detailed response (default: false)
+    
+    Returns a list of sentiment responses, one for each symbol.
+    """
+)
+async def get_sentiment_batch(
+    request: BatchSentimentRequest
+):
+    """
+    Get aggregated sentiment analysis for multiple stock symbols.
+    
+    Args:
+        request: Batch sentiment request with symbols and options
+    
+    Returns:
+        List of sentiment responses
+    
+    Raises:
+        HTTPException: If analysis fails
+    """
+    import time
+    request_start = time.time()
+    
+    symbols = request.symbols
+    sources = request.sources
+    cache_enabled = request.cache_enabled
+    detailed = request.detailed
+    
+    logger.info("=" * 80)
+    logger.info(f"🌐 API REQUEST: POST /sentiment/batch")
+    logger.info("-" * 80)
+    logger.info(f"📋 Request Parameters:")
+    logger.info(f"   • Symbols: {', '.join(symbols)}")
+    logger.info(f"   • Sources filter: {sources or 'all enabled sources'}")
+    logger.info(f"   • Cache enabled: {'✅ YES' if cache_enabled else '❌ NO (RAG will be used)'}")
+    logger.info(f"   • Detailed response: {'✅ YES' if detailed else '❌ NO'}")
+    logger.info("-" * 80)
+    
+    try:
+        # Validate all symbols
+        for symbol in symbols:
+            try:
+                symbol_upper = symbol.upper().strip()
+                validate_stock_symbol(symbol_upper)
+            except ValueError as e:
+                logger.warning(f"Invalid symbol '{symbol}': {e}")
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid stock symbol: {symbol}. {str(e)}"
+                )
+        
+        # Get all services
+        settings, redis_cache, rag_service, collector, analyzer = get_all_services()
+        
+        if analyzer is None:
+            logger.error("Sentiment analyzer not available")
+            raise HTTPException(
+                status_code=503,
+                detail="Sentiment analyzer service unavailable. Please check configuration."
+            )
+        
+        # Temporarily disable cache if requested
+        original_cache_setting = settings.app.cache_sentiment_enabled
+        if not cache_enabled:
+            settings.app.cache_sentiment_enabled = False
+            logger.info(f"API: Sentiment cache disabled for this batch request (forcing RAG usage)")
+        
+        try:
+            # Parse data source filters
+            data_source_filters = parse_data_source_filters(sources)
+            
+            # Process each symbol
+            results = []
+            for idx, symbol in enumerate(symbols, 1):
+                symbol_upper = symbol.upper().strip()
+                logger.info(f"Processing {symbol_upper} ({idx}/{len(symbols)})...")
+                
+                # Get aggregated sentiment
+                result = get_aggregated_sentiment(
+                    symbol=symbol_upper,
+                    collector=collector,
+                    analyzer=analyzer,
+                    rag_service=rag_service,
+                    redis_cache=redis_cache,
+                    settings=settings,
+                    data_source_filters=data_source_filters,
+                    return_detailed=detailed
+                )
+                
+                # Transform result for response
+                if detailed:
+                    detailed_result = result.copy()
+                    if 'data' in result:
+                        data = result['data']
+                        detailed_result['price_data'] = data.get('price_data', {})
+                        detailed_result['news'] = data.get('news', [])
+                    results.append(DetailedSentimentResponse(**detailed_result))
+                else:
+                    simple_result = {k: v for k, v in result.items() 
+                                   if k not in ['data', 'news_sentiments', 'social_sentiments']}
+                    results.append(SentimentResponse(**simple_result))
+            
+            request_time = time.time() - request_start
+            logger.info("-" * 80)
+            logger.info(f"✅ API RESPONSE: Successfully analyzed {len(symbols)} symbols")
+            logger.info(f"   • Request time: {request_time:.2f}s")
+            logger.info("=" * 80)
+            
+            return results
+            
+        finally:
+            # Restore original cache setting
+            settings.app.cache_sentiment_enabled = original_cache_setting
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"API: Error in batch sentiment analysis: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to analyze sentiment for batch: {str(e)}"
         )
 

@@ -400,14 +400,14 @@ class RAGService:
         
         if self.vector_db and self.vector_db.is_available():
             logger.info(f"   🔍 Checking Azure AI Search for existing articles...")
-            vector_ids_to_check = [f"{symbol}:{meta['article_id']}" for meta in article_metadata]
+            vector_ids_to_check = [f"{symbol}_{meta['article_id']}" for meta in article_metadata]
             existing_docs = self.vector_db.batch_check_documents_exist(vector_ids_to_check)
             
             # Filter out articles that already exist in Azure AI Search
             filtered_texts = []
             filtered_metadata = []
             for i, (text, metadata) in enumerate(zip(article_texts, article_metadata)):
-                vector_id = f"{symbol}:{metadata['article_id']}"
+                vector_id = f"{symbol}_{metadata['article_id']}"
                 if existing_docs.get(vector_id, False):
                     existing_in_vector_db += 1
                     # Still mark in Redis for duplicate checking

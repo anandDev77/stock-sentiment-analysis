@@ -5,14 +5,16 @@ Stock comparison tab component.
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+from typing import Optional
 
-from ...utils.ui_helpers import generate_comparison_insights, show_toast
+from ...utils.ui_helpers import show_toast
 from ...utils.logger import get_logger
+from ...presentation.api_client import SentimentAPIClient
 
 logger = get_logger(__name__)
 
 
-def render_comparison_tab(collector, analyzer, rag_service):
+def render_comparison_tab(api_client: Optional[SentimentAPIClient]):
     """Render the stock comparison tab."""
     st.header("📊 Stock Comparison")
     st.markdown("Compare multiple stocks side-by-side with AI-powered insights")
@@ -50,54 +52,80 @@ def render_comparison_tab(collector, analyzer, rag_service):
                 st.session_state.comparison_sentiments = {}
                 st.session_state.comparison_insights = None
                 
-                # Collect data for all stocks
+                if not api_client:
+                    st.error("❌ API client not available. Please ensure API mode is enabled.")
+                    return
+                
+                # Collect data for all stocks using batch API
                 progress_bar = st.progress(0)
                 status_text = st.empty()
                 
-                total_stocks = len(compare_stocks)
-                for idx, sym in enumerate(compare_stocks):
-                    try:
-                        status_text.text(f"📊 Analyzing {sym} ({idx+1}/{total_stocks})...")
-                        progress_bar.progress((idx + 1) / total_stocks)
-                        
-                        comp_data = collector.collect_all_data(sym)
-                        comp_texts = [a.get('summary', a.get('title', '')) for a in comp_data.get('news', [])]
-                        
-                        if comp_texts:
-                            comp_sentiments = analyzer.batch_analyze(comp_texts, symbol=sym)
-                            
-                            # Store articles in RAG for future context
-                            if rag_service and comp_data.get('news'):
-                                logger.info(f"Storing {len(comp_data['news'])} articles in RAG for {sym}")
-                                rag_service.store_articles_batch(comp_data['news'], sym)
-                            
-                            # Aggregate sentiment
-                            if comp_sentiments:
-                                df = pd.DataFrame(comp_sentiments)
-                                st.session_state.comparison_data[sym] = comp_data
-                                st.session_state.comparison_sentiments[sym] = {
-                                    'positive': float(df['positive'].mean()),
-                                    'negative': float(df['negative'].mean()),
-                                    'neutral': float(df['neutral'].mean())
-                                }
-                    except Exception as e:
-                        logger.error(f"Error comparing {sym}: {e}")
-                        st.warning(f"⚠️ Failed to load data for {sym}: {str(e)}")
-                
-                progress_bar.empty()
-                status_text.empty()
-                
-                # Generate AI insights
-                if st.session_state.comparison_data and st.session_state.comparison_sentiments:
-                    status_text.text("🤖 Generating AI comparison insights...")
-                    st.session_state.comparison_insights = generate_comparison_insights(
-                        st.session_state.comparison_data,
-                        st.session_state.comparison_sentiments,
-                        analyzer
+                try:
+                    status_text.text(f"📊 Analyzing {len(compare_stocks)} stocks...")
+                    progress_bar.progress(0.3)
+                    
+                    # Get batch sentiment analysis
+                    batch_results = api_client.get_sentiment_batch(
+                        symbols=compare_stocks,
+                        detailed=True,
+                        cache_enabled=True
                     )
+                    
+                    progress_bar.progress(0.7)
+                    
+                    # Process results
+                    for result in batch_results:
+                        sym = result['symbol']
+                        
+                        # Extract data
+                        price_data = result.get('price_data', {})
+                        news = result.get('news', [])
+                        news_sentiments = result.get('news_sentiments', [])
+                        
+                        # Store comparison data
+                        st.session_state.comparison_data[sym] = {
+                            'price_data': price_data,
+                            'news': news
+                        }
+                        
+                        # Aggregate sentiment from individual article sentiments
+                        if news_sentiments:
+                            df = pd.DataFrame(news_sentiments)
+                            st.session_state.comparison_sentiments[sym] = {
+                                'positive': float(df['positive'].mean()),
+                                'negative': float(df['negative'].mean()),
+                                'neutral': float(df['neutral'].mean())
+                            }
+                        else:
+                            # Fallback to aggregated sentiment
+                            st.session_state.comparison_sentiments[sym] = {
+                                'positive': result.get('positive', 0),
+                                'negative': result.get('negative', 0),
+                                'neutral': result.get('neutral', 0)
+                            }
+                    
+                    progress_bar.progress(0.9)
+                    
+                    # Generate AI insights
+                    if st.session_state.comparison_data and st.session_state.comparison_sentiments:
+                        status_text.text("🤖 Generating AI comparison insights...")
+                        st.session_state.comparison_insights = api_client.get_comparison_insights(
+                            st.session_state.comparison_data,
+                            st.session_state.comparison_sentiments
+                        )
+                    
+                    progress_bar.progress(1.0)
+                    progress_bar.empty()
                     status_text.empty()
+                    
                     show_toast("✅ Comparison complete!", "success")
                     st.rerun()
+                    
+                except Exception as e:
+                    logger.error(f"Error in comparison: {e}")
+                    progress_bar.empty()
+                    status_text.empty()
+                    st.error(f"❌ Failed to compare stocks: {str(e)}")
     
     # Display comparison if data available
     if st.session_state.get('comparison_data') and st.session_state.get('comparison_sentiments'):

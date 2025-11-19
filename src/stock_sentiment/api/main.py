@@ -11,6 +11,10 @@ import time
 from typing import Dict
 
 from .routes.sentiment import router as sentiment_router
+from .routes.price import router as price_router
+from .routes.comparison import router as comparison_router
+from .routes.system import router as system_router
+from .routes.cache import router as cache_router
 from .models.response import HealthResponse, ErrorResponse
 from .dependencies import get_all_services
 from ..utils.logger import get_logger, setup_logger
@@ -129,6 +133,10 @@ async def general_exception_handler(request: Request, exc: Exception):
 
 # Include routers
 app.include_router(sentiment_router)
+app.include_router(price_router)
+app.include_router(comparison_router)
+app.include_router(system_router)
+app.include_router(cache_router)
 
 
 # Root endpoint
