@@ -229,7 +229,9 @@ class AppSettings(BaseSettings):
     sentiment_temperature: float = Field(default=0.2, description="Temperature for sentiment analysis model (0.0-2.0, lower = more consistent)")
     sentiment_max_tokens: int = Field(default=200, description="Maximum tokens for sentiment analysis response")
     sentiment_batch_size: int = Field(default=100, description="Batch size for parallel sentiment analysis")
-    sentiment_max_workers: int = Field(default=5, description="Maximum parallel workers for batch sentiment analysis")
+    sentiment_max_workers: int = Field(default=5, description="Maximum parallel workers for batch sentiment analysis (deprecated, use analysis_parallel_workers)")
+    analysis_parallel_workers: int = Field(default=5, description="Maximum parallel workers for sentiment analysis batches")
+    analysis_worker_timeout: int = Field(default=180, description="Timeout (seconds) for each parallel sentiment task")
     
     # Retry settings
     retry_max_attempts: int = Field(default=3, description="Maximum retry attempts for API calls")

@@ -10,6 +10,7 @@ This module provides AI-powered sentiment analysis with support for:
 
 import json
 import re
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError, as_completed
 from typing import Dict, List, Optional
 from openai import AzureOpenAI
 from textblob import TextBlob
@@ -445,7 +446,8 @@ Respond ONLY with valid JSON. No explanations, no markdown, just the JSON object
         self,
         texts: List[str],
         symbol: Optional[str] = None,
-        max_workers: Optional[int] = None
+        max_workers: Optional[int] = None,
+        worker_timeout: Optional[int] = None
     ) -> List[Dict[str, float]]:
         """
         Analyze sentiment for multiple texts in parallel (industry best practice).
@@ -461,20 +463,29 @@ Respond ONLY with valid JSON. No explanations, no markdown, just the JSON object
         Returns:
             List of sentiment score dictionaries in same order as input
         """
-        from concurrent.futures import ThreadPoolExecutor, as_completed
-        
         if not texts:
             return []
         
         # Use configured max_workers if not provided
         if max_workers is None:
-            max_workers = self.settings.app.sentiment_max_workers
+            configured_workers = self.settings.app.analysis_parallel_workers or self.settings.app.sentiment_max_workers
+            max_workers = max(1, configured_workers)
+        else:
+            max_workers = max(1, max_workers)
+        
+        if worker_timeout is None:
+            worker_timeout = max(30, self.settings.app.analysis_worker_timeout)
         
         # For small batches, sequential might be faster (avoid overhead)
         if len(texts) <= 2:
             return [self.analyze_sentiment(text, symbol) for text in texts]
         
         results = [None] * len(texts)
+        
+        logger.info(
+            f"Sentiment Analysis: batch size={len(texts)}, "
+            f"max_workers={max_workers}, worker_timeout={worker_timeout}s"
+        )
         
         # Use ThreadPoolExecutor for parallel processing
         # ThreadPoolExecutor works well with I/O-bound operations like API calls
@@ -489,7 +500,13 @@ Respond ONLY with valid JSON. No explanations, no markdown, just the JSON object
             for future in as_completed(future_to_index):
                 index = future_to_index[future]
                 try:
-                    results[index] = future.result()
+                    results[index] = future.result(timeout=worker_timeout)
+                except FuturesTimeoutError:
+                    logger.error(
+                        f"Sentiment Analysis: Timeout after {worker_timeout}s "
+                        f"for text at index {index}"
+                    )
+                    results[index] = {'positive': 0.0, 'negative': 0.0, 'neutral': 1.0}
                 except Exception as e:
                     logger.error(f"Error analyzing sentiment for text at index {index}: {e}")
                     # Fallback to neutral sentiment on error

@@ -26,8 +26,14 @@ def parse_data_source_filters(sources: Optional[str] = None) -> Optional[Dict[st
     Returns:
         Dictionary of source enable/disable flags, or None if not specified
     """
-    if not sources:
-        return None
+    if not sources or not sources.strip():
+        # Default to only yfinance when no sources are specified
+        return {
+            "yfinance": True,
+            "alpha_vantage": False,
+            "finnhub": False,
+            "reddit": False
+        }
     
     # Default all sources to False, then enable specified ones
     filters = {
@@ -47,9 +53,6 @@ def parse_data_source_filters(sources: Optional[str] = None) -> Optional[Dict[st
             filters["yfinance"] = True
         else:
             logger.warning(f"Unknown data source: {source}")
-    
-    # yfinance is always enabled (primary source)
-    filters["yfinance"] = True
     
     return filters
 

@@ -51,9 +51,12 @@ def load_stock_data(
         if 'search_filters' in st.session_state and 'data_sources' in st.session_state.search_filters:
             data_source_filters = st.session_state.search_filters.get('data_sources')
             enabled_sources = [k for k, v in data_source_filters.items() if v]
-            # Convert to comma-separated string for API
-            sources_param = ','.join([s for s in enabled_sources if s != 'yfinance'])  # yfinance is always enabled
-            logger.info(f"[{symbol}] Data source filters applied - Enabled: {', '.join(enabled_sources)}")
+            if enabled_sources:
+                sources_param = ','.join(enabled_sources)
+            else:
+                # Fail-safe: at least yfinance should be requested
+                sources_param = 'yfinance'
+            logger.info(f"[{symbol}] Data source filters applied - Enabled: {', '.join(enabled_sources) if enabled_sources else 'yfinance'}")
         
         # Get cache setting from UI (if available in sidebar)
         cache_enabled = settings.app.cache_sentiment_enabled

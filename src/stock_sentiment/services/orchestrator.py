@@ -198,11 +198,17 @@ def get_aggregated_sentiment(
         initial_rag_attempts = getattr(analyzer, 'rag_attempts', 0) if hasattr(analyzer, 'rag_attempts') else 0
         
         # Batch analyze with parallel processing
-        logger.info(f"[{symbol}] Starting batch sentiment analysis (max_workers=5)...")
+        worker_count = settings.app.analysis_parallel_workers or settings.app.sentiment_max_workers
+        worker_timeout = settings.app.analysis_worker_timeout
+        logger.info(
+            f"[{symbol}] Starting batch sentiment analysis "
+            f"(workers={worker_count}, timeout={worker_timeout}s)..."
+        )
         news_sentiments = analyzer.batch_analyze(
             texts=news_texts,
             symbol=symbol,
-            max_workers=5
+            max_workers=worker_count,
+            worker_timeout=worker_timeout
         )
         
         # Track RAG usage after analysis
@@ -233,7 +239,8 @@ def get_aggregated_sentiment(
             social_sentiments = analyzer.batch_analyze(
                 texts=social_texts,
                 symbol=symbol,
-                max_workers=5
+                max_workers=worker_count,
+                worker_timeout=worker_timeout
             )
             # Handle empty texts
             for i, text in enumerate(social_texts):
