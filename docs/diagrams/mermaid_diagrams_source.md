@@ -1,6 +1,6 @@
 # Mermaid Diagrams Source Code
 
-This file contains all Mermaid diagram source code extracted from INDEX_V3.md.
+This file contains all Mermaid diagram source code extracted from index.md.
 This is kept for reference and future modifications.
 
 **Total Diagrams:** 29
@@ -9,7 +9,7 @@ This is kept for reference and future modifications.
 
 ## Diagram 1
 
-**Location:** Line 176 in INDEX_V3.md
+**Location:** Line 176 in index.md
 
 **Context:** ## High-Level Architecture ### Complete System Overview
 
@@ -94,7 +94,7 @@ flowchart TB
 
 ## Diagram 2
 
-**Location:** Line 264 in INDEX_V3.md
+**Location:** Line 264 in index.md
 
 **Context:** ### System Architecture Overview
 
@@ -164,7 +164,7 @@ flowchart TB
 
 ## Diagram 3
 
-**Location:** Line 330 in INDEX_V3.md
+**Location:** Line 330 in index.md
 
 **Context:** ### Component Interaction Flow
 
@@ -199,11 +199,56 @@ sequenceDiagram
         Orchestrator->>Cache: Store data in cache
     end
     
+    Note over Orchestrator: STEP 2: Store in RAG
     Orchestrator->>RAG: store_articles_batch(articles, symbol)
-    RAG->>VectorDB: Check existing articles
-    RAG->>AzureOpenAI: Generate embeddings (batch)
-    RAG->>VectorDB: Store articles with embeddings
-    RAG-->>Orchestrator: Articles stored
+    
+    alt RAG Service Available
+        Note over RAG: Check Embeddings Enabled
+        alt Embeddings Enabled
+            RAG->>RAG: Preprocess articles<br/>(clean, expand abbreviations)
+            RAG->>Redis: Check duplicate markers<br/>(per article)
+            RAG->>VectorDB: batch_check_documents_exist<br/>(if Azure AI Search available)
+            alt Articles Already Exist
+                VectorDB-->>RAG: Return existing count
+                RAG->>Redis: Mark as stored
+                RAG-->>Orchestrator: Return existing count
+            else New Articles to Store
+                RAG->>Redis: Check cached embeddings
+                alt Embeddings Cached
+                    Redis-->>RAG: Return cached embeddings
+                else Embeddings Not Cached
+                    RAG->>AzureOpenAI: get_embeddings_batch<br/>(batch_size=100, single API call)
+                    alt Embedding Generation Success
+                        AzureOpenAI-->>RAG: Return embeddings (1536 dims)
+                        RAG->>Redis: Cache embeddings (7 days TTL)
+                    else Embedding Generation Failed
+                        RAG->>RAG: Log error, skip failed articles
+                    end
+                end
+                
+                alt Azure AI Search Available
+                    RAG->>VectorDB: batch_store_vectors<br/>(vectors + metadata)
+                    alt Storage Success
+                        VectorDB->>VectorDB: Index with HNSW algorithm
+                        VectorDB-->>RAG: Return stored count
+                        RAG->>Redis: Set duplicate markers (7 days TTL)
+                        RAG-->>Orchestrator: Return stored count
+                    else Storage Failed
+                        RAG->>RAG: Log error, return partial count
+                        RAG-->>Orchestrator: Return stored count (partial)
+                    end
+                else Azure AI Search Unavailable
+                    RAG->>Redis: Store in Redis SCAN format<br/>(fallback storage)
+                    Redis-->>RAG: Storage confirmed
+                    RAG-->>Orchestrator: Return stored count
+                end
+            end
+        else Embeddings Disabled
+            RAG-->>Orchestrator: Return 0 (embeddings not enabled)
+        end
+    else RAG Service Unavailable
+        Note over Orchestrator: RAG skipped, continue without context
+    end
     
     loop For each article
         Orchestrator->>Cache: Check sentiment cache
@@ -232,7 +277,7 @@ sequenceDiagram
 
 ## Diagram 4
 
-**Location:** Line 394 in INDEX_V3.md
+**Location:** Line 394 in index.md
 
 **Context:** ### API-Driven Architecture Flow
 
@@ -279,7 +324,7 @@ flowchart LR
 
 ## Diagram 5
 
-**Location:** Line 437 in INDEX_V3.md
+**Location:** Line 437 in index.md
 
 **Context:** ### Deployment Architecture
 
@@ -331,7 +376,7 @@ flowchart TB
 
 ## Diagram 6
 
-**Location:** Line 543 in INDEX_V3.md
+**Location:** Line 543 in index.md
 
 **Context:** ### Component Relationship Diagram
 
@@ -415,7 +460,7 @@ graph TB
 
 ## Diagram 7
 
-**Location:** Line 2975 in INDEX_V3.md
+**Location:** Line 2975 in index.md
 
 **Context:** #### User Request Flow Diagram
 
@@ -443,14 +488,53 @@ sequenceDiagram
     alt Cache Hit
         Cache-->>Orchestrator: Return cached data
     else Cache Miss
-        Orchestrator->>Collector: collect_all_data(symbol)
-        Collector->>YFinance: Fetch stock & news
-        Collector->>AlphaVantage: Fetch news (if enabled)
-        Collector->>Finnhub: Fetch news (if enabled)
-        Collector->>Reddit: Fetch posts (if enabled)
-        Collector-->>Orchestrator: Return collected data
-        Orchestrator->>Cache: Store data in cache
-    end
+        Orchestrator->>Collector: collect_all_data(symbol, data_source_filters)
+            Note over Collector: Apply Source Filters
+            Collector->>Collector: Validate symbol format
+            alt Symbol Valid
+                Collector->>YFinance: Fetch stock & news<br/>(always enabled)
+                alt YFinance Success
+                    YFinance-->>Collector: Return stock + news data
+                else YFinance Error
+                    Collector->>Collector: Log error, continue with other sources
+                end
+                
+                alt Alpha Vantage Enabled
+                    Collector->>AlphaVantage: Fetch news<br/>(if API key configured)
+                    alt Alpha Vantage Success
+                        AlphaVantage-->>Collector: Return news articles
+                    else Alpha Vantage Error
+                        Collector->>Collector: Log warning, skip source
+                    end
+                end
+                
+                alt Finnhub Enabled
+                    Collector->>Finnhub: Fetch news<br/>(if API key configured)
+                    alt Finnhub Success
+                        Finnhub-->>Collector: Return news articles
+                    else Finnhub Error
+                        Collector->>Collector: Log warning, skip source
+                    end
+                end
+                
+                alt Reddit Enabled
+                    Collector->>Reddit: Fetch posts<br/>(if credentials configured)
+                    alt Reddit Success
+                        Reddit-->>Collector: Return social posts
+                    else Reddit Error
+                        Collector->>Collector: Log warning, skip source
+                    end
+                end
+                
+                Note over Collector: Post-Processing
+                Collector->>Collector: Deduplicate articles<br/>(by URL & title similarity)
+                Collector->>Collector: Normalize article format<br/>(standard structure)
+                Collector-->>Orchestrator: Return collected data
+                Orchestrator->>Cache: Store data in cache<br/>(stock: 1h TTL, news: 2h TTL)
+            else Symbol Invalid
+                Collector-->>Orchestrator: Return error/default data
+            end
+        end
     
     Note over Orchestrator: STEP 2: Store in RAG
     Orchestrator->>RAG: store_articles_batch(articles, symbol)
@@ -490,7 +574,7 @@ sequenceDiagram
 
 ## Diagram 8
 
-**Location:** Line 3079 in INDEX_V3.md
+**Location:** Line 3079 in index.md
 
 **Context:** #### Data Collection Flow Diagram
 
@@ -501,23 +585,38 @@ flowchart TD
     CHECK_CACHE -->|Cache Hit| RETURN_CACHED[Return Cached Data<br/>TTL: 1h stock, 2h news]
     CHECK_CACHE -->|Cache Miss| COLLECT[Start Data Collection]
     
-    COLLECT --> FILTER[Apply Source Filters<br/>yfinance: ✅<br/>Alpha Vantage: ✅<br/>Finnhub: ❌<br/>Reddit: ❌]
+    COLLECT --> VALIDATE[Validate Symbol<br/>Check format & length]
     
-    FILTER --> YFINANCE[yfinance API<br/>Stock price + News]
-    FILTER --> ALPHA_VANTAGE[Alpha Vantage API<br/>Company News]
-    FILTER --> FINNHUB[Finnhub API<br/>Company News<br/>SKIPPED]
-    FILTER --> REDDIT[Reddit API<br/>Social Posts<br/>SKIPPED]
+    VALIDATE -->|Invalid| ERROR_RETURN[Return Error/Default<br/>price: 0.0, empty news]
+    VALIDATE -->|Valid| FILTER[Apply Source Filters<br/>yfinance: ✅<br/>Alpha Vantage: ✅<br/>Finnhub: ❌<br/>Reddit: ❌]
     
-    YFINANCE --> PARALLEL[Parallel Collection]
-    ALPHA_VANTAGE --> PARALLEL
+    FILTER --> YFINANCE[yfinance API<br/>Stock price + News<br/>Always enabled]
+    FILTER --> ALPHA_VANTAGE{Alpha Vantage<br/>Enabled?}
+    FILTER --> FINNHUB{Finnhub<br/>Enabled?}
+    FILTER --> REDDIT{Reddit<br/>Enabled?}
     
-    PARALLEL --> DEDUPE[Deduplicate Articles<br/>By URL & Title Similarity]
+    ALPHA_VANTAGE -->|Yes| ALPHA_FETCH[Alpha Vantage API<br/>Company News]
+    ALPHA_VANTAGE -->|No| SKIP_ALPHA[Skip Alpha Vantage]
+    FINNHUB -->|Yes| FINN_FETCH[Finnhub API<br/>Company News]
+    FINNHUB -->|No| SKIP_FINN[Skip Finnhub]
+    REDDIT -->|Yes| REDDIT_FETCH[Reddit API<br/>Social Posts]
+    REDDIT -->|No| SKIP_REDDIT[Skip Reddit]
     
-    DEDUPE --> NORMALIZE[Normalize Article Format<br/>title, summary, source, url, timestamp]
+    YFINANCE --> PARALLEL[Parallel Collection<br/>All enabled sources]
+    ALPHA_FETCH --> PARALLEL
+    FINN_FETCH --> PARALLEL
+    REDDIT_FETCH --> PARALLEL
+    
+    PARALLEL --> ERROR_HANDLE[Error Handling<br/>Log errors, continue with<br/>available sources]
+    
+    ERROR_HANDLE --> DEDUPE[Deduplicate Articles<br/>By URL & Title Similarity<br/>85% threshold]
+    
+    DEDUPE --> NORMALIZE[Normalize Article Format<br/>title, summary, source, url, timestamp<br/>Validate all fields present]
     
     NORMALIZE --> STORE_CACHE[Store in Redis Cache<br/>stock: 1h TTL<br/>news: 2h TTL]
     
     STORE_CACHE --> RETURN[Return Data Dictionary<br/>price_data, news]
+    ERROR_RETURN --> RETURN
     
     RETURN_CACHED --> RETURN
     
@@ -536,7 +635,7 @@ flowchart TD
 
 ## Diagram 9
 
-**Location:** Line 3156 in INDEX_V3.md
+**Location:** Line 3156 in index.md
 
 **Context:** #### RAG Storage Flow Diagram
 
@@ -550,44 +649,81 @@ sequenceDiagram
     
     Orchestrator->>RAG: store_articles_batch(articles, symbol)
     
-    Note over RAG: STEP 1: Prepare Articles
-    RAG->>RAG: Preprocess articles<br/>(clean text, expand abbreviations)
-    RAG->>RAG: Create article IDs<br/>(MD5 hash of title+url)
-    
-    Note over RAG: STEP 2: Check Duplicates
-    RAG->>Redis: Check duplicate markers<br/>(article_hash:SYMBOL:ID)
-    alt Already in Redis
-        Redis-->>RAG: Duplicate found
-        RAG-->>Orchestrator: Skip (already stored)
-    else Not in Redis
-        Note over RAG: STEP 3: Check Azure AI Search
-        RAG->>VectorDB: batch_check_documents_exist(vector_ids)
-        VectorDB-->>RAG: Return existing document IDs
+    Note over RAG: STEP 1: Validate & Prepare
+    RAG->>RAG: Check embeddings enabled<br/>Check Redis available
+    alt Embeddings Disabled or Redis Unavailable
+        RAG-->>Orchestrator: Return 0 (cannot store)
+    else Service Available
+        Note over RAG: STEP 2: Prepare Articles
+        RAG->>RAG: Preprocess articles<br/>(clean text, expand abbreviations,<br/>filter financial text)
+        RAG->>RAG: Create article IDs<br/>(MD5 hash of symbol:title:url)
+        RAG->>RAG: Filter empty texts<br/>Skip articles with no content
         
-        alt Already in Azure AI Search
-            RAG->>Redis: Mark as stored (for duplicate checking)
-            RAG-->>Orchestrator: Return existing count
-        else New Articles
-            Note over RAG: STEP 4: Generate Embeddings
-            RAG->>Redis: Check cached embeddings
-            alt Embedding Cached
-                Redis-->>RAG: Return cached embedding
-            else Embedding Not Cached
-                RAG->>OpenAI: get_embeddings_batch(texts, batch_size=100)
-                Note over OpenAI: Single API call for<br/>all articles (batch processing)
-                OpenAI-->>RAG: Return embeddings (1536 dims each)
-                RAG->>Redis: Cache embeddings (7 days TTL)
+        Note over RAG: STEP 3: Check Duplicates (per article)
+        loop For each article
+            RAG->>Redis: Check duplicate marker<br/>(article_hash:SYMBOL:ID)<br/>EXISTS operation
+            alt Already in Redis
+                Redis-->>RAG: Duplicate found (TTL active)
+                Note over RAG: Skip this article, increment count
+            else Not in Redis
+                Note over RAG: Article needs processing<br/>Add to processing list
             end
-            
-            Note over RAG: STEP 5: Store in Azure AI Search
-            RAG->>VectorDB: batch_store_vectors(vectors_with_metadata)
-            VectorDB->>VectorDB: Index with HNSW algorithm
-            VectorDB-->>RAG: Return stored count
-            
-            Note over RAG: STEP 6: Mark in Redis
-            RAG->>Redis: Set duplicate markers<br/>(article_hash:SYMBOL:ID, 7 days TTL)
-            
-            RAG-->>Orchestrator: Return total stored count
+        end
+        
+        alt All Articles Duplicates
+            RAG-->>Orchestrator: Return duplicate count<br/>(all already stored)
+        else Some New Articles
+            Note over RAG: STEP 4: Check Azure AI Search (batch)
+            alt Azure AI Search Available
+                RAG->>VectorDB: batch_check_documents_exist(vector_ids)<br/>Check before embedding generation
+                VectorDB-->>RAG: Return existing document IDs
+                
+                alt All articles already in Azure AI Search
+                    RAG->>Redis: Mark as stored<br/>(for duplicate checking, 7 days TTL)
+                    RAG-->>Orchestrator: Return existing count<br/>(no embeddings needed)
+                else Some new articles
+                    Note over RAG: STEP 5: Generate Embeddings (batch)
+                    RAG->>Redis: Check cached embeddings<br/>(per article, 7 days TTL)
+                    alt Some embeddings cached
+                        Redis-->>RAG: Return cached embeddings<br/>(skip generation for these)
+                    end
+                    alt Some embeddings not cached
+                        RAG->>OpenAI: get_embeddings_batch(texts, batch_size=100)
+                        Note over OpenAI: Single API call for<br/>all articles (batch processing)<br/>Up to 2048 inputs per call
+                        alt Embedding Success
+                            OpenAI-->>RAG: Return embeddings<br/>(1536 dims each)
+                            RAG->>Redis: Cache embeddings<br/>(7 days TTL, per article)
+                        else Embedding Failed
+                            RAG->>RAG: Log error<br/>Skip failed articles<br/>Continue with successful ones
+                        end
+                    end
+                    
+                    Note over RAG: STEP 6: Store in Azure AI Search
+                    alt Has Valid Embeddings
+                        RAG->>VectorDB: batch_store_vectors<br/>(vectors + metadata)<br/>Replace colon in IDs
+                        alt Storage Success
+                            VectorDB->>VectorDB: Index with HNSW algorithm<br/>O(N log N) build time
+                            VectorDB-->>RAG: Return stored count
+                            
+                            Note over RAG: STEP 7: Mark in Redis
+                            RAG->>Redis: Set duplicate markers<br/>(article_hash:SYMBOL:ID, 7 days TTL)
+                            
+                            RAG-->>Orchestrator: Return total stored count<br/>(existing + newly stored)
+                        else Storage Failed
+                            RAG->>RAG: Log error<br/>Return partial count
+                            RAG-->>Orchestrator: Return stored count (partial)
+                        end
+                    else No Valid Embeddings
+                        RAG-->>Orchestrator: Return 0 (all embeddings failed)
+                    end
+                end
+            else Azure AI Search Unavailable
+                Note over RAG: Fallback to Redis Storage
+                RAG->>Redis: Store embeddings + metadata<br/>(Redis SCAN format)
+                Redis-->>RAG: Storage confirmed
+                RAG->>Redis: Set duplicate markers<br/>(7 days TTL)
+                RAG-->>Orchestrator: Return stored count<br/>(Redis fallback)
+            end
         end
     end
 ```
@@ -596,7 +732,7 @@ sequenceDiagram
 
 ## Diagram 10
 
-**Location:** Line 3251 in INDEX_V3.md
+**Location:** Line 3251 in index.md
 
 **Context:** #### Sentiment Analysis Flow Diagram
 
@@ -634,18 +770,44 @@ sequenceDiagram
         Note over Sentiment: STEP 4: Build Prompt
         Sentiment->>Sentiment: Format RAG context<br/>Build prompt with context
         
-        Note over Sentiment: STEP 5: Call LLM
-        Sentiment->>OpenAI: GPT-4 API call<br/>(text + RAG context + few-shot examples)
-        OpenAI-->>Sentiment: Return JSON response<br/>{"positive": 0.85, "negative": 0.10, "neutral": 0.05}
-        
-        Note over Sentiment: STEP 6: Parse & Normalize
-        Sentiment->>Sentiment: Parse JSON response
-        Sentiment->>Sentiment: Normalize scores (sum to 1.0)
-        
-        Note over Sentiment: STEP 7: Cache Result
-        Sentiment->>Cache: cache_sentiment(text, scores, TTL)
-        
-        Sentiment-->>Orchestrator: Return sentiment scores
+            Note over Sentiment: STEP 5: Call LLM (with Circuit Breaker)
+        Sentiment->>Sentiment: Check Circuit Breaker State
+        alt Circuit Breaker OPEN
+            Sentiment->>Sentiment: Use TextBlob Fallback<br/>(prevent cascading failures)
+            Sentiment-->>Orchestrator: Return TextBlob sentiment
+        else Circuit Breaker CLOSED
+            Sentiment->>Sentiment: Retry with Exponential Backoff<br/>(max_attempts, initial_delay)
+            Sentiment->>OpenAI: GPT-4 API call<br/>(text + RAG context + few-shot examples)
+            alt API Success
+                OpenAI-->>Sentiment: Return JSON response<br/>{"positive": 0.85, "negative": 0.10, "neutral": 0.05}
+                
+                Note over Sentiment: STEP 6: Parse & Normalize
+                Sentiment->>Sentiment: Parse JSON response
+                alt JSON Parse Success
+                    Sentiment->>Sentiment: Normalize scores (sum to 1.0)
+                    Sentiment->>Sentiment: Validate score ranges<br/>(0.0 ≤ score ≤ 1.0)
+                    
+                    Note over Sentiment: STEP 7: Cache Result
+                    Sentiment->>Cache: cache_sentiment(text, scores, TTL)
+                    
+                    Sentiment-->>Orchestrator: Return sentiment scores
+                else JSON Parse Failed
+                    Sentiment->>Sentiment: Extract JSON from markdown/text<br/>(regex fallback)
+                    alt Extraction Success
+                        Sentiment->>Sentiment: Normalize & validate
+                        Sentiment->>Cache: cache_sentiment(text, scores, TTL)
+                        Sentiment-->>Orchestrator: Return sentiment scores
+                    else Extraction Failed
+                        Sentiment->>Sentiment: Use TextBlob Fallback
+                        Sentiment-->>Orchestrator: Return TextBlob sentiment
+                    end
+                end
+            else API Error (Retry Exhausted)
+                Sentiment->>Sentiment: Circuit Breaker Trip<br/>(increment failure count)
+                Sentiment->>Sentiment: Use TextBlob Fallback
+                Sentiment-->>Orchestrator: Return TextBlob sentiment
+            end
+        end
     end
 ```
 
@@ -653,7 +815,7 @@ sequenceDiagram
 
 ## Diagram 11
 
-**Location:** Line 3302 in INDEX_V3.md
+**Location:** Line 3302 in index.md
 
 **Context:** Diagram 11
 
@@ -667,17 +829,34 @@ flowchart TD
     POOL --> WORKER4[Worker 4:<br/>Article 19-24]
     POOL --> WORKER5[Worker 5:<br/>Article 25-30]
     
-    WORKER1 --> ANALYZE1[Analyze Sentiment<br/>Cache Check → RAG → LLM]
-    WORKER2 --> ANALYZE2[Analyze Sentiment<br/>Cache Check → RAG → LLM]
-    WORKER3 --> ANALYZE3[Analyze Sentiment<br/>Cache Check → RAG → LLM]
-    WORKER4 --> ANALYZE4[Analyze Sentiment<br/>Cache Check → RAG → LLM]
-    WORKER5 --> ANALYZE5[Analyze Sentiment<br/>Cache Check → RAG → LLM]
+    WORKER1 --> ANALYZE1["Analyze Sentiment<br/>1. Preprocess text<br/>2. Check cache<br/>3. RAG retrieval<br/>4. LLM call with retry<br/>5. Parse and normalize<br/>6. Cache result"]
+    WORKER2 --> ANALYZE2["Analyze Sentiment<br/>1. Preprocess text<br/>2. Check cache<br/>3. RAG retrieval<br/>4. LLM call with retry<br/>5. Parse and normalize<br/>6. Cache result"]
+    WORKER3 --> ANALYZE3["Analyze Sentiment<br/>1. Preprocess text<br/>2. Check cache<br/>3. RAG retrieval<br/>4. LLM call with retry<br/>5. Parse and normalize<br/>6. Cache result"]
+    WORKER4 --> ANALYZE4["Analyze Sentiment<br/>1. Preprocess text<br/>2. Check cache<br/>3. RAG retrieval<br/>4. LLM call with retry<br/>5. Parse and normalize<br/>6. Cache result"]
+    WORKER5 --> ANALYZE5["Analyze Sentiment<br/>1. Preprocess text<br/>2. Check cache<br/>3. RAG retrieval<br/>4. LLM call with retry<br/>5. Parse and normalize<br/>6. Cache result"]
     
-    ANALYZE1 --> COLLECT[Collect Results]
-    ANALYZE2 --> COLLECT
-    ANALYZE3 --> COLLECT
-    ANALYZE4 --> COLLECT
-    ANALYZE5 --> COLLECT
+    ANALYZE1 --> ERROR_HANDLE1{Error?}
+    ANALYZE2 --> ERROR_HANDLE2{Error?}
+    ANALYZE3 --> ERROR_HANDLE3{Error?}
+    ANALYZE4 --> ERROR_HANDLE4{Error?}
+    ANALYZE5 --> ERROR_HANDLE5{Error?}
+    
+    ERROR_HANDLE1 -->|Success| COLLECT[Collect Results]
+    ERROR_HANDLE1 -->|Error| FALLBACK1["TextBlob Fallback<br/>Return neutral sentiment"]
+    ERROR_HANDLE2 -->|Success| COLLECT
+    ERROR_HANDLE2 -->|Error| FALLBACK2[TextBlob Fallback]
+    ERROR_HANDLE3 -->|Success| COLLECT
+    ERROR_HANDLE3 -->|Error| FALLBACK3[TextBlob Fallback]
+    ERROR_HANDLE4 -->|Success| COLLECT
+    ERROR_HANDLE4 -->|Error| FALLBACK4[TextBlob Fallback]
+    ERROR_HANDLE5 -->|Success| COLLECT
+    ERROR_HANDLE5 -->|Error| FALLBACK5[TextBlob Fallback]
+    
+    FALLBACK1 --> COLLECT
+    FALLBACK2 --> COLLECT
+    FALLBACK3 --> COLLECT
+    FALLBACK4 --> COLLECT
+    FALLBACK5 --> COLLECT
     
     COLLECT --> AGGREGATE[Aggregate Sentiment Scores<br/>Average positive, negative, neutral]
     AGGREGATE --> END([Return Aggregated Results])
@@ -696,7 +875,7 @@ flowchart TD
 
 ## Diagram 12
 
-**Location:** Line 3375 in INDEX_V3.md
+**Location:** Line 3375 in index.md
 
 **Context:** #### RAG Retrieval Flow Diagram
 
@@ -704,17 +883,32 @@ flowchart TD
 flowchart TD
     START([Query: Apple earnings report<br/>Symbol: AAPL]) --> PREPROCESS[Preprocess Query<br/>Clean & normalize]
     
-    PREPROCESS --> EXPAND{Expand Query?}
+    PREPROCESS --> VALIDATE_QUERY{Query Valid?<br/>Non-empty, length check}
+    
+    VALIDATE_QUERY -->|Invalid| RETURN_EMPTY([Return Empty Context])
+    VALIDATE_QUERY -->|Valid| EXPAND{Expand Query?}
+    
     EXPAND -->|Yes| EXPANDED[Expanded Query:<br/>Apple earnings report<br/>profits revenue results financial]
     EXPAND -->|No| ORIGINAL[Original Query]
     
-    EXPANDED --> EMBED[Generate Query Embedding<br/>Azure OpenAI<br/>1536 dimensions]
-    ORIGINAL --> EMBED
+    EXPANDED --> CHECK_EMBED_CACHE{Query Embedding<br/>Cached?}
+    ORIGINAL --> CHECK_EMBED_CACHE
     
-    EMBED --> HYBRID[Hybrid Search]
+    CHECK_EMBED_CACHE -->|Cached| GET_CACHED[Get Cached Embedding<br/>24h TTL]
+    CHECK_EMBED_CACHE -->|Not Cached| EMBED[Generate Query Embedding<br/>Azure OpenAI<br/>1536 dimensions]
     
-    HYBRID --> SEMANTIC[Semantic Search<br/>Vector Similarity<br/>Cosine Similarity]
-    HYBRID --> KEYWORD[Keyword Search<br/>Full-Text Search<br/>BM25 Algorithm]
+    EMBED -->|Success| CACHE_EMBED[Cache Embedding<br/>24h TTL]
+    EMBED -->|Failed| FALLBACK_KEYWORD[Fallback to Keyword-Only<br/>Search]
+    
+    GET_CACHED --> HYBRID[Hybrid Search]
+    CACHE_EMBED --> HYBRID
+    FALLBACK_KEYWORD --> KEYWORD_ONLY[Keyword Search Only<br/>BM25 Algorithm]
+    
+    HYBRID --> CHECK_VECTOR_DB{Azure AI Search<br/>Available?}
+    
+    CHECK_VECTOR_DB -->|Yes| SEMANTIC[Semantic Search<br/>Vector Similarity<br/>Cosine Similarity]
+    CHECK_VECTOR_DB -->|Yes| KEYWORD[Keyword Search<br/>Full-Text Search<br/>BM25 Algorithm]
+    CHECK_VECTOR_DB -->|No| REDIS_FALLBACK[Redis SCAN Fallback<br/>Calculate cosine similarity<br/>in-memory]
     
     SEMANTIC --> FILTER1[Apply OData Filters<br/>symbol eq 'AAPL'<br/>date_range, sources]
     KEYWORD --> FILTER2[Apply OData Filters<br/>symbol eq 'AAPL'<br/>date_range, sources]
@@ -722,8 +916,11 @@ flowchart TD
     FILTER1 --> RESULTS1[Semantic Results<br/>Ranked by similarity<br/>0.0 - 1.0]
     FILTER2 --> RESULTS2[Keyword Results<br/>Ranked by BM25 score<br/>0 - 100]
     
-    RESULTS1 --> RRF[Reciprocal Rank Fusion<br/>RRF score calculation]
+    REDIS_FALLBACK --> REDIS_RESULTS[Redis Results<br/>Sorted by similarity]
+    
+    RESULTS1 --> RRF[Reciprocal Rank Fusion<br/>RRF score calculation<br/>k=60 constant]
     RESULTS2 --> RRF
+    REDIS_RESULTS --> TEMPORAL
     
     RRF --> COMBINED[Combined Results<br/>Articles appearing in both<br/>rank highest]
     
@@ -731,14 +928,21 @@ flowchart TD
     
     TEMPORAL --> THRESHOLD{Filter by<br/>Similarity Threshold}
     
-    THRESHOLD -->|Too Restrictive| AUTO_ADJUST[Auto-Adjust Threshold<br/>Lower by 20%]
+    THRESHOLD -->|Too Restrictive<br/>No results| AUTO_ADJUST[Auto-Adjust Threshold<br/>Lower by 20%<br/>Retry search]
     AUTO_ADJUST --> THRESHOLD
     
-    THRESHOLD -->|Pass| TOP_K[Select Top K Articles<br/>Default: 3]
+    THRESHOLD -->|Pass| CHECK_RESULTS{Results<br/>Found?}
     
-    TOP_K --> FORMAT[Format Context<br/>Title, Summary, Source,<br/>Relevance Score]
+    CHECK_RESULTS -->|No Results| LOG_WARNING[Log Warning<br/>Indexing delay or<br/>filter too restrictive]
+    CHECK_RESULTS -->|Results Found| TOP_K[Select Top K Articles<br/>Default: 3<br/>Up to top_k]
     
-    FORMAT --> END([Return Context Articles<br/>for LLM Prompt])
+    LOG_WARNING --> RETURN_EMPTY_FINAL([Return Empty Context<br/>Proceed without RAG])
+    TOP_K --> FORMAT[Format Context<br/>Title, Summary, Source,<br/>Relevance Score, Timestamp]
+    
+    FORMAT --> VALIDATE_CONTEXT{Context<br/>Valid?}
+    
+    VALIDATE_CONTEXT -->|Invalid| RETURN_EMPTY_FINAL
+    VALIDATE_CONTEXT -->|Valid| END([Return Context Articles<br/>for LLM Prompt])
     
     style START fill:#e1f5ff
     style EMBED fill:#fff9c4
@@ -753,7 +957,7 @@ flowchart TD
 
 ## Diagram 13
 
-**Location:** Line 3426 in INDEX_V3.md
+**Location:** Line 3426 in index.md
 
 **Context:** Diagram 13
 
@@ -800,7 +1004,7 @@ flowchart LR
 
 ## Diagram 14
 
-**Location:** Line 3548 in INDEX_V3.md
+**Location:** Line 3548 in index.md
 
 **Context:** #### Cosine Similarity Visualization
 
@@ -842,7 +1046,7 @@ graph TB
 
 ## Diagram 15
 
-**Location:** Line 3685 in INDEX_V3.md
+**Location:** Line 3685 in index.md
 
 **Context:** #### RRF Calculation Flow Diagram
 
@@ -874,7 +1078,7 @@ flowchart TD
 
 ## Diagram 16
 
-**Location:** Line 3799 in INDEX_V3.md
+**Location:** Line 3799 in index.md
 
 **Context:** #### Temporal Decay Curve Visualization
 
@@ -915,7 +1119,7 @@ graph LR
 
 ## Diagram 17
 
-**Location:** Line 3965 in INDEX_V3.md
+**Location:** Line 3965 in index.md
 
 **Context:** #### Normalization Process Diagram
 
@@ -952,7 +1156,7 @@ flowchart TD
 
 ## Diagram 18
 
-**Location:** Line 4091 in INDEX_V3.md
+**Location:** Line 4091 in index.md
 
 **Context:** #### Batch Processing Flow Diagram
 
@@ -988,7 +1192,7 @@ flowchart TD
 
 ## Diagram 19
 
-**Location:** Line 4194 in INDEX_V3.md
+**Location:** Line 4194 in index.md
 
 **Context:** #### HNSW Graph Structure Visualization
 
@@ -1056,7 +1260,7 @@ graph TB
 
 ## Diagram 20
 
-**Location:** Line 4256 in INDEX_V3.md
+**Location:** Line 4256 in index.md
 
 **Context:** Diagram 20
 
@@ -1083,7 +1287,7 @@ sequenceDiagram
 
 ## Diagram 21
 
-**Location:** Line 4313 in INDEX_V3.md
+**Location:** Line 4313 in index.md
 
 **Context:** ### 6.1.1 Data Source Integration Architecture
 
@@ -1116,23 +1320,30 @@ flowchart TB
     end
     
     USER --> COLLECTOR
-    COLLECTOR --> FILTER
+    COLLECTOR --> VALIDATE[Validate Symbol<br/>Format check]
+    VALIDATE --> FILTER
     FILTER --> REDIS_CACHE
     
+    REDIS_CACHE -->|Cache Hit| UPDATE_STATS[Update Cache Stats<br/>Increment hits]
     REDIS_CACHE -->|Cache Miss| YFINANCE
     REDIS_CACHE -->|Cache Miss| ALPHA
     REDIS_CACHE -->|Cache Miss| FINN
     REDIS_CACHE -->|Cache Miss| REDDIT
     
-    YFINANCE --> DEDUPE
-    ALPHA --> DEDUPE
-    FINN --> DEDUPE
-    REDDIT --> DEDUPE
+    UPDATE_STATS --> RESULT
     
+    YFINANCE --> ERROR_HANDLE[Error Handling<br/>Log per source<br/>Continue with others]
+    ALPHA --> ERROR_HANDLE
+    FINN --> ERROR_HANDLE
+    REDDIT --> ERROR_HANDLE
+    
+    ERROR_HANDLE --> DEDUPE
     DEDUPE --> NORMALIZE
-    NORMALIZE --> REDIS_CACHE
-    REDIS_CACHE -->|Cache Hit| RESULT
-    NORMALIZE --> RESULT
+    NORMALIZE --> VALIDATE_DATA[Validate Data<br/>Check required fields]
+    VALIDATE_DATA --> REDIS_CACHE
+    REDIS_CACHE -->|Store in Cache| UPDATE_STATS_STORE[Update Cache Stats<br/>Increment sets]
+    UPDATE_STATS_STORE --> RESULT
+    VALIDATE_DATA --> RESULT
     
     style USER fill:#e1f5ff
     style COLLECTOR fill:#fff4e1
@@ -1148,33 +1359,53 @@ flowchart TB
 
 ## Diagram 22
 
-**Location:** Line 4532 in INDEX_V3.md
+**Location:** Line 4532 in index.md
 
 **Context:** Diagram 22
 
 ```mermaid
 flowchart TD
-    START([User Request with Sources]) --> PARSE[Parse Source Filters<br/>yfinance, alpha_vantage, etc.]
+    START([User Request with Sources]) --> VALIDATE_SYMBOL[Validate Symbol<br/>Format, length check]
     
-    PARSE --> CHECK{Source Enabled?}
+    VALIDATE_SYMBOL -->|Invalid| ERROR[Return Error<br/>Invalid symbol format]
+    VALIDATE_SYMBOL -->|Valid| CHECK_CACHE{Check Redis Cache<br/>for stock & news}
     
-    CHECK -->|yfinance| YFINANCE[yfinance Collection<br/>Always enabled]
-    CHECK -->|alpha_vantage| ALPHA[Alpha Vantage Collection<br/>Requires API key]
-    CHECK -->|finnhub| FINN[Finnhub Collection<br/>Requires API key]
-    CHECK -->|reddit| REDDIT[Reddit Collection<br/>Requires credentials]
+    CHECK_CACHE -->|Cache Hit| RETURN[Return Cached Data<br/>TTL: 1h stock, 2h news<br/>Deserialize JSON]
+    CHECK_CACHE -->|Cache Miss| PARSE[Parse Source Filters<br/>yfinance, alpha_vantage, etc.<br/>Validate filter format]
     
-    YFINANCE --> COLLECT[Parallel Collection<br/>All enabled sources]
+    PARSE --> CHECK{Source Enabled?<br/>Check API keys}
+    
+    CHECK -->|yfinance| YFINANCE[yfinance Collection<br/>Always enabled<br/>No API key needed]
+    CHECK -->|alpha_vantage| CHECK_ALPHA{Alpha Vantage<br/>API Key?}
+    CHECK -->|finnhub| CHECK_FINN{Finnhub<br/>API Key?}
+    CHECK -->|reddit| CHECK_REDDIT{Reddit<br/>Credentials?}
+    
+    CHECK_ALPHA -->|Yes| ALPHA[Alpha Vantage Collection<br/>Company News API]
+    CHECK_ALPHA -->|No| SKIP_ALPHA[Skip Alpha Vantage<br/>Log warning]
+    CHECK_FINN -->|Yes| FINN[Finnhub Collection<br/>Financial News API]
+    CHECK_FINN -->|No| SKIP_FINN[Skip Finnhub<br/>Log warning]
+    CHECK_REDDIT -->|Yes| REDDIT[Reddit Collection<br/>Social Media Posts]
+    CHECK_REDDIT -->|No| SKIP_REDDIT[Skip Reddit<br/>Log warning]
+    
+    YFINANCE --> COLLECT[Parallel Collection<br/>All enabled sources<br/>Concurrent execution]
     ALPHA --> COLLECT
     FINN --> COLLECT
     REDDIT --> COLLECT
     
-    COLLECT --> DEDUPE[Deduplicate Articles<br/>By URL & Title]
+    COLLECT --> ERROR_HANDLE[Error Handling<br/>Log errors per source<br/>Continue with available data]
     
-    DEDUPE --> NORMALIZE[Normalize Format<br/>Standard structure]
+    ERROR_HANDLE --> DEDUPE[Deduplicate Articles<br/>By URL & Title Similarity<br/>85% threshold]
     
-    NORMALIZE --> CACHE[Cache in Redis<br/>2h TTL]
+    DEDUPE --> NORMALIZE[Normalize Format<br/>Standard structure<br/>Validate all fields]
     
-    CACHE --> RETURN[Return Combined Results]
+    NORMALIZE --> VALIDATE_DATA{Data<br/>Valid?}
+    
+    VALIDATE_DATA -->|Invalid| DEFAULT[Return Default Data<br/>Empty news, price: 0.0]
+    VALIDATE_DATA -->|Valid| CACHE[Cache in Redis<br/>stock: 1h TTL<br/>news: 2h TTL]
+    
+    CACHE --> RETURN
+    DEFAULT --> RETURN
+    ERROR --> RETURN
     
     style START fill:#e1f5ff
     style COLLECT fill:#fff9c4
@@ -1185,7 +1416,7 @@ flowchart TD
 
 ## Diagram 23
 
-**Location:** Line 4579 in INDEX_V3.md
+**Location:** Line 4579 in index.md
 
 **Context:** ### 6.8 Data Normalization Flow
 
@@ -1228,7 +1459,7 @@ flowchart LR
 
 ## Diagram 24
 
-**Location:** Line 4645 in INDEX_V3.md
+**Location:** Line 4645 in index.md
 
 **Context:** ### 7.2 Cache Architecture
 
@@ -1273,24 +1504,40 @@ flowchart TB
 
 ## Diagram 25
 
-**Location:** Line 4753 in INDEX_V3.md
+**Location:** Line 4753 in index.md
 
 **Context:** ### 7.6 Cache Flow Diagram
 
 ```mermaid
 flowchart TD
-    START([Data Request]) --> CHECK{Check Redis Cache}
+    START([Data Request]) --> CHECK_REDIS{Redis<br/>Available?}
     
-    CHECK -->|Cache Hit| RETURN[Return Cached Data<br/>Update Stats]
+    CHECK_REDIS -->|Not Available| FETCH_DIRECT[Fetch from API/Service<br/>Skip caching]
+    CHECK_REDIS -->|Available| CHECK{Check Redis Cache<br/>GET operation}
+    
+    CHECK -->|Cache Hit| UPDATE_STATS_HIT[Update Cache Stats<br/>Increment hits]
     CHECK -->|Cache Miss| FETCH[Fetch from API/Service]
     
-    FETCH --> PROCESS[Process Data]
-    PROCESS --> STORE[Store in Redis<br/>with TTL]
+    UPDATE_STATS_HIT --> RETURN[Return Cached Data<br/>Deserialize JSON]
     
-    STORE --> RETURN
+    FETCH --> VALIDATE_DATA{Data<br/>Valid?}
+    FETCH_DIRECT --> VALIDATE_DATA
+    
+    VALIDATE_DATA -->|Invalid| ERROR_RETURN[Return Error/Default<br/>Log error]
+    VALIDATE_DATA -->|Valid| PROCESS[Process Data<br/>Normalize, validate]
+    
+    PROCESS --> STORE{Store in<br/>Redis?}
+    
+    STORE -->|Yes| STORE_CACHE[Store in Redis<br/>with TTL<br/>Serialize JSON]
+    STORE -->|No| SKIP_STORE[Skip Storage<br/>Redis unavailable]
+    
+    STORE_CACHE --> UPDATE_STATS_SET[Update Cache Stats<br/>Increment sets]
+    SKIP_STORE --> RETURN
+    UPDATE_STATS_SET --> RETURN
+    ERROR_RETURN --> RETURN
     
     subgraph "Cache Statistics"
-        STATS[Track Cache Stats<br/>Hits, Misses, Sets]
+        STATS[Track Cache Stats<br/>Hits, Misses, Sets<br/>Stored in Redis]
     end
     
     RETURN --> STATS
@@ -1305,7 +1552,7 @@ flowchart TD
 
 ## Diagram 26
 
-**Location:** Line 4831 in INDEX_V3.md
+**Location:** Line 4831 in index.md
 
 **Context:** ### 8.2 Authentication ### 8.2.1 API Request/Response Flow
 
@@ -1321,27 +1568,57 @@ sequenceDiagram
     participant External as External Services<br/>(APIs, Databases)
     
     Client->>FastAPI: HTTP Request<br/>GET /sentiment/AAPL?detailed=true
-    FastAPI->>Middleware: Process Request<br/>(CORS, Logging)
-    Middleware->>Route: Route to Handler
-    Route->>Validator: Validate Parameters<br/>(Path, Query, Body)
     
-    alt Validation Failed
-        Validator-->>Client: 400 Bad Request<br/>Error Details
-    else Validation Success
-        Validator->>Deps: Get Services<br/>(Dependency Injection)
-        Deps->>Service: Call Business Logic<br/>(orchestrator.get_aggregated_sentiment)
+    Note over FastAPI: Request Processing
+    FastAPI->>Middleware: Process Request<br/>(CORS, Logging, Timing)
+    alt Health Check / Docs
+        Middleware-->>Client: Skip logging, return immediately
+    else Regular Request
+        Middleware->>Route: Route to Handler<br/>(/sentiment/{symbol})
+        Route->>Validator: Validate Parameters<br/>(Path, Query, Body)<br/>Pydantic validation
         
-        Service->>External: Fetch Data<br/>(APIs, Cache, Vector DB)
-        External-->>Service: Return Data
-        
-        Service->>Service: Process & Aggregate
-        Service-->>Deps: Return Results
-        Deps-->>Route: Return Data Dictionary
-        
-        Route->>Validator: Validate Response<br/>(Pydantic Models)
-        Validator->>Middleware: JSON Response
-        Middleware->>FastAPI: Add Headers
-        FastAPI-->>Client: HTTP 200 OK<br/>JSON Response
+        alt Validation Failed
+            Validator-->>Route: Validation Error
+            Route->>Middleware: 422 Unprocessable Entity<br/>Error Details
+            Middleware->>FastAPI: JSON Error Response
+            FastAPI-->>Client: HTTP 422<br/>Validation Error Details
+        else Validation Success
+            Validator->>Deps: Get Services<br/>(Dependency Injection)<br/>Singleton pattern
+            alt Service Initialization Failed
+                Deps-->>Route: Service Error
+                Route->>Middleware: 500 Internal Server Error
+                Middleware->>FastAPI: JSON Error Response
+                FastAPI-->>Client: HTTP 500<br/>Service Unavailable
+            else Services Available
+                Deps->>Service: Call Business Logic<br/>(orchestrator.get_aggregated_sentiment)
+                
+                Note over Service: Business Logic Execution
+                Service->>External: Fetch Data<br/>(APIs, Cache, Vector DB)
+                alt External Service Error
+                    External-->>Service: Error Response
+                    Service->>Service: Handle Error<br/>(Fallback, Retry, or Return Partial)
+                    Service-->>Deps: Return Results (with errors)
+                else External Service Success
+                    External-->>Service: Return Data
+                    Service->>Service: Process & Aggregate<br/>(Sentiment scores, normalization)
+                    Service-->>Deps: Return Results
+                end
+                
+                Deps-->>Route: Return Data Dictionary
+                
+                Route->>Validator: Validate Response<br/>(Pydantic Models)
+                alt Response Validation Failed
+                    Validator-->>Route: Validation Error
+                    Route->>Middleware: 500 Internal Server Error<br/>Response Format Error
+                    Middleware->>FastAPI: JSON Error Response
+                    FastAPI-->>Client: HTTP 500<br/>Response Format Error
+                else Response Validation Success
+                    Validator->>Middleware: JSON Response<br/>Validated data
+                    Middleware->>FastAPI: Add Headers<br/>(CORS, Content-Type)
+                    FastAPI-->>Client: HTTP 200 OK<br/>JSON Response with Data
+                end
+            end
+        end
     end
 ```
 
@@ -1349,7 +1626,7 @@ sequenceDiagram
 
 ## Diagram 27
 
-**Location:** Line 5172 in INDEX_V3.md
+**Location:** Line 5172 in index.md
 
 **Context:** ## Configuration Guide ### 9.1 Configuration Loading Flow
 
@@ -1391,7 +1668,7 @@ flowchart TD
 
 ## Diagram 28
 
-**Location:** Line 5208 in INDEX_V3.md
+**Location:** Line 5208 in index.md
 
 **Context:** Diagram 28
 
@@ -1415,7 +1692,7 @@ graph TD
 
 ## Diagram 29
 
-**Location:** Line 5466 in INDEX_V3.md
+**Location:** Line 5466 in index.md
 
 **Context:** ## Troubleshooting & FAQ ### 10.1 Troubleshooting Decision Tree
 

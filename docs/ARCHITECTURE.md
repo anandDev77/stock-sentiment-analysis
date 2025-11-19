@@ -108,7 +108,7 @@ This section provides detailed system architecture diagrams and explanations of 
 The following diagram shows the complete system architecture with all components, data flows, and external dependencies:
 
 <div align="center">
-  <img src="diagrams/high-level_architecture_complete_system_overview_user_interface.png" alt="Complete System Architecture" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
+  <img src="diagrams/01__high_level_architecture_complete_system_overview.png" alt="Complete System Architecture" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
 </div>
 
 **Architecture Layers**:
@@ -145,7 +145,7 @@ The following diagram shows the complete system architecture with all components
 The application strictly follows an API-driven architecture where the frontend never directly calls services:
 
 <div align="center">
-  <img src="diagrams/api-driven_architecture_flow_frontend_streamlit.png" alt="API-Driven Architecture" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
+  <img src="diagrams/04__api_driven_architecture_flow.png" alt="API-Driven Architecture" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
 </div>
 
 **Key Benefits**:
@@ -160,7 +160,7 @@ The application strictly follows an API-driven architecture where the frontend n
 The service layer encapsulates all business logic and is independent of the presentation layer:
 
 <div align="center">
-  <img src="diagrams/system_architecture_overview_frontend_layer.png" alt="Service Layer Architecture" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
+  <img src="diagrams/02__system_architecture_overview.png" alt="Service Layer Architecture" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
 </div>
 
 **Service Responsibilities**:
@@ -177,7 +177,7 @@ The service layer encapsulates all business logic and is independent of the pres
 This diagram shows how components interact during a typical request:
 
 <div align="center">
-  <img src="diagrams/component_interaction_flow_user_streamlit.png" alt="Component Interaction" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
+  <img src="diagrams/03__component_interaction_flow.png" alt="Component Interaction" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
 </div>
 
 **Interaction Patterns**:
@@ -193,7 +193,7 @@ This diagram shows how components interact during a typical request:
 The application can be deployed as separate, independently scalable services:
 
 <div align="center">
-  <img src="diagrams/deployment_architecture_user_browser.png" alt="Deployment Architecture" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
+  <img src="diagrams/05__deployment_architecture.png" alt="Deployment Architecture" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
 </div>
 
 **Deployment Options**:
@@ -221,7 +221,7 @@ This section provides detailed documentation of each component in the system, in
 This diagram shows how different components interact and depend on each other:
 
 <div align="center">
-  <img src="diagrams/component_relationship_diagram_presentation_layer.png" alt="Component Relationships" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
+  <img src="diagrams/06__component_relationship_diagram.png" alt="Component Relationships" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
 </div>
 
 **Dependency Hierarchy**:
@@ -1613,7 +1613,7 @@ This section documents the complete data flow patterns for all major operations 
 The following sequence diagram shows the complete request lifecycle from user input to response:
 
 <div align="center">
-  <img src="diagrams/user_request_flow_diagram_user_streamlit.png" alt="Complete Request Lifecycle" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
+  <img src="diagrams/07__user_request_flow_diagram.png" alt="Complete Request Lifecycle" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
 </div>
 
 **Request Lifecycle Phases**:
@@ -1633,7 +1633,7 @@ The following sequence diagram shows the complete request lifecycle from user in
 The data collection pipeline handles multi-source aggregation with intelligent caching:
 
 <div align="center">
-  <img src="diagrams/data_collection_flow_diagram_user_load.png" alt="Data Collection Pipeline" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
+  <img src="diagrams/08__data_collection_flow_diagram.png" alt="Data Collection Pipeline" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
 </div>
 
 **Pipeline Stages**:
@@ -1653,7 +1653,7 @@ The data collection pipeline handles multi-source aggregation with intelligent c
 The RAG storage pipeline efficiently stores articles for future retrieval:
 
 <div align="center">
-  <img src="diagrams/rag_storage_flow_diagram_orchestrator_orchestrator.png" alt="RAG Storage Pipeline" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
+  <img src="diagrams/09__rag_storage_flow_diagram.png" alt="RAG Storage Pipeline" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
 </div>
 
 **Storage Pipeline Stages**:
@@ -1674,7 +1674,7 @@ The RAG storage pipeline efficiently stores articles for future retrieval:
 The sentiment analysis pipeline processes articles with RAG context:
 
 <div align="center">
-  <img src="diagrams/sentiment_analysis_flow_diagram_orchestrator_orchestrator.png" alt="Sentiment Analysis Pipeline" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
+  <img src="diagrams/10__sentiment_analysis_flow_diagram.png" alt="Sentiment Analysis Pipeline" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
 </div>
 
 **Analysis Pipeline Stages**:
@@ -1695,7 +1695,7 @@ The sentiment analysis pipeline processes articles with RAG context:
 The caching flow optimizes performance by reducing external API calls:
 
 <div align="center">
-  <img src="diagrams/76_cache_flow_diagram_data_request.png" alt="Caching Flow" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
+  <img src="diagrams/25__76_cache_flow_diagram.png" alt="Caching Flow" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
 </div>
 
 **Cache Flow Pattern**:
@@ -1734,7 +1734,7 @@ This section provides a comprehensive deep dive into the RAG (Retrieval Augmente
 The storage phase efficiently ingests articles into the vector database:
 
 <div align="center">
-  <img src="diagrams/rag_storage_flow_diagram_orchestrator_orchestrator.png" alt="RAG Storage Architecture" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
+  <img src="diagrams/09__rag_storage_flow_diagram.png" alt="RAG Storage Architecture" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
 </div>
 
 **Storage Architecture Components**:
@@ -1769,7 +1769,7 @@ The storage phase efficiently ingests articles into the vector database:
 The retrieval phase finds relevant articles using hybrid search:
 
 <div align="center">
-  <img src="diagrams/rag_retrieval_flow_diagram_query_apple.png" alt="RAG Retrieval Architecture" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
+  <img src="diagrams/12__rag_retrieval_flow_diagram.png" alt="RAG Retrieval Architecture" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
 </div>
 
 **Retrieval Architecture Components**:
@@ -1805,7 +1805,7 @@ The retrieval phase finds relevant articles using hybrid search:
 Hybrid search combines semantic and keyword search for improved accuracy:
 
 <div align="center">
-  <img src="diagrams/diagram_13_semantic_search.png" alt="Hybrid Search Combination" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
+  <img src="diagrams/13_diagram_13.png" alt="Hybrid Search Combination" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
 </div>
 
 **Hybrid Search Process**:
@@ -1885,7 +1885,7 @@ This section provides a deep dive into the vector database architecture, focusin
 Azure AI Search uses an HNSW (Hierarchical Navigable Small World) index for fast approximate nearest neighbor search:
 
 <div align="center">
-  <img src="diagrams/hnsw_graph_structure_visualization_layer_sparse.png" alt="HNSW Graph Structure" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
+  <img src="diagrams/19__hnsw_graph_structure_visualization.png" alt="HNSW Graph Structure" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
 </div>
 
 **HNSW Index Structure**:
@@ -1912,7 +1912,7 @@ Azure AI Search uses an HNSW (Hierarchical Navigable Small World) index for fast
 Vector search uses cosine similarity for semantic matching:
 
 <div align="center">
-  <img src="diagrams/cosine_similarity_visualization_vector_space.png" alt="Cosine Similarity" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
+  <img src="diagrams/14__cosine_similarity_visualization.png" alt="Cosine Similarity" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
 </div>
 
 **Cosine Similarity Formula**:
@@ -1977,7 +1977,7 @@ This section documents the caching architecture, including strategy, implementat
 The application uses a single-tier Redis cache architecture:
 
 <div align="center">
-  <img src="diagrams/72_cache_architecture_cache_types.png" alt="Cache Architecture" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
+  <img src="diagrams/24__72_cache_architecture.png" alt="Cache Architecture" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
 </div>
 
 **Cache Types**:
@@ -2012,7 +2012,7 @@ The application uses a single-tier Redis cache architecture:
 The cache flow optimizes performance by reducing external API calls:
 
 <div align="center">
-  <img src="diagrams/76_cache_flow_diagram_data_request.png" alt="Cache Flow" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
+  <img src="diagrams/25__76_cache_flow_diagram.png" alt="Cache Flow" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
 </div>
 
 **Cache Flow Pattern**:
@@ -2176,7 +2176,7 @@ The API follows RESTful principles with clear resource-based URLs:
 **API Request/Response Flow**:
 
 <div align="center">
-  <img src="diagrams/82_authentication_821_api_requestresponse_flow_client_client.png" alt="API Request/Response Flow" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
+  <img src="diagrams/26__82_authentication_821_api_requestresponse_flow.png" alt="API Request/Response Flow" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
 </div>
 
 **API Design Principles**:
