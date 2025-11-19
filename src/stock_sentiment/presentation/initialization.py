@@ -11,6 +11,7 @@ from ..services.collector import StockDataCollector
 from ..services.cache import RedisCache
 from ..services.rag import RAGService
 from ..utils.logger import get_logger, setup_logger
+from .api_client import SentimentAPIClient
 
 logger = get_logger(__name__)
 
@@ -75,28 +76,63 @@ def get_analyzer(_settings, _cache, _rag_service):
         return None
 
 
+@st.cache_resource
+def get_api_client(_settings):
+    """Get API client instance."""
+    try:
+        if _settings.app.api_enabled:
+            client = SentimentAPIClient(settings=_settings)
+            # Test connection
+            if client.is_available():
+                logger.info("API client initialized and API is available")
+                return client
+            else:
+                logger.warning("API client initialized but API is not available")
+                return client  # Return anyway, let it fail gracefully on use
+        return None
+    except Exception as e:
+        logger.warning(f"API client not available: {e}")
+        return None
+
+
 def initialize_services(settings) -> Tuple[
+    Optional[SentimentAPIClient],
     Optional[RedisCache],
     Optional[RAGService],
-    StockDataCollector,
+    Optional[StockDataCollector],
     Optional[SentimentAnalyzer]
 ]:
     """
     Initialize all application services.
     
+    If API mode is enabled, returns API client. Otherwise returns direct services.
+    
     Returns:
-        Tuple of (redis_cache, rag_service, collector, analyzer)
+        Tuple of (api_client, redis_cache, rag_service, collector, analyzer)
+        - api_client: API client if API mode enabled, None otherwise
+        - Other services: For fallback or status display
     """
+    # Initialize API client if API mode is enabled
+    api_client = None
+    if settings.app.api_enabled:
+        api_client = get_api_client(settings)
+        if api_client and not api_client.is_available():
+            logger.warning("API is enabled but not available. Dashboard may not work correctly.")
+            st.warning("⚠️ API is not available. Please ensure the API server is running.")
+    
+    # Initialize services for fallback or status display
     redis_cache = get_redis_cache(settings)
     rag_service = get_rag_service(settings, redis_cache)
     collector = get_collector(settings, redis_cache)
     analyzer = get_analyzer(settings, redis_cache, rag_service)
     
-    if analyzer is None:
+    # If API mode is enabled, we don't require analyzer (API handles it)
+    # But we still initialize it for status display
+    if not settings.app.api_enabled and analyzer is None:
         st.error("Failed to initialize sentiment analyzer. Please check your configuration.")
         st.stop()
     
-    return redis_cache, rag_service, collector, analyzer
+    return api_client, redis_cache, rag_service, collector, analyzer
 
 
 def initialize_session_state():

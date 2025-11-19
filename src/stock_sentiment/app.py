@@ -39,15 +39,27 @@ apply_custom_styles()
 
 # Initialize settings and services
 settings = initialize_settings()
-redis_cache, rag_service, collector, analyzer = initialize_services(settings)
+api_client, redis_cache, rag_service, collector, analyzer = initialize_services(settings)
 initialize_session_state()
 
 # Render sidebar and get selected symbol
-symbol = render_sidebar(redis_cache, rag_service, analyzer, settings)
+symbol = render_sidebar(redis_cache, rag_service, analyzer, settings, api_client)
 
 # Load data if button clicked
 if st.session_state.load_data and symbol:
-    load_stock_data(symbol, collector, analyzer, rag_service, redis_cache, settings)
+    # Use API client if available, otherwise fall back to direct services
+    if api_client and settings.app.api_enabled:
+        load_stock_data(symbol, api_client, settings)
+    else:
+        # Fallback to direct service calls if API not available
+        if analyzer is None:
+            st.error("❌ Sentiment analyzer not available. Please check your configuration or enable API mode.")
+            st.stop()
+        # For now, we'll show a message that API mode is required
+        # In the future, we could add fallback logic here
+        st.error("❌ API mode is required. Please set APP_API_ENABLED=true and ensure the API server is running.")
+        st.info("💡 Start the API server with: `python -m stock_sentiment.api`")
+    st.stop()
 
 # Main header - only show once
 if not st.session_state.title_shown:
@@ -121,16 +133,16 @@ else:
         render_overview_tab(data, news_sentiments, social_sentiments, current_symbol)
     
     with tab2:
-        render_price_analysis_tab(current_symbol)
+        render_price_analysis_tab(current_symbol, api_client)
     
     with tab3:
         render_news_sentiment_tab(data, news_sentiments, current_symbol)
     
     with tab4:
-        render_technical_analysis_tab(current_symbol)
+        render_technical_analysis_tab(current_symbol, api_client)
     
     with tab5:
         render_ai_insights_tab(news_sentiments, current_symbol)
     
     with tab6:
-        render_comparison_tab(collector, analyzer, rag_service)
+        render_comparison_tab(api_client)

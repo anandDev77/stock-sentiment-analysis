@@ -380,35 +380,84 @@ class RAGService:
         if not article_texts:
             if duplicates_count != len(articles):
                 logger.warning(
-                    f"No articles to store for {symbol}: "
+                    f"   ⚠️ No articles to store for {symbol}: "
                     f"{duplicates_count} duplicates, {empty_text_count} empty, {len(article_texts)} valid"
                 )
             return 0
         
-        # Generate embeddings in batches
-        logger.info(f"RAG Storage: Generating embeddings for {len(article_texts)} articles (symbol={symbol}, batch_size={batch_size})")
-        embeddings = self.get_embeddings_batch(article_texts, batch_size=batch_size, use_cache=False)
+        # Log preparation summary
+        logger.info(f"   📊 Article Preparation Summary:")
+        logger.info(f"      • Total articles: {len(articles)}")
+        logger.info(f"      • Duplicates skipped: {duplicates_count}")
+        logger.info(f"      • Empty texts skipped: {empty_text_count}")
+        logger.info(f"      • Valid articles to store: {len(article_texts)}")
+        
+        # Check Azure AI Search for existing documents BEFORE generating embeddings
+        # This saves API calls and processing time
+        articles_to_process = article_texts
+        metadata_to_process = article_metadata
+        existing_in_vector_db = 0
+        
+        if self.vector_db and self.vector_db.is_available():
+            logger.info(f"   🔍 Checking Azure AI Search for existing articles...")
+            vector_ids_to_check = [f"{symbol}_{meta['article_id']}" for meta in article_metadata]
+            existing_docs = self.vector_db.batch_check_documents_exist(vector_ids_to_check)
+            
+            # Filter out articles that already exist in Azure AI Search
+            filtered_texts = []
+            filtered_metadata = []
+            for i, (text, metadata) in enumerate(zip(article_texts, article_metadata)):
+                vector_id = f"{symbol}_{metadata['article_id']}"
+                if existing_docs.get(vector_id, False):
+                    existing_in_vector_db += 1
+                    # Still mark in Redis for duplicate checking
+                    if self.cache and self.cache.client:
+                        try:
+                            ttl = self.settings.app.cache_ttl_rag_articles
+                            self.cache.client.setex(metadata['duplicate_key'], ttl, "1")
+                        except Exception:
+                            pass
+                else:
+                    filtered_texts.append(text)
+                    filtered_metadata.append(metadata)
+            
+            articles_to_process = filtered_texts
+            metadata_to_process = filtered_metadata
+            
+            if existing_in_vector_db > 0:
+                logger.info(f"   ✅ Found {existing_in_vector_db} articles already in Azure AI Search (skipping)")
+            if len(articles_to_process) > 0:
+                logger.info(f"   📝 {len(articles_to_process)} new articles need processing")
+        
+        # Generate embeddings only for articles that don't exist in vector DB
+        if not articles_to_process:
+            logger.info(f"   ℹ️ All articles already exist in vector database - no embeddings needed")
+            return existing_in_vector_db
+        
+        logger.info(f"   🔄 Generating embeddings for {len(articles_to_process)} articles (batch_size={batch_size})...")
+        embeddings = self.get_embeddings_batch(articles_to_process, batch_size=batch_size, use_cache=True)
         
         # Count successful embeddings
         valid_embeddings = sum(1 for e in embeddings if e is not None)
-        logger.info(f"RAG Storage: Generated {valid_embeddings}/{len(article_texts)} embeddings successfully")
+        failed_embeddings = len(articles_to_process) - valid_embeddings
+        logger.info(f"   ✅ Embedding Generation Complete:")
+        logger.info(f"      • Successful: {valid_embeddings}/{len(articles_to_process)}")
+        if failed_embeddings > 0:
+            logger.warning(f"      • Failed: {failed_embeddings}")
         
         # Use Azure AI Search if available, otherwise fallback to Redis
         if self.vector_db and self.vector_db.is_available():
-            logger.info(f"RAG Storage: Using Azure AI Search for {len(article_texts)} articles (symbol={symbol})")
+            logger.info(f"   📦 Preparing {len(articles_to_process)} new articles for storage in Azure AI Search...")
             
             # Store in Azure AI Search
             vectors_to_store = []
-            for metadata, embedding in zip(article_metadata, embeddings):
+            for metadata, embedding in zip(metadata_to_process, embeddings):
                 if embedding is None:
-                    logger.warning(f"RAG Storage: Skipping article (no embedding): {metadata['article_id'][:8]}")
+                    logger.warning(f"      ⚠️ Skipping article (no embedding): {metadata['article_id'][:8]}")
                     continue
                 
                 article = metadata['article']
                 article_id = metadata['article_id']
-                
-                # Create vector ID (must be unique across all symbols)
-                vector_id = f"{symbol}:{article_id}"
                 
                 # Prepare metadata with proper timestamp handling
                 timestamp = article.get('timestamp', '')
@@ -432,13 +481,11 @@ class RAGService:
                     'timestamp': timestamp_str
                 }
                 
-                # Log article being stored with full details
+                # Log article being stored (debug level to avoid too much noise)
                 title_preview = article_meta['title'][:50] if article_meta['title'] else 'No title'
-                logger.info(
-                    f"RAG Storage: Preparing article [{article_id[:8]}] for {symbol} - "
-                    f"'{title_preview}...' | Source: {article_meta['source']} | "
-                    f"Timestamp: {timestamp_str[:19] if timestamp_str else 'None'} | "
-                    f"Vector ID: {vector_id[:20]}..."
+                logger.debug(
+                    f"      • Preparing article [{article_id[:8]}] - "
+                    f"'{title_preview}...' (source: {article_meta['source']})"
                 )
                 
                 vectors_to_store.append({
@@ -448,24 +495,34 @@ class RAGService:
                 })
             
             # Batch store in Azure AI Search
-            logger.info(f"RAG Storage: Batch storing {len(vectors_to_store)} vectors in Azure AI Search for {symbol}")
+            logger.info(f"   💾 Storing {len(vectors_to_store)} vectors in Azure AI Search...")
             stored_count = self.vector_db.batch_store_vectors(vectors_to_store)
-            logger.info(f"RAG Storage: ✅ Successfully stored {stored_count}/{len(vectors_to_store)} articles in Azure AI Search for {symbol}")
             
-            if stored_count < len(vectors_to_store):
-                logger.warning(f"RAG Storage: ⚠️ Only {stored_count}/{len(vectors_to_store)} articles stored successfully")
+            if stored_count == len(vectors_to_store):
+                logger.info(f"   ✅ Successfully stored all {stored_count} articles in Azure AI Search")
+            elif stored_count > 0:
+                logger.warning(f"   ⚠️ Partially stored: {stored_count}/{len(vectors_to_store)} articles")
+            else:
+                logger.error(f"   ❌ Failed to store any articles in Azure AI Search")
             
-            # Also mark as stored in Redis for duplicate checking (if Redis available)
+            # Also mark newly stored articles in Redis for duplicate checking
+            # (Existing articles were already marked during the check phase)
             if self.cache and self.cache.client:
                 ttl = self.settings.app.cache_ttl_rag_articles
-                for metadata in article_metadata:
+                # Mark newly stored articles
+                for metadata in metadata_to_process:
                     try:
                         self.cache.client.setex(metadata['duplicate_key'], ttl, "1")
                     except Exception:
                         pass  # Non-critical
+            
+            # Return total count: existing + newly stored
+            total_stored = existing_in_vector_db + stored_count
+            logger.info(f"   📊 Total articles in RAG: {total_stored} ({existing_in_vector_db} existing + {stored_count} newly stored)")
+            return total_stored
         else:
             # Fallback to Redis storage (original implementation)
-            logger.info(f"RAG Storage: Using Redis fallback for {len(article_texts)} articles (symbol={symbol}, Azure AI Search not available)")
+            logger.info(f"   📦 Using Redis fallback for {len(article_texts)} articles (Azure AI Search not available)")
             ttl = self.settings.app.cache_ttl_rag_articles
             
             for metadata, embedding in zip(article_metadata, embeddings):
@@ -505,7 +562,7 @@ class RAGService:
                     logger.error(f"Error storing article in batch: {e}")
                     continue
             
-            logger.info(f"RAG Storage: Stored {stored_count}/{len(article_texts)} articles in Redis")
+            logger.info(f"   ✅ Stored {stored_count}/{len(article_texts)} articles in Redis")
         
         if stored_count == 0:
             logger.error(

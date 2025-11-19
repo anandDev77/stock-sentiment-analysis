@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.8"
 license = {text = "MIT"}
 authors = [
-    {name = "Stock Sentiment Analysis Team"}
+    {name = "Anand Mohan Singh"}
 ]
 classifiers = [
     "Development Status :: 4 - Beta",

@@ -26,6 +26,10 @@ help: ## Show this help message
 	@echo "  make venv          - Create virtual environment"
 	@echo "  make venv-activate - Show activation command"
 	@echo ""
+	@echo "Running:"
+	@echo "  make run           - Run the Streamlit dashboard"
+	@echo "  make run-api       - Run the FastAPI server"
+	@echo ""
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
 venv: ## Create virtual environment
@@ -70,6 +74,16 @@ run: venv ## Run the Streamlit application
 		echo "Note: Using venv Python (venv not activated)."; \
 	fi
 	@PYTHONPATH=src $(STREAMLIT) run src/stock_sentiment/app.py
+
+run-api: venv ## Run the FastAPI server
+	@if [ ! -f "$(VENV_BIN)/uvicorn" ]; then \
+		echo "uvicorn not found. Installing dependencies..."; \
+		$(MAKE) install; \
+	fi
+	@if [ "$(VENV_ACTIVE)" = "false" ]; then \
+		echo "Note: Using venv Python (venv not activated)."; \
+	fi
+	@cd src/stock_sentiment && PYTHONPATH=../.. $(VENV_BIN)/uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
 
 test: venv ## Run tests
 	@if [ ! -f "$(PYTEST)" ]; then \

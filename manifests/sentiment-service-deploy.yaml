@@ -1,0 +1,182 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: stock-sentiment
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sentiment-api
+  namespace: stock-sentiment
+  labels:
+    app: sentiment-api
+    version: v2
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: sentiment-api
+  template:
+    metadata:
+      labels:
+        app: sentiment-api
+        version: v2
+    spec:
+      containers:
+      - name: sentiment-api
+        image: stock-sentiment-api:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8000
+          name: http
+          protocol: TCP
+        env:
+        # Azure OpenAI Configuration
+        - name: AZURE_OPENAI_ENDPOINT
+          valueFrom:
+            secretKeyRef:
+              name: azure-openai
+              key: endpoint
+        - name: AZURE_OPENAI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: azure-openai
+              key: api-key
+        - name: AZURE_OPENAI_DEPLOYMENT_NAME
+          valueFrom:
+            secretKeyRef:
+              name: azure-openai
+              key: deployment-name
+        - name: AZURE_OPENAI_EMBEDDING_DEPLOYMENT
+          valueFrom:
+            secretKeyRef:
+              name: azure-openai
+              key: embedding-deployment
+        # Redis Configuration (Optional)
+        - name: REDIS_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: redis-config
+              key: host
+              optional: true
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: redis-secret
+              key: password
+              optional: true
+        - name: REDIS_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: redis-config
+              key: port
+              optional: true
+        # Azure AI Search Configuration (Optional)
+        - name: AZURE_AI_SEARCH_ENDPOINT
+          valueFrom:
+            secretKeyRef:
+              name: azure-ai-search
+              key: endpoint
+              optional: true
+        - name: AZURE_AI_SEARCH_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: azure-ai-search
+              key: api-key
+              optional: true
+        - name: AZURE_AI_SEARCH_INDEX_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: azure-ai-search-config
+              key: index-name
+              optional: true
+        # Data Source Configuration (Optional)
+        - name: DATA_SOURCE_ALPHA_VANTAGE_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: data-sources
+              key: alpha-vantage-api-key
+              optional: true
+        - name: DATA_SOURCE_FINNHUB_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: data-sources
+              key: finnhub-api-key
+              optional: true
+        - name: DATA_SOURCE_REDDIT_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: data-sources
+              key: reddit-client-id
+              optional: true
+        - name: DATA_SOURCE_REDDIT_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: data-sources
+              key: reddit-client-secret
+              optional: true
+        # API Configuration
+        - name: APP_API_HOST
+          value: "0.0.0.0"
+        - name: APP_API_PORT
+          value: "8000"
+        - name: APP_LOG_LEVEL
+          value: "INFO"
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 40
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 20
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sentiment-api
+  namespace: stock-sentiment
+  labels:
+    app: sentiment-api
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8000
+    targetPort: 8000
+    protocol: TCP
+    name: http
+  selector:
+    app: sentiment-api
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis-config
+  namespace: stock-sentiment
+data:
+  host: "redis-service"
+  port: "6379"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: azure-ai-search-config
+  namespace: stock-sentiment
+data:
+  index-name: "stock-articles"
+

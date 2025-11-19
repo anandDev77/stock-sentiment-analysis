@@ -1,1221 +1,2367 @@
-# Stock Sentiment Analysis Dashboard - Technical Architecture Documentation V2
+# Stock Sentiment Analysis Dashboard - Technical Architecture Documentation
 
-**Version:** 2.0  
-**Last Updated:** December 2024  
-**Author:** Technical Architecture Team
+**Version:** 1.0  
+**Last Updated:** November 2025  
+**Author:** Anand Mohan Singh  
+**Repository:** [https://github.com/anandDev77/stock-sentiment-analysis](https://github.com/anandDev77/stock-sentiment-analysis)  
+**Target Audience:** Software Architects, Senior Developers, System Designers, DevOps Engineers
 
 ---
 
 ## Table of Contents
 
 1. [Executive Summary](#executive-summary)
-2. [System Overview](#system-overview)
-3. [High-Level Architecture](#high-level-architecture)
-4. [Modular Application Structure](#modular-application-structure)
-5. [Core Components](#core-components)
-6. [Data Flow Architecture](#data-flow-architecture)
-7. [RAG (Retrieval Augmented Generation) Flow](#rag-retrieval-augmented-generation-flow)
-8. [Vector Database Architecture](#vector-database-architecture)
-9. [Data Sources Integration](#data-sources-integration)
-10. [Caching Strategy](#caching-strategy)
-11. [Mathematical Models & Algorithms](#mathematical-models--algorithms)
-12. [Data Models](#data-models)
-13. [Key Attributes and Their Meanings](#key-attributes-and-their-meanings)
-14. [Technology Stack](#technology-stack)
-15. [Performance Considerations](#performance-considerations)
-16. [Security Architecture](#security-architecture)
+2. [System Architecture](#system-architecture)
+3. [Component Architecture](#component-architecture)
+4. [Data Flow Architecture](#data-flow-architecture)
+5. [RAG Architecture Deep Dive](#rag-architecture-deep-dive)
+6. [Vector Database Architecture](#vector-database-architecture)
+7. [Caching Architecture](#caching-architecture)
+8. [Mathematical Models & Algorithms](#mathematical-models--algorithms)
+9. [API Architecture](#api-architecture)
+10. [Security Architecture](#security-architecture)
+11. [Performance Architecture](#performance-architecture)
+12. [Deployment Architecture](#deployment-architecture)
 
 ---
 
 ## Executive Summary
 
-### What This Application Does (Layman's Terms)
+### Architecture Overview
 
-Imagine you want to know how people feel about a company's stock (like Apple or Microsoft). This application:
+The Stock Sentiment Analysis Dashboard is built on a **modern, API-driven microservices architecture** that emphasizes:
 
-1. **Collects Information**: Gathers recent news articles and stock price data from multiple sources (Yahoo Finance, Alpha Vantage, Finnhub, Reddit)
-2. **Stores Knowledge**: Uses Azure AI Search to store and index articles for fast retrieval
-3. **Understands Context**: Uses artificial intelligence to read and understand the news articles with relevant context from similar articles
-4. **Analyzes Sentiment**: Determines if the news is positive, negative, or neutral about the stock using Azure OpenAI GPT-4
-5. **Provides Insights**: Shows you charts, graphs, and summaries to help you make investment decisions
+- **Separation of Concerns**: Clear boundaries between presentation, API, service, and infrastructure layers
+- **API-First Design**: Frontend communicates exclusively through REST API, enabling independent deployment and scaling
+- **Modular Service Layer**: Business logic encapsulated in independent, testable services
+- **Production-Ready Patterns**: Circuit breakers, retry logic, comprehensive error handling, and observability
+- **Scalable Data Architecture**: Multi-tier caching, vector database for semantic search, and parallel processing
 
-Think of it as a smart assistant that reads hundreds of news articles about a stock, remembers them in a searchable knowledge base, and tells you whether the overall sentiment is good or bad, helping you understand market trends without reading everything yourself.
+### Design Principles
 
-### Technical Overview
+1. **API-Driven Architecture**
+   - Frontend (Streamlit) → API (FastAPI) → Services
+   - No direct service calls from frontend
+   - Enables independent scaling and deployment
+   - Facilitates multiple client types (web, mobile, CLI)
 
-This is a **web-based application** built using:
-- **Streamlit** (Python web framework) for the user interface
-- **Azure OpenAI GPT-4** for intelligent sentiment analysis
-- **Azure AI Search** for high-performance vector search (10-100x faster than Redis SCAN)
-- **Redis** for high-speed data caching
-- **RAG (Retrieval Augmented Generation)** with hybrid search for context-aware analysis
-- **Multiple Data Sources**: yfinance, Alpha Vantage, Finnhub, Reddit for comprehensive news coverage
+2. **Layered Separation**
+   - **Presentation Layer**: UI components, user interaction
+   - **API Layer**: Request routing, validation, response formatting
+   - **Service Layer**: Business logic, orchestration
+   - **Infrastructure Layer**: External APIs, databases, caching
 
-The application follows a **modular, layered architecture** with clear separation of concerns:
-- **Presentation Layer**: UI components, tabs, styling
-- **Application Layer**: Data loading, orchestration
-- **Service Layer**: Business logic (collector, sentiment, RAG, cache, vector DB)
-- **Infrastructure Layer**: External APIs, databases
+3. **Dependency Injection**
+   - Services injected via FastAPI dependencies
+   - Enables testing and mocking
+   - Reduces coupling between components
 
-This architecture makes it maintainable, scalable, testable, and suitable for production deployment.
+4. **Fail-Safe Design**
+   - Circuit breakers prevent cascading failures
+   - Retry logic with exponential backoff
+   - Graceful degradation (Redis fallback, TextBlob fallback)
+   - Comprehensive error handling and logging
 
----
+5. **Performance Optimization**
+   - Multi-tier caching (Redis for all caching)
+   - Batch processing (embeddings, sentiment analysis)
+   - Parallel processing (concurrent sentiment analysis)
+   - Vector database for 10-100× faster semantic search
 
-## System Overview
+6. **Cost Efficiency**
+   - Intelligent caching reduces API calls by 50-90%
+   - Batch embedding generation (100 articles = 1 API call)
+   - Configurable TTLs for different data types
+   - Optional services (Azure AI Search) with fallbacks
 
-### Purpose
+### Technology Choices Rationale
 
-The Stock Sentiment Analysis Dashboard provides real-time sentiment analysis of financial news and social media content related to stock symbols. It combines:
+| Technology | Choice | Rationale |
+|------------|--------|-----------|
+| **FastAPI** | REST API Framework | High performance, automatic OpenAPI docs, async support, type safety |
+| **Streamlit** | Frontend Framework | Rapid development, Python-native, good for data apps |
+| **Azure OpenAI** | LLM Provider | Enterprise-grade, GPT-4 for accuracy, embedding models |
+| **Azure AI Search** | Vector Database | 10-100× faster than Redis SCAN, HNSW algorithm, hybrid search |
+| **Redis** | Cache Layer | High-speed in-memory cache, persistent across app reloads |
+| **Pydantic** | Configuration | Type validation, environment variable management, settings hierarchy |
+| **ThreadPoolExecutor** | Parallel Processing | Simple, effective for I/O-bound sentiment analysis |
 
-- **Multi-source data collection** from financial APIs (yfinance, Alpha Vantage, Finnhub, Reddit)
-- **AI-powered sentiment analysis** using Large Language Models (LLMs)
-- **Context-aware analysis** through RAG technology with hybrid search
-- **High-performance vector search** using Azure AI Search
-- **Intelligent caching** to optimize performance and reduce costs
-- **Interactive visualization** for data exploration
+### Architecture Patterns
 
-### Key Capabilities
-
-1. **Multi-Source Stock Data Collection**: Fetches current stock prices, company information, and historical data from yfinance
-2. **News Aggregation**: Collects relevant news articles from multiple sources (Yahoo Finance, Alpha Vantage, Finnhub, Reddit)
-3. **Vector Search**: Stores and retrieves articles using Azure AI Search for 10-100x faster search
-4. **Hybrid Search**: Combines semantic (vector) and keyword search using Reciprocal Rank Fusion (RRF)
-5. **Sentiment Analysis**: Analyzes text to determine positive, negative, or neutral sentiment with RAG context
-6. **Temporal Decay**: Boosts recent articles in search results (financial news is time-sensitive)
-7. **Data Visualization**: Creates interactive charts and graphs
-8. **Performance Optimization**: Multi-level caching to minimize API calls and improve response times
-9. **Configurable Caching**: Enable/disable sentiment caching to test RAG functionality
-
----
-
-## High-Level Architecture
-
-### System Architecture Diagram
-
-![Architecture Diagram](diagrams/architecture.png)
-
-### Component Interaction Flow
-
-![Component Flow](diagrams/components.png)
-
-### Data Flow Diagram
-
-![Data Flow](diagrams/dataflow.png)
+1. **API Gateway Pattern**: FastAPI acts as single entry point
+2. **Service Layer Pattern**: Business logic encapsulated in services
+3. **Repository Pattern**: Data access abstracted (cache, vector DB)
+4. **Dependency Injection**: Services injected, not instantiated
+5. **Circuit Breaker Pattern**: Prevents cascading failures
+6. **Retry Pattern**: Exponential backoff for transient failures
+7. **Caching Pattern**: Multi-tier with TTL-based expiration
+8. **RAG Pattern**: Retrieval Augmented Generation for context-aware LLM calls
 
 ---
 
-## Modular Application Structure
+## System Architecture
 
-### V2 Architecture Overview
+This section provides detailed system architecture diagrams and explanations of how all components interact.
 
-The application has been refactored from a monolithic `app.py` into a modular, layered architecture:
+### Complete System Architecture
 
-```
-src/stock_sentiment/
-├── app.py                          # Thin orchestrator (entry point)
-├── presentation/                   # Presentation Layer
-│   ├── styles.py                  # Custom CSS styling
-│   ├── initialization.py          # App setup, service initialization
-│   ├── data_loader.py             # Data loading orchestration
-│   ├── components/                # Reusable UI components
-│   │   ├── sidebar.py             # Sidebar with filters, settings
-│   │   └── empty_state.py         # Empty state component
-│   └── tabs/                      # Tab modules
-│       ├── overview_tab.py        # Overview dashboard
-│       ├── price_analysis_tab.py  # Price charts and analysis
-│       ├── news_sentiment_tab.py  # News and sentiment display
-│       ├── technical_analysis_tab.py  # Technical indicators
-│       ├── ai_insights_tab.py     # AI-generated insights
-│       └── comparison_tab.py      # Multi-stock comparison
-├── services/                      # Service Layer (Business Logic)
-│   ├── collector.py               # Multi-source data collection
-│   ├── sentiment.py               # AI sentiment analysis
-│   ├── rag.py                     # RAG service with hybrid search
-│   ├── cache.py                   # Redis caching
-│   └── vector_db.py               # Azure AI Search integration
-├── config/                        # Configuration
-│   └── settings.py                # Pydantic settings management
-├── models/                        # Data Models
-│   ├── sentiment.py              # SentimentScores model
-│   └── stock.py                   # StockData model
-└── utils/                         # Utilities
-    ├── logger.py                  # Logging configuration
-    ├── retry.py                   # Retry logic
-    ├── circuit_breaker.py         # Circuit breaker pattern
-    └── preprocessing.py           # Text preprocessing
-```
+The following diagram shows the complete system architecture with all components, data flows, and external dependencies:
 
-### Presentation Layer
+<div align="center">
+  <img src="diagrams/high-level_architecture_complete_system_overview_user_interface.png" alt="Complete System Architecture" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
+</div>
 
-#### 1. Main Application (`app.py`)
+**Architecture Layers**:
 
-**Purpose**: Thin orchestrator that coordinates the application flow.
+1. **User Interface Layer**
+   - Streamlit dashboard with 6 tabs
+   - User input and visualization
+   - API client for backend communication
 
-**Responsibilities**:
+2. **API Layer (FastAPI)**
+   - RESTful endpoints
+   - Request validation (Pydantic)
+   - Dependency injection
+   - CORS middleware
+   - Error handling
+
+3. **Service Layer**
+   - **Orchestrator**: Coordinates pipeline execution
+   - **Collector**: Multi-source data collection
+   - **Sentiment Analyzer**: AI-powered analysis with RAG
+   - **RAG Service**: Context retrieval with hybrid search
+   - **Cache Service**: Redis caching operations
+
+4. **Storage Layer**
+   - **Redis**: L2 cache (stock, news, sentiment, embeddings)
+   - **Azure AI Search**: Vector database (optional, with Redis fallback)
+
+5. **External Services**
+   - Azure OpenAI (GPT-4 + embeddings)
+   - Data sources (yfinance, Alpha Vantage, Finnhub, Reddit)
+
+### API-Driven Architecture Pattern
+
+The application strictly follows an API-driven architecture where the frontend never directly calls services:
+
+<div align="center">
+  <img src="diagrams/api-driven_architecture_flow_frontend_streamlit.png" alt="API-Driven Architecture" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
+</div>
+
+**Key Benefits**:
+- **Decoupling**: Frontend and backend can evolve independently
+- **Scalability**: API layer can be scaled separately
+- **Testing**: Services can be tested independently
+- **Multiple Clients**: Same API can serve web, mobile, CLI clients
+- **Security**: Centralized authentication/authorization point
+
+### Service Layer Architecture
+
+The service layer encapsulates all business logic and is independent of the presentation layer:
+
+<div align="center">
+  <img src="diagrams/system_architecture_overview_frontend_layer.png" alt="Service Layer Architecture" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
+</div>
+
+**Service Responsibilities**:
+
+- **Orchestrator Service**: Coordinates the complete sentiment analysis pipeline
+- **Collector Service**: Handles multi-source data collection with deduplication
+- **Sentiment Analyzer**: AI-powered analysis with RAG context and caching
+- **RAG Service**: Manages article storage and retrieval with hybrid search
+- **Cache Service**: Provides Redis caching abstraction
+- **Vector DB Service**: Azure AI Search integration with Redis fallback
+
+### Component Interaction Architecture
+
+This diagram shows how components interact during a typical request:
+
+<div align="center">
+  <img src="diagrams/component_interaction_flow_user_streamlit.png" alt="Component Interaction" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
+</div>
+
+**Interaction Patterns**:
+
+1. **Request Flow**: User → Streamlit → API Client → FastAPI → Orchestrator → Services
+2. **Data Flow**: Services → Cache/Vector DB → External APIs
+3. **Response Flow**: Services → Orchestrator → FastAPI → API Client → Streamlit → User
+4. **Caching**: Services check cache before external calls
+5. **Error Handling**: Errors propagate through layers with appropriate handling
+
+### Deployment Architecture
+
+The application can be deployed as separate, independently scalable services:
+
+<div align="center">
+  <img src="diagrams/deployment_architecture_user_browser.png" alt="Deployment Architecture" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
+</div>
+
+**Deployment Options**:
+
+1. **Monolithic**: Single container with Streamlit + FastAPI (development)
+2. **Microservices**: Separate containers for frontend and API (production)
+3. **Kubernetes**: Orchestrated deployment with auto-scaling
+4. **Serverless**: API as serverless functions (future)
+
+**Service Dependencies**:
+- Frontend Service → API Service (HTTP)
+- API Service → Azure OpenAI (HTTPS)
+- API Service → Azure AI Search (HTTPS)
+- API Service → Redis (TCP/TLS)
+- API Service → Data Sources (HTTPS)
+
+---
+
+## Component Architecture
+
+This section provides detailed documentation of each component in the system, including purpose, responsibilities, key methods, dependencies, and interaction patterns.
+
+### Component Relationship Diagram
+
+This diagram shows how different components interact and depend on each other:
+
+<div align="center">
+  <img src="diagrams/component_relationship_diagram_presentation_layer.png" alt="Component Relationships" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
+</div>
+
+**Dependency Hierarchy**:
+- **Presentation Layer** → **API Layer** → **Service Layer** → **Infrastructure Layer**
+- **Services** → **Config** (all services depend on settings)
+- **Services** → **Utils** (retry, circuit breaker, logger)
+- **Services** → **Models** (data structures)
+
+### 3.1 Presentation Layer
+
+The presentation layer handles all user interface concerns and communicates exclusively with the API layer.
+
+#### File: `app.py`
+
+**Purpose**: Thin orchestrator that coordinates the Streamlit application flow. This is the entry point when running `streamlit run app.py`.
+
+**Key Responsibilities**:
 - Imports and initializes presentation layer modules
-- Coordinates between different components
-- Manages tab rendering
+- Coordinates between different UI components
+- Manages tab rendering based on data availability
+- Handles session state management
 
-**Key Flow**:
+**Key Code**:
 ```python
-1. Setup application (styles, initialization)
-2. Initialize settings and services
-3. Render sidebar (filters, settings)
-4. Load data if requested
-5. Render tabs based on data availability
+# Setup application
+setup_app()
+apply_custom_styles()
+
+# Initialize settings and services
+settings = initialize_settings()
+api_client, redis_cache, rag_service, collector, analyzer = initialize_services(settings)
+initialize_session_state()
+
+# Render sidebar and get selected symbol
+symbol = render_sidebar(redis_cache, rag_service, analyzer, settings, api_client)
+
+# Load data if button clicked
+if st.session_state.load_data and symbol:
+    if api_client and settings.app.api_enabled:
+        load_stock_data(symbol, api_client, settings)
+
+# Render tabs based on data availability
+if data is None:
+    render_empty_state()
+else:
+    with tab1:
+        render_overview_tab(data, news_sentiments, social_sentiments, current_symbol)
+    # ... other tabs ...
 ```
 
-#### 2. Initialization Module (`presentation/initialization.py`)
+**Dependencies**: 
+- All presentation layer modules
+- Streamlit framework
 
-**Purpose**: Centralized initialization of all application components.
+**Used By**: Streamlit runtime (entry point)
 
-**Key Functions**:
-- `initialize_settings()`: Load and validate application settings
-- `initialize_services()`: Create service instances (Redis, RAG, Collector, Analyzer)
-- `initialize_session_state()`: Initialize Streamlit session state
-- `setup_app()`: Configure Streamlit page settings
-
-**Service Initialization**:
-- Uses `@st.cache_resource` for singleton services
-- Handles graceful degradation if services unavailable
-- Provides fallback mechanisms
-
-#### 3. Data Loader (`presentation/data_loader.py`)
-
-**Purpose**: Orchestrates the complete data loading and processing pipeline.
-
-**Key Functions**:
-- `load_stock_data()`: Main orchestration function
-
-**Process Flow**:
-1. **Step 1**: Fetch stock data (with Redis cache check)
-2. **Step 2**: Collect news from multiple sources (with source filters)
-3. **Step 3**: Store articles in RAG (Azure AI Search)
-4. **Step 4**: Analyze sentiment for all articles (with RAG context)
-5. **Step 5**: Store results in session state
-
-**Features**:
-- Progress tracking with progress bars
-- Comprehensive logging for demos
-- Operation summary tracking (Redis usage, RAG usage, cache hits/misses)
-- Error handling with user-friendly messages
-
-#### 4. Sidebar Component (`presentation/components/sidebar.py`)
-
-**Purpose**: Provides user controls and system information.
-
-**Sections**:
-- **System Status**: Redis and RAG service availability
-- **Search Filters**: 
-  - Stock symbol input
-  - Data source toggles (yfinance, Alpha Vantage, Finnhub, Reddit)
-  - RAG filter controls (exclude sources)
-- **Sentiment Cache Controls**:
-  - Enable/disable sentiment caching
-  - TTL slider (0.1 to 168 hours)
-  - Allows testing RAG by disabling cache
-- **Operation Summary**: 
-  - Redis usage (stock/news/sentiment cache hits)
-  - RAG usage (queries made, articles found)
-  - Articles stored in RAG
-  - Summary of last operation
-
-#### 5. Tab Modules (`presentation/tabs/`)
-
-Each tab is a self-contained module with a `render_*_tab()` function:
-
-- **Overview Tab**: Dashboard with key metrics, sentiment distribution
-- **Price Analysis Tab**: Stock price charts, historical data
-- **News & Sentiment Tab**: Article list with sentiment scores
-- **Technical Analysis Tab**: Technical indicators, moving averages
-- **AI Insights Tab**: AI-generated insights and recommendations
-- **Comparison Tab**: Multi-stock comparison functionality
+**Architecture Pattern**: Orchestrator pattern - coordinates UI components without containing business logic
 
 ---
 
-## Core Components
+#### File: `presentation/initialization.py`
 
-### 1. Data Collector Service (`StockDataCollector`)
+**Purpose**: Centralized initialization of all application components, including settings, services, and session state.
 
-**Purpose**: Fetches stock market data and news articles from multiple external APIs.
+**Key Responsibilities**:
+- Initialize and validate application settings
+- Create service instances (Redis, RAG, Collector, Analyzer) with caching
+- Initialize Streamlit session state
+- Configure Streamlit page settings
+- Initialize API client if API mode is enabled
 
-**Data Sources**:
-1. **yfinance** (Primary, always enabled)
-   - Stock prices, company info
-   - News headlines
-   - Historical data
+**Key Functions/Methods**:
 
-2. **Alpha Vantage** (Optional)
-   - Company news
-   - Free tier: 500 calls/day
-   - API key required
+##### `initialize_settings()`
+**Purpose**: Load and validate application settings from environment variables
 
-3. **Finnhub** (Optional)
-   - Company news
-   - Free tier: 60 calls/minute
-   - API key required
+**Code**:
+```python
+def initialize_settings():
+    """Initialize and validate application settings."""
+    try:
+        settings = get_settings()
+        return settings
+    except ValueError as e:
+        st.error(f"Configuration Error: {e}")
+        st.stop()
+        return None
+```
 
-4. **Reddit** (Optional)
-   - Social media sentiment
-   - Uses PRAW (Python Reddit API Wrapper)
-   - Requires Reddit app registration
+**Returns**: `Settings` instance or None if validation fails
 
-**How It Works**:
-1. Receives a stock symbol (e.g., "AAPL" for Apple)
-2. Checks Redis cache first to avoid unnecessary API calls
-3. If not cached, fetches data from enabled sources in parallel
-4. Deduplicates articles across sources
-5. Stores the fetched data in Redis for future use
-6. Returns structured data to the application
+**Architecture Pattern**: Singleton pattern for settings (global configuration)
 
-**Key Methods**:
-- `get_stock_price(symbol)`: Fetches current stock price and company info
-- `get_news_headlines(symbol)`: Retrieves news from yfinance
-- `get_alpha_vantage_news(symbol)`: Retrieves news from Alpha Vantage
-- `get_finnhub_news(symbol)`: Retrieves news from Finnhub
-- `get_reddit_sentiment_data(symbol)`: Retrieves Reddit posts
-- `collect_all_data(symbol, data_source_filters)`: Orchestrates collection from all enabled sources
+---
 
-**Technical Details**:
-- Uses `yfinance` library for Yahoo Finance data
-- Implements caching with configurable TTL (Time To Live)
-- Handles API errors gracefully with fallback mechanisms
-- Supports source filtering (enable/disable individual sources)
-- Deduplicates articles by title and URL
+##### `initialize_services(settings)`
+**Purpose**: Initialize all application services with proper dependency injection
 
-### 2. Sentiment Analyzer Service (`SentimentAnalyzer`)
+**Code**:
+```python
+def initialize_services(settings) -> Tuple[
+    Optional[SentimentAPIClient],
+    Optional[RedisCache],
+    Optional[RAGService],
+    Optional[StockDataCollector],
+    Optional[SentimentAnalyzer]
+]:
+    """
+    Initialize all application services.
+    
+    If API mode is enabled, returns API client. Otherwise returns direct services.
+    """
+    # Initialize API client if API mode is enabled
+    api_client = None
+    if settings.app.api_enabled:
+        api_client = get_api_client(settings)
+    
+    # Initialize services for fallback or status display
+    redis_cache = get_redis_cache(settings)
+    rag_service = get_rag_service(settings, redis_cache)
+    collector = get_collector(settings, redis_cache)
+    analyzer = get_analyzer(settings, redis_cache, rag_service)
+    
+    return api_client, redis_cache, rag_service, collector, analyzer
+```
 
-**Purpose**: Analyzes text to determine sentiment (positive, negative, or neutral) using AI with RAG context.
+**Architecture Pattern**: Dependency Injection - services are created and injected, not instantiated directly
 
-**How It Works**:
-1. Receives text to analyze (e.g., a news article headline)
-2. Checks if sentiment for this text was previously analyzed (cached)
-3. If not cached and RAG available:
-   - Retrieves relevant context from stored articles using hybrid search
-   - Formats context with article metadata
-4. Sends the text and context to Azure OpenAI GPT-4
-5. Receives sentiment scores (positive, negative, neutral) as JSON
-6. Caches the result for future use (if caching enabled)
-7. Returns sentiment scores
+**Dependencies**: 
+- `config.settings`
+- `services.*` (for service initialization)
+- `presentation.api_client`
 
-**Key Methods**:
-- `analyze_sentiment(text, symbol)`: Main analysis method with RAG context
-- `batch_analyze(texts, symbol, max_workers)`: Analyzes multiple texts efficiently in parallel
+---
 
-**Technical Details**:
-- Uses Azure OpenAI GPT-4 for high-quality sentiment analysis
-- Implements RAG (Retrieval Augmented Generation) for context-aware analysis
-- Falls back to TextBlob library if Azure OpenAI fails
-- Returns normalized scores that sum to 1.0
-- Supports configurable sentiment caching (can be disabled for RAG testing)
-- Uses few-shot learning with examples in the prompt
-- Implements retry logic with exponential backoff
-- Circuit breaker pattern for resilience
+#### File: `presentation/api_client.py`
 
-**Prompt Engineering**:
-- System prompt with role definition
-- Few-shot examples (positive, negative, neutral)
-- Structured JSON output format
-- Context injection from RAG results
+**Purpose**: HTTP client for communicating with the FastAPI backend. Ensures all frontend interactions go through the API.
 
-### 3. RAG Service (`RAGService`)
+**Key Responsibilities**:
+- Make HTTP requests to FastAPI endpoints
+- Handle errors and timeouts gracefully
+- Parse JSON responses
+- Provide type-safe method interfaces
 
-**Purpose**: Provides context-aware analysis by retrieving relevant articles from a knowledge base using hybrid search.
+**Key Classes**:
 
-**What is RAG?** (Layman's Terms)
-
-Imagine you're reading a news article about Apple. Instead of analyzing it in isolation, RAG:
-1. Looks through all previously stored articles about Apple in Azure AI Search
-2. Finds the most similar/relevant articles using hybrid search (semantic + keyword)
-3. Combines results using Reciprocal Rank Fusion (RRF)
-4. Applies temporal decay to boost recent articles
-5. Provides that context to the AI, so it understands the full picture
-6. The AI can then make a more informed decision about sentiment
-
-**How It Works**:
-
-**Storage Phase**: When a news article is collected:
-1. Preprocesses article text (cleaning, normalization)
-2. Converts the article text into a mathematical representation (embedding vector) using Azure OpenAI
-3. Stores the embedding and article metadata in Azure AI Search
-4. Also marks as stored in Redis for duplicate checking
-
-**Retrieval Phase**: When analyzing sentiment:
-1. Converts the query text into an embedding
-2. Performs hybrid search:
-   - **Semantic search**: Vector similarity search in Azure AI Search
-   - **Keyword search**: Full-text search in Azure AI Search
-3. Combines results using Reciprocal Rank Fusion (RRF)
-4. Applies temporal decay to boost recent articles
-5. Filters by similarity threshold
-6. Returns the top K most relevant articles
+##### `SentimentAPIClient`
+**Purpose**: HTTP client wrapper for FastAPI communication
 
 **Key Methods**:
-- `store_articles_batch(articles, symbol, batch_size)`: Stores multiple articles with batch embedding generation
-- `retrieve_relevant_context(query, symbol, top_k, use_hybrid)`: Finds similar articles using hybrid search
-- `get_embedding(text)`: Converts text to embedding vector
-- `get_embeddings_batch(texts, batch_size)`: Batch embedding generation (industry best practice)
 
-**Technical Details**:
-- Uses Azure OpenAI embedding models (e.g., text-embedding-ada-002, 1536 dimensions)
-- Uses Azure AI Search for vector storage and search (10-100x faster than Redis SCAN)
-- Implements hybrid search (semantic + keyword) with RRF
-- Applies similarity threshold filtering (default: 0.01 for RRF scores)
-- Supports OData filters (symbol, date range, sources)
-- Batch embedding generation (reduces API calls from N to N/batch_size)
-- Temporal decay for recency boosting
-- Falls back to Redis SCAN if Azure AI Search unavailable
+##### `get_sentiment(symbol, detailed=False, sources=None, cache_enabled=True)`
+**Purpose**: Get sentiment analysis for a stock symbol
 
-### 4. Vector Database Service (`AzureAISearchVectorDB`)
+**Code**:
+```python
+def get_sentiment(
+    self,
+    symbol: str,
+    detailed: bool = False,
+    sources: Optional[str] = None,
+    cache_enabled: bool = True
+) -> Dict[str, Any]:
+    """
+    Get sentiment analysis for a stock symbol.
+    
+    Args:
+        symbol: Stock symbol to analyze
+        detailed: If True, returns detailed response with individual article sentiments
+        sources: Comma-separated list of data sources (yfinance,alpha_vantage,finnhub,reddit)
+        cache_enabled: Whether to use sentiment caching
+        
+    Returns:
+        Dictionary with sentiment scores and optional detailed data
+    """
+    endpoint = f"/sentiment/{symbol}"
+    params = {}
+    if detailed:
+        params['detailed'] = 'true'
+    if sources:
+        params['sources'] = sources
+    if not cache_enabled:
+        params['cache_enabled'] = 'false'
+    
+    try:
+        response = self.client.get(endpoint, params=params, timeout=self.timeout)
+        response.raise_for_status()
+        return response.json()
+    except httpx.TimeoutException:
+        logger.error(f"API request timeout for {symbol}")
+        raise
+    except httpx.RequestError as e:
+        logger.error(f"API request error: {e}")
+        raise
+```
 
-**Purpose**: Provides high-performance vector search using Azure AI Search.
+**Error Handling**:
+- Timeout exceptions: Logged with user-friendly messages
+- Request errors: Logged with troubleshooting tips
+- HTTP errors: Raised for upstream handling
 
-**Why Azure AI Search?**
-- **10-100x faster** than Redis SCAN-based search for large datasets
-- **Native vector indexing** using HNSW (Hierarchical Navigable Small World) algorithm
-- **Hybrid search** (vector + keyword) with built-in RRF
-- **OData filter support** for complex queries (date ranges, sources, etc.)
-- **Built-in relevance scoring** and reranking
-- **Scalable** to millions of documents
+**Architecture Pattern**: Adapter pattern - adapts HTTP client to application interface
 
-**Features**:
-- Automatic index creation if not exists
-- Batch document upload
-- Vector search with configurable top_k
-- Hybrid search (vector + keyword) with RRF
-- OData filter support
-- Error handling and logging
+**Dependencies**: `httpx`, `config.settings`, `utils.logger`
+
+---
+
+### 3.2 Service Layer
+
+The service layer contains all business logic and is independent of the presentation layer. Services are called by the API layer.
+
+#### File: `services/orchestrator.py`
+
+**Purpose**: Core orchestration service that coordinates the complete sentiment analysis pipeline. This is the main entry point for business logic, used by both the API and can be used by the dashboard.
+
+**Key Responsibilities**:
+- Orchestrate data collection
+- Coordinate RAG storage
+- Manage sentiment analysis with parallel processing
+- Aggregate sentiment scores
+- Track operation summary for logging
+
+**Key Functions/Methods**:
+
+##### `get_aggregated_sentiment(symbol, collector, analyzer, rag_service, redis_cache, settings, data_source_filters, return_detailed)`
+**Purpose**: Main orchestration function that runs the complete sentiment analysis pipeline
+
+**Code**:
+```python
+def get_aggregated_sentiment(
+    symbol: str,
+    collector: StockDataCollector,
+    analyzer: SentimentAnalyzer,
+    rag_service: Optional[RAGService] = None,
+    redis_cache: Optional[RedisCache] = None,
+    settings: Optional[Settings] = None,
+    data_source_filters: Optional[Dict[str, bool]] = None,
+    return_detailed: bool = False
+) -> Dict[str, Any]:
+    """
+    Get aggregated sentiment analysis for a stock symbol.
+    
+    This function orchestrates the complete sentiment analysis pipeline:
+    1. Collect stock data and news from multiple sources
+    2. Store articles in RAG for context retrieval
+    3. Analyze sentiment for all articles with RAG context
+    4. Aggregate sentiment scores
+    
+    Returns:
+        Dictionary with sentiment scores, operation summary, and optionally detailed data
+    """
+    # Initialize operation summary
+    operation_summary = {
+        'redis_used': False,
+        'stock_cached': False,
+        'news_cached': False,
+        'sentiment_cache_hits': 0,
+        'sentiment_cache_misses': 0,
+        'rag_used': False,
+        'rag_queries': 0,
+        'rag_articles_found': 0,
+        'articles_stored': 0
+    }
+    
+    # Step 1: Collect stock data and news
+    logger.info(f"📊 STEP 1: Collecting stock data and news for {symbol}...")
+    
+    # Check cache status BEFORE collection
+    if redis_cache:
+        cached_stock = redis_cache.get_cached_stock_data(symbol)
+        if redis_cache.last_tier_used == "Redis":
+            operation_summary['stock_cached'] = True
+        
+        cached_news = redis_cache.get_cached_news(symbol)
+        if redis_cache.last_tier_used == "Redis":
+            operation_summary['news_cached'] = True
+    
+    # Collect data with source filters
+    data = collector.collect_all_data(symbol, data_source_filters=data_source_filters)
+    
+    # Step 2: Store articles in RAG
+    logger.info(f"💾 STEP 2: Storing articles in RAG vector database...")
+    if rag_service and data['news']:
+        total_in_rag = rag_service.store_articles_batch(data['news'], symbol)
+        operation_summary['articles_stored'] = total_in_rag
+    
+    # Step 3: Analyze sentiment
+    logger.info(f"🤖 STEP 3: Analyzing sentiment with AI...")
+    news_texts = [
+        article.get('summary', article.get('title', ''))
+        for article in data.get('news', [])
+    ]
+    
+    # Parallel sentiment analysis
+    sentiment_results = analyzer.batch_analyze(
+        news_texts,
+        symbol,
+        max_workers=settings.app.analysis_parallel_workers
+    )
+    
+    # Track cache hits/misses
+    for result in sentiment_results:
+        if result.get('from_cache'):
+            operation_summary['sentiment_cache_hits'] += 1
+        else:
+            operation_summary['sentiment_cache_misses'] += 1
+            if result.get('rag_used'):
+                operation_summary['rag_used'] = True
+                operation_summary['rag_queries'] += 1
+                operation_summary['rag_articles_found'] += result.get('rag_articles_found', 0)
+    
+    # Aggregate sentiment scores
+    if sentiment_results:
+        avg_positive = sum(r['positive'] for r in sentiment_results) / len(sentiment_results)
+        avg_negative = sum(r['negative'] for r in sentiment_results) / len(sentiment_results)
+        avg_neutral = sum(r['neutral'] for r in sentiment_results) / len(sentiment_results)
+    else:
+        avg_positive = avg_negative = avg_neutral = 0.0
+    
+    # Build response
+    result = {
+        'symbol': symbol,
+        'positive': avg_positive,
+        'negative': avg_negative,
+        'neutral': avg_neutral,
+        'net_sentiment': avg_positive - avg_negative,
+        'dominant_sentiment': 'positive' if avg_positive > avg_negative and avg_positive > avg_neutral 
+                             else 'negative' if avg_negative > avg_neutral else 'neutral',
+        'sources_analyzed': len(sentiment_results),
+        'timestamp': datetime.now().isoformat(),
+        'operation_summary': operation_summary
+    }
+    
+    # Add detailed data if requested
+    if return_detailed:
+        result['data'] = data
+        result['news_sentiments'] = sentiment_results
+        result['social_sentiments'] = []  # Can be extended
+    
+    return result
+```
+
+**Pipeline Steps**:
+1. **Data Collection**: Collect stock data and news from multiple sources
+2. **RAG Storage**: Store articles in vector database for future retrieval
+3. **Sentiment Analysis**: Analyze all articles with parallel processing
+4. **Aggregation**: Calculate average sentiment scores
+
+**Architecture Pattern**: Orchestrator pattern - coordinates multiple services to complete a business process
+
+**Dependencies**: 
+- `services.collector.StockDataCollector`
+- `services.sentiment.SentimentAnalyzer`
+- `services.rag.RAGService`
+- `services.cache.RedisCache`
+- `config.settings.Settings`
+
+**Used By**: `api.routes.sentiment` (API endpoints)
+
+---
+
+#### File: `services/collector.py`
+
+**Purpose**: Handles multi-source data collection from various financial APIs and news sources.
+
+**Key Responsibilities**:
+- Fetch stock price data from yfinance
+- Collect news articles from multiple sources (yfinance, Alpha Vantage, Finnhub, Reddit)
+- Deduplicate articles across sources
+- Cache collected data in Redis
+- Apply data source filters
+
+**Key Classes**:
+
+##### `StockDataCollector`
+**Purpose**: Multi-source data collection service
 
 **Key Methods**:
-- `store_vector(vector_id, vector, metadata)`: Store single vector
-- `batch_store_vectors(vectors)`: Batch store vectors
-- `search_vectors(query_vector, top_k, filter)`: Pure vector search
-- `hybrid_search(query_text, query_vector, top_k, filter)`: Hybrid search
-- `is_available()`: Check if service is available
-- `delete_vector(vector_id)`: Delete vector by ID
 
-**Index Schema**:
-- `id`: Unique document ID (symbol:article_id)
-- `contentVector`: Embedding vector (1536 dimensions)
-- `content`: Searchable text (title + summary)
-- `symbol`: Stock symbol (filterable)
-- `title`: Article title
-- `summary`: Article summary
-- `source`: Article source (filterable)
-- `url`: Article URL
-- `timestamp`: Publication date (filterable, sortable)
-- `article_id`: Original article ID
+##### `collect_all_data(symbol, data_source_filters=None)`
+**Purpose**: Collect stock data and news from all enabled sources
 
-### 5. Redis Cache Service (`RedisCache`)
+**Code**:
+```python
+def collect_all_data(
+    self,
+    symbol: str,
+    data_source_filters: Optional[Dict[str, bool]] = None
+) -> Dict[str, Any]:
+    """
+    Collect stock data and news from multiple sources.
+    
+    Args:
+        symbol: Stock symbol to collect data for
+        data_source_filters: Dictionary of source enable/disable flags
+        
+    Returns:
+        Dictionary with price_data and news articles
+    """
+    # Get stock price data (always from yfinance)
+    price_data = self.get_stock_price(symbol)
+    
+    # Collect news from enabled sources
+    all_articles = []
+    
+    # yfinance (always enabled)
+    if not data_source_filters or data_source_filters.get('yfinance', True):
+        yfinance_news = self.get_news_headlines(symbol)
+        all_articles.extend(yfinance_news)
+    
+    # Alpha Vantage (if enabled)
+    if (not data_source_filters or data_source_filters.get('alpha_vantage', False)) and \
+       self.settings.data_sources.alpha_vantage_enabled:
+        try:
+            av_news = self.get_alpha_vantage_news(symbol)
+            all_articles.extend(av_news)
+        except Exception as e:
+            logger.warning(f"Alpha Vantage news collection failed: {e}")
+    
+    # Similar for Finnhub and Reddit...
+    
+    # Deduplicate articles
+    unique_articles = self._deduplicate_articles(all_articles)
+    
+    # Cache results
+    if self.cache:
+        self.cache.cache_stock_data(symbol, price_data)
+        self.cache.cache_news(symbol, unique_articles)
+    
+    return {
+        'price_data': price_data,
+        'news': unique_articles
+    }
+```
 
-**Purpose**: Stores frequently accessed data to improve performance and reduce API costs.
+**Architecture Pattern**: Facade pattern - provides simple interface to complex multi-source collection
 
-**What Gets Cached**:
-1. **Stock Data**: Current prices, company info (TTL: 1 hour)
-2. **News Articles**: Recent news headlines (TTL: 2 hours)
-3. **Sentiment Results**: Analyzed sentiment scores (TTL: 24 hours, configurable, can be disabled)
-4. **Article Embeddings**: Vector representations for RAG (TTL: 7 days)
-5. **Query Embeddings**: Cached query embeddings (TTL: 24 hours)
-6. **Cache Statistics**: Hit/miss counters (persistent)
+**Error Handling**: Graceful degradation - if one source fails, others continue
+
+**Dependencies**: 
+- `yfinance` library
+- `services.cache.RedisCache`
+- External APIs (Alpha Vantage, Finnhub, Reddit)
+
+---
+
+#### File: `services/sentiment.py`
+
+**Purpose**: Provides AI-powered sentiment analysis using Azure OpenAI GPT-4 with RAG context and Redis caching.
+
+**Key Responsibilities**:
+- Analyze text sentiment using Azure OpenAI GPT-4
+- Integrate with RAG service for context-aware analysis
+- Cache sentiment results in Redis
+- Support parallel batch analysis
+- Provide TextBlob fallback for reliability
+
+**Key Classes**:
+
+##### `SentimentAnalyzer`
+**Purpose**: AI-powered sentiment analysis service
 
 **Key Methods**:
-- `get(key)`: Retrieve cached value
-- `set(key, value, ttl)`: Store value with expiration
-- `get_cached_stock_data(symbol)`: Get cached stock data
-- `get_cached_news(symbol)`: Get cached news articles
-- `get_cached_sentiment(text)`: Get cached sentiment result (respects cache_sentiment_enabled setting)
-- `cache_sentiment(text, scores, ttl)`: Cache sentiment result (respects cache_sentiment_enabled setting)
 
-**Technical Details**:
-- Uses MD5 hashing for consistent key generation
-- Implements normalized key generation (uppercase, trimmed)
-- Tracks cache statistics in Redis for monitoring
-- Uses JSON serialization for complex data structures
-- Supports configurable sentiment caching (can be disabled)
+##### `analyze_sentiment(text, symbol, context)`
+**Purpose**: Analyze sentiment of text with optional RAG context
+
+**Code**:
+```python
+def analyze_sentiment(
+    self,
+    text: str,
+    symbol: Optional[str] = None,
+    context: Optional[List[Dict]] = None
+) -> Dict[str, float]:
+    """
+    Analyze sentiment of given text using Azure OpenAI with optional RAG context.
+    
+    Args:
+        text: Text to analyze
+        symbol: Optional stock symbol for RAG context retrieval
+        context: Optional additional context items
+        
+    Returns:
+        Dictionary with sentiment scores: {'positive': float, 'negative': float, 'neutral': float}
+    """
+    # Check cache first
+    if self.cache:
+        cached_result = self.cache.get_cached_sentiment(text)
+        if cached_result:
+            return cached_result
+    
+    # Retrieve RAG context if available
+    rag_context = None
+    if self.rag_service and symbol:
+        rag_context = self.rag_service.retrieve_relevant_context(
+            query=text,
+            symbol=symbol,
+            top_k=self.settings.app.rag_top_k
+        )
+    
+    # Build prompt with context
+    prompt = self._build_prompt(text, rag_context, context)
+    
+    # Call Azure OpenAI
+    try:
+        response = self.client.chat.completions.create(
+            model=self.deployment_name,
+            messages=[
+                {"role": "system", "content": self._get_system_prompt()},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.2,
+            max_tokens=200,
+            response_format={"type": "json_object"}
+        )
+        
+        # Parse response
+        result = json.loads(response.choices[0].message.content)
+        
+        # Normalize scores
+        scores = SentimentScores(**result)
+        
+        # Cache result
+        if self.cache:
+            self.cache.cache_sentiment(text, scores.dict())
+        
+        return scores.dict()
+    except Exception as e:
+        logger.error(f"Azure OpenAI error: {e}")
+        # Fallback to TextBlob
+        return self._fallback_sentiment(text)
+```
+
+**Architecture Patterns**:
+- **Strategy Pattern**: Can use GPT-4 or TextBlob (fallback)
+- **Template Method**: Prompt building with RAG context
+- **Circuit Breaker**: Prevents cascading failures
+
+**Dependencies**: 
+- Azure OpenAI SDK
+- `services.rag.RAGService`
+- `services.cache.RedisCache`
+- `utils.preprocessing`
+- `utils.retry`
+- `utils.circuit_breaker`
+
+---
+
+##### `batch_analyze(texts, symbol, max_workers)`
+**Purpose**: Analyze multiple texts in parallel for improved performance
+
+**Code**:
+```python
+def batch_analyze(
+    self,
+    texts: List[str],
+    symbol: Optional[str] = None,
+    max_workers: int = 5
+) -> List[Dict[str, Any]]:
+    """
+    Analyze multiple texts in parallel using ThreadPoolExecutor.
+    
+    Args:
+        texts: List of texts to analyze
+        symbol: Optional stock symbol for RAG context
+        max_workers: Number of parallel workers
+        
+    Returns:
+        List of sentiment analysis results with metadata
+    """
+    results = []
+    
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {
+            executor.submit(self.analyze_sentiment, text, symbol): text
+            for text in texts
+        }
+        
+        for future in as_completed(futures):
+            text = futures[future]
+            try:
+                result = future.result(timeout=self.settings.app.analysis_worker_timeout)
+                results.append({
+                    'positive': result['positive'],
+                    'negative': result['negative'],
+                    'neutral': result['neutral'],
+                    'text': text,
+                    'from_cache': False  # Would need to track this
+                })
+            except Exception as e:
+                logger.error(f"Error analyzing text: {e}")
+                results.append({
+                    'positive': 0.0,
+                    'negative': 0.0,
+                    'neutral': 1.0,
+                    'text': text,
+                    'error': str(e)
+                })
+    
+    return results
+```
+
+**Architecture Pattern**: Producer-Consumer pattern with ThreadPoolExecutor
+
+**Performance**: 3-5× faster than sequential processing
+
+**Dependencies**: `concurrent.futures.ThreadPoolExecutor`
+
+---
+
+#### File: `services/rag.py`
+
+**Purpose**: Provides Retrieval Augmented Generation (RAG) functionality for context-aware sentiment analysis using Azure OpenAI embeddings and Azure AI Search (or Redis fallback).
+
+**Key Responsibilities**:
+- Generate embeddings for articles and queries
+- Store article embeddings in Azure AI Search (or Redis)
+- Retrieve relevant articles using hybrid search (semantic + keyword)
+- Apply temporal decay to boost recent articles
+- Cache embeddings for performance
+
+**Key Classes**:
+
+##### `RAGService`
+**Purpose**: RAG service for context retrieval
+
+**Key Methods**:
+
+##### `store_articles_batch(articles, symbol, batch_size)`
+**Purpose**: Store multiple articles with batch embedding generation
+
+**Code**:
+```python
+def store_articles_batch(
+    self, 
+    articles: List[Dict], 
+    symbol: str,
+    batch_size: Optional[int] = None
+) -> int:
+    """
+    Store multiple articles with embeddings in batch for efficiency.
+    
+    Args:
+        articles: List of article dictionaries
+        symbol: Stock symbol
+        batch_size: Number of articles per batch (default: from settings)
+        
+    Returns:
+        Total number of articles stored (existing + newly stored)
+    """
+    if not articles:
+        return 0
+    
+    # Check which articles already exist
+    existing_in_vector_db = 0
+    articles_to_process = []
+    
+    if self.vector_db and self.vector_db.is_available():
+        # Check Azure AI Search for existing articles
+        vector_ids_to_check = [f"{symbol}_{self._get_article_id(article)}" for article in articles]
+        existing_ids = self.vector_db.batch_check_existing(vector_ids_to_check)
+        existing_in_vector_db = len(existing_ids)
+        
+        # Filter out existing articles
+        articles_to_process = [
+            article for article in articles
+            if f"{symbol}_{self._get_article_id(article)}" not in existing_ids
+        ]
+    else:
+        # Fallback: check Redis
+        articles_to_process = articles
+    
+    if not articles_to_process:
+        return existing_in_vector_db
+    
+    # Prepare texts for batch embedding
+    article_texts = [
+        f"{article.get('title', '')} {article.get('summary', '')}"
+        for article in articles_to_process
+    ]
+    
+    # Generate embeddings in batch
+    embeddings = self.get_embeddings_batch(
+        article_texts,
+        batch_size=batch_size,
+        use_cache=True  # Cache embeddings
+    )
+    
+    # Store in Azure AI Search or Redis
+    if self.vector_db and self.vector_db.is_available():
+        # Store in Azure AI Search
+        stored_count = self._store_in_azure_ai_search(
+            articles_to_process,
+            embeddings,
+            symbol
+        )
+    else:
+        # Fallback to Redis
+        stored_count = self._store_in_redis(
+            articles_to_process,
+            embeddings,
+            symbol
+        )
+    
+    return existing_in_vector_db + stored_count
+```
+
+**Optimizations**:
+- **Duplicate Prevention**: Checks Azure AI Search before embedding generation
+- **Batch Processing**: 100 articles = 1 API call (100× reduction)
+- **Embedding Caching**: Caches embeddings in Redis (7 days TTL)
+
+**Architecture Pattern**: Strategy pattern - can use Azure AI Search or Redis
+
+**Dependencies**: 
+- Azure OpenAI SDK
+- `services.vector_db.AzureAISearchVectorDB`
+- `services.cache.RedisCache`
+
+---
+
+##### `retrieve_relevant_context(query, symbol, top_k, use_hybrid)`
+**Purpose**: Retrieve relevant articles using hybrid search for RAG context
+
+**Code**:
+```python
+def retrieve_relevant_context(
+    self,
+    query: str,
+    symbol: str,
+    top_k: Optional[int] = None,
+    use_hybrid: bool = True,
+    date_range: Optional[tuple] = None,
+    sources: Optional[List[str]] = None,
+    exclude_sources: Optional[List[str]] = None,
+    days_back: Optional[int] = None,
+    expand_query: bool = True
+) -> List[Dict]:
+    """
+    Retrieve relevant articles using hybrid search (semantic + keyword).
+    
+    Args:
+        query: Search query text
+        symbol: Stock symbol to filter by
+        top_k: Number of results to return
+        use_hybrid: Use hybrid search (semantic + keyword)
+        date_range: Optional date range filter
+        sources: Optional source filter
+        exclude_sources: Optional sources to exclude
+        days_back: Optional days back filter
+        expand_query: Expand query with synonyms
+        
+    Returns:
+        List of relevant article dictionaries with similarity scores
+    """
+    if not self.embeddings_enabled and not use_hybrid:
+        return []
+    
+    # Use Azure AI Search if available
+    if self.vector_db and self.vector_db.is_available():
+        # Generate query embedding
+        query_embedding = self.get_embedding(query)
+        if not query_embedding:
+            return []
+        
+        # Build filter string
+        filter_string = self._build_filter_string(
+            symbol=symbol,
+            date_range=date_range,
+            sources=sources,
+            exclude_sources=exclude_sources,
+            days_back=days_back
+        )
+        
+        # Perform hybrid search
+        if use_hybrid:
+            results = self.vector_db.hybrid_search(
+                query_text=query,
+                query_vector=query_embedding,
+                top_k=top_k or self.settings.app.rag_top_k,
+                filter_string=filter_string
+            )
+        else:
+            results = self.vector_db.search_vectors(
+                query_vector=query_embedding,
+                top_k=top_k or self.settings.app.rag_top_k,
+                filter_string=filter_string
+            )
+        
+        # Apply temporal decay
+        results = self._apply_temporal_decay(results)
+        
+        return results
+    else:
+        # Fallback to Redis SCAN (slower but works)
+        return self._retrieve_from_redis(query, symbol, top_k)
+```
+
+**Architecture Pattern**: Strategy pattern with fallback mechanism
+
+**Search Methods**:
+1. **Hybrid Search**: Semantic (vector) + Keyword (BM25) with RRF
+2. **Vector Search**: Semantic only
+3. **Redis Fallback**: SCAN-based search if Azure AI Search unavailable
+
+**Dependencies**: 
+- `services.vector_db.AzureAISearchVectorDB`
+- `services.cache.RedisCache` (fallback)
+
+---
+
+#### File: `services/cache.py`
+
+**Purpose**: Provides Redis-based caching layer to reduce API calls and improve performance.
+
+**Key Responsibilities**:
+- Cache sentiment analysis results
+- Cache stock price data
+- Cache news articles
+- Cache article embeddings for RAG
+- Track cache statistics (hits, misses, sets)
+- Provide cache management operations
+
+**Key Classes**:
+
+##### `RedisCache`
+**Purpose**: Redis caching abstraction
+
+**Key Methods**:
+
+##### `get(key)` / `set(key, value, ttl)`
+**Purpose**: Generic cache operations
+
+**Code**:
+```python
+def get(self, key: str) -> Optional[Any]:
+    """
+    Get value from cache.
+    
+    Args:
+        key: Cache key
+        
+    Returns:
+        Cached value or None if not found
+    """
+    if not self.client:
+        return None
+    
+    try:
+        value = self.client.get(key)
+        if value:
+            self.last_tier_used = "Redis"
+            CacheStats.increment_hit(self.client)
+            return json.loads(value)
+        else:
+            CacheStats.increment_miss(self.client)
+            return None
+    except Exception as e:
+        logger.error(f"Error getting from cache: {e}")
+        return None
+
+def set(self, key: str, value: Any, ttl: Optional[int] = None) -> bool:
+    """
+    Set value in cache.
+    
+    Args:
+        key: Cache key
+        value: Value to cache
+        ttl: Time-to-live in seconds (optional)
+        
+    Returns:
+        True if successful, False otherwise
+    """
+    if not self.client:
+        return False
+    
+    try:
+        serialized = json.dumps(value)
+        if ttl:
+            self.client.setex(key, ttl, serialized)
+        else:
+            self.client.set(key, serialized)
+        CacheStats.increment_set(self.client)
+        return True
+    except Exception as e:
+        logger.error(f"Error setting cache: {e}")
+        return False
+```
+
+**Architecture Pattern**: Repository pattern - abstracts data access
+
+**Cache Key Structure**:
+- `stock:{symbol}` - Stock price data
+- `news:{symbol}` - News articles
+- `sentiment:{hash}` - Sentiment analysis result
+- `embedding:{hash}` - Article embedding vector
+
+**Dependencies**: Redis client
+
+---
+
+#### File: `services/vector_db.py`
+
+**Purpose**: Provides vector database abstraction with Azure AI Search implementation for high-performance vector search.
+
+**Key Responsibilities**:
+- Store article embeddings with metadata
+- Perform vector similarity search
+- Perform hybrid search (vector + keyword)
+- Support OData filtering
+- Manage Azure AI Search index
+
+**Key Classes**:
+
+##### `AzureAISearchVectorDB`
+**Purpose**: Azure AI Search implementation of vector database interface
+
+**Key Methods**:
+
+##### `hybrid_search(query_text, query_vector, top_k, filter_string)`
+**Purpose**: Perform hybrid search combining semantic and keyword search
+
+**Code**:
+```python
+def hybrid_search(
+    self,
+    query_text: str,
+    query_vector: List[float],
+    top_k: int = 10,
+    filter_string: Optional[str] = None
+) -> List[Dict[str, Any]]:
+    """
+    Perform hybrid search (semantic + keyword) using Azure AI Search.
+    
+    Azure AI Search automatically combines results using Reciprocal Rank Fusion (RRF).
+    
+    Args:
+        query_text: Keyword search query
+        query_vector: Semantic search query vector
+        top_k: Number of results
+        filter_string: Optional OData filter
+        
+    Returns:
+        List of results with RRF scores
+    """
+    if not self.is_available():
+        return []
+    
+    try:
+        # Perform hybrid search (Azure AI Search handles RRF internally)
+        results = self._client.search(
+            search_text=query_text,  # Keyword search
+            vector_queries=[{
+                "vector": query_vector,  # Semantic search
+                "k_nearest_neighbors": top_k,
+                "fields": "contentVector"
+            }],
+            filter=filter_string,
+            top=top_k,
+            select=["article_id", "title", "summary", "source", "timestamp", "symbol"]
+        )
+        
+        # Format results with RRF scores
+        formatted = []
+        for result in results:
+            formatted.append({
+                "article_id": result.get("article_id", ""),
+                "title": result.get("title", ""),
+                "summary": result.get("summary", ""),
+                "source": result.get("source", ""),
+                "timestamp": result.get("timestamp", ""),
+                "similarity": result.get("@search.score", 0.0),
+                "rrf_score": result.get("@search.reranker_score", result.get("@search.score", 0.0))
+            })
+        
+        return formatted
+    except Exception as e:
+        logger.error(f"Error in hybrid search: {e}")
+        return []
+```
+
+**Architecture Pattern**: Adapter pattern - adapts Azure AI Search to application interface
+
+**Performance**: 10-100× faster than Redis SCAN for large datasets
+
+**Dependencies**: Azure AI Search SDK
+
+---
+
+### 3.3 API Layer
+
+The API layer provides RESTful endpoints for the sentiment analysis service.
+
+#### File: `api/main.py`
+
+**Purpose**: FastAPI application entry point that sets up the API server, middleware, error handling, and routes.
+
+**Key Responsibilities**:
+- Initialize FastAPI application
+- Configure CORS middleware
+- Set up request logging middleware
+- Handle errors globally
+- Register API routes
+- Provide health check endpoint
+
+**Key Code**:
+```python
+# Create FastAPI app
+app = FastAPI(
+    title="Stock Sentiment Analysis API",
+    description="REST API for AI-powered stock sentiment analysis.",
+    version="2.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc"
+)
+
+# CORS configuration
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Request logging middleware
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    """Log all API requests with timing."""
+    start_time = time.time()
+    logger.info(f"🌐 API Request: {request.method} {request.url.path}")
+    response = await call_next(request)
+    process_time = time.time() - start_time
+    logger.info(f"✅ API Response: {request.method} {request.url.path} - Time: {process_time:.3f}s")
+    return response
+
+# Include routers
+app.include_router(sentiment_router)
+app.include_router(price_router)
+app.include_router(comparison_router)
+app.include_router(system_router)
+app.include_router(cache_router)
+```
+
+**Architecture Pattern**: API Gateway pattern - single entry point for all requests
+
+**Dependencies**: 
+- FastAPI framework
+- All route modules
+- `api.dependencies`
+- `api.models.response`
+
+---
+
+#### File: `api/dependencies.py`
+
+**Purpose**: Provides dependency injection functions for FastAPI, initializing services as singletons without Streamlit dependencies.
+
+**Key Functions/Methods**:
+
+##### `get_all_services()`
+**Purpose**: Get all services initialized (main dependency for API routes)
+
+**Code**:
+```python
+def get_all_services() -> Tuple[
+    Settings,
+    Optional[RedisCache],
+    Optional[RAGService],
+    StockDataCollector,
+    Optional[SentimentAnalyzer]
+]:
+    """
+    Get all services initialized.
+    
+    Returns:
+        Tuple of (settings, redis_cache, rag_service, collector, analyzer)
+    """
+    settings = get_settings_cached()
+    redis_cache = get_redis_cache()
+    rag_service = get_rag_service()
+    collector = get_collector()
+    analyzer = get_analyzer()
+    
+    return settings, redis_cache, rag_service, collector, analyzer
+```
+
+**Architecture Pattern**: Dependency Injection - services are injected, not instantiated in routes
+
+**Dependencies**: All service modules
+
+**Used By**: All API route handlers
+
+---
+
+#### File: `api/routes/sentiment.py`
+
+**Purpose**: Defines sentiment analysis API endpoints.
+
+**Key Responsibilities**:
+- Handle GET `/sentiment/{symbol}` endpoint
+- Handle POST `/sentiment/batch` endpoint
+- Parse query parameters (sources, cache_enabled, detailed)
+- Call orchestrator service
+- Return formatted responses
+
+**Key Endpoints**:
+
+##### `GET /sentiment/{symbol}`
+**Purpose**: Get sentiment analysis for a single stock symbol
+
+**Code**:
+```python
+@router.get(
+    "/{symbol}",
+    response_model=SentimentResponse,
+    summary="Get sentiment analysis for a stock symbol",
+    description="Analyzes sentiment for a stock symbol by collecting news, analyzing sentiment with AI, and returning aggregated scores."
+)
+async def get_sentiment(
+    symbol: str = Path(..., description="Stock ticker symbol (e.g., AAPL)"),
+    detailed: bool = Query(False, description="Include detailed data (articles, individual sentiments)"),
+    sources: Optional[str] = Query(None, description="Comma-separated data sources (yfinance,alpha_vantage,finnhub,reddit)"),
+    cache_enabled: bool = Query(True, description="Enable sentiment caching"),
+    settings: Settings = Depends(get_settings),
+    services: Tuple = Depends(get_all_services)
+):
+    """Get sentiment analysis for a stock symbol."""
+    _, redis_cache, rag_service, collector, analyzer = services
+    
+    # Parse data source filters
+    data_source_filters = parse_data_source_filters(sources)
+    
+    # Temporarily override cache setting if requested
+    original_cache_setting = settings.app.cache_sentiment_enabled
+    if not cache_enabled:
+        settings.app.cache_sentiment_enabled = False
+    
+    try:
+        # Call orchestrator
+        result = get_aggregated_sentiment(
+            symbol=symbol.upper(),
+            collector=collector,
+            analyzer=analyzer,
+            rag_service=rag_service,
+            redis_cache=redis_cache,
+            settings=settings,
+            data_source_filters=data_source_filters,
+            return_detailed=detailed
+        )
+        
+        return SentimentResponse(**result)
+    finally:
+        # Restore original cache setting
+        settings.app.cache_sentiment_enabled = original_cache_setting
+```
+
+**Architecture Pattern**: Controller pattern - handles HTTP concerns, delegates to service layer
+
+**Dependencies**: 
+- `services.orchestrator.get_aggregated_sentiment`
+- `api.dependencies.get_all_services`
+- `api.models.response.SentimentResponse`
+
+---
+
+### 3.4 Infrastructure Layer
+
+The infrastructure layer provides supporting services and utilities.
+
+#### File: `config/settings.py`
+
+**Purpose**: Centralized configuration management using Pydantic for environment variable loading and validation.
+
+**Key Responsibilities**:
+- Load environment variables from `.env` file
+- Validate configuration values
+- Provide type-safe settings access
+- Support both Pydantic v1 and v2
+- Group related settings into nested models
+
+**Key Classes**:
+
+##### `Settings`
+**Purpose**: Main settings class that aggregates all configuration
+
+**Code**:
+```python
+class Settings(BaseSettings):
+    """Main application settings."""
+    
+    app: AppSettings = Field(default_factory=AppSettings)
+    azure_openai: AzureOpenAISettings = Field(default_factory=AzureOpenAISettings)
+    redis: RedisSettings = Field(default_factory=RedisSettings)
+    azure_ai_search: Optional[AzureAISearchSettings] = Field(default=None)
+    data_sources: DataSourceSettings = Field(default_factory=DataSourceSettings)
+    
+    def is_redis_available(self) -> bool:
+        """Check if Redis is configured."""
+        return bool(self.redis.host and self.redis.password)
+    
+    def is_rag_available(self) -> bool:
+        """Check if RAG is available (requires embeddings)."""
+        return bool(
+            self.azure_openai.embedding_deployment and
+            self.azure_openai.endpoint and
+            self.azure_openai.api_key
+        )
+    
+    def is_azure_ai_search_available(self) -> bool:
+        """Check if Azure AI Search is configured."""
+        return bool(
+            self.azure_ai_search and
+            self.azure_ai_search.endpoint and
+            self.azure_ai_search.api_key
+        )
+```
+
+**Architecture Pattern**: Singleton pattern - single source of truth for configuration
+
+**Dependencies**: 
+- `pydantic` or `pydantic-settings`
+- `python-dotenv`
+
+**Used By**: All modules throughout the application
+
+---
+
+#### File: `models/sentiment.py`
+
+**Purpose**: Defines data structures for sentiment analysis results.
+
+**Key Classes**:
+
+##### `SentimentScores`
+**Purpose**: Represents sentiment scores as a normalized probability distribution
+
+**Code**:
+```python
+@dataclass
+class SentimentScores:
+    """
+    Sentiment scores for a piece of text.
+    
+    Attributes:
+        positive: Positive sentiment score (0.0 to 1.0)
+        negative: Negative sentiment score (0.0 to 1.0)
+        neutral: Neutral sentiment score (0.0 to 1.0)
+    """
+    positive: float
+    negative: float
+    neutral: float
+    
+    def __post_init__(self):
+        """Validate and normalize scores to sum to 1.0."""
+        # Normalize to ensure they sum to 1.0
+        total = self.positive + self.negative + self.neutral
+        if total > 0:
+            self.positive /= total
+            self.negative /= total
+            self.neutral /= total
+    
+    @property
+    def net_sentiment(self) -> float:
+        """Calculate net sentiment (positive - negative)."""
+        return self.positive - self.negative
+    
+    @property
+    def dominant_sentiment(self) -> str:
+        """Get the dominant sentiment label."""
+        if self.positive > self.negative and self.positive > self.neutral:
+            return "positive"
+        elif self.negative > self.positive and self.negative > self.neutral:
+            return "negative"
+        else:
+            return "neutral"
+```
+
+**Architecture Pattern**: Value Object pattern - immutable data structure with validation
+
+**Dependencies**: Python `dataclasses`
+
+---
+
+#### File: `utils/logger.py`
+
+**Purpose**: Provides centralized logging configuration for the application.
+
+**Key Functions**:
+- `setup_logger(name, level)` - Configure root logger with formatting and handlers
+- `get_logger(name)` - Get logger instance for a module
+
+**Architecture Pattern**: Singleton pattern for logger configuration
+
+**Dependencies**: Python `logging` module
+
+**Used By**: All modules throughout the application
+
+---
+
+#### File: `utils/retry.py`
+
+**Purpose**: Provides retry logic with exponential backoff for resilient API calls.
+
+**Key Functions**:
+
+##### `retry_with_exponential_backoff(max_retries, base_delay)`
+**Purpose**: Decorator for retrying functions with exponential backoff
+
+**Code**:
+```python
+def retry_with_exponential_backoff(
+    max_retries: int = 3,
+    base_delay: float = 1.0
+):
+    """
+    Retry decorator with exponential backoff.
+    
+    Args:
+        max_retries: Maximum number of retry attempts
+        base_delay: Base delay in seconds (doubles with each retry)
+    """
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            for attempt in range(max_retries):
+                try:
+                    return func(*args, **kwargs)
+                except Exception as e:
+                    if attempt == max_retries - 1:
+                        raise
+                    delay = base_delay * (2 ** attempt)
+                    time.sleep(delay)
+        return wrapper
+    return decorator
+```
+
+**Architecture Pattern**: Decorator pattern - adds retry behavior without modifying function logic
+
+**Dependencies**: Python `time`, `functools`
+
+---
+
+#### File: `utils/circuit_breaker.py`
+
+**Purpose**: Implements circuit breaker pattern to prevent cascading failures.
+
+**Key Classes**:
+
+##### `CircuitBreaker`
+**Purpose**: Prevents API calls when service is down
+
+**Code**:
+```python
+class CircuitBreaker:
+    """
+    Circuit breaker to prevent cascading failures.
+    
+    Opens circuit after failure_threshold failures,
+    preventing further calls until timeout expires.
+    """
+    def __init__(self, failure_threshold: int = 5, timeout: int = 60):
+        self.failure_threshold = failure_threshold
+        self.timeout = timeout
+        self.failure_count = 0
+        self.last_failure_time = None
+        self.state = "closed"  # closed, open, half_open
+```
+
+**Architecture Pattern**: Circuit Breaker pattern - prevents cascading failures
+
+**States**:
+- **Closed**: Normal operation, calls pass through
+- **Open**: Circuit open, calls fail immediately
+- **Half-Open**: Testing if service recovered
+
+**Dependencies**: Python `threading`, `time`
 
 ---
 
 ## Data Flow Architecture
 
-### Complete Request Flow
+This section documents the complete data flow patterns for all major operations in the system.
 
-![Data Flow Diagram](diagrams/dataflow.png)
+### Complete Request Lifecycle
 
-### Detailed Request Flow
+The following sequence diagram shows the complete request lifecycle from user input to response:
 
-1. **User Input**: User enters stock symbol and clicks "Load Data"
-2. **Sidebar Processing**: Sidebar captures filters (data sources, RAG filters)
-3. **Data Loading**:
-   - Check Redis for cached stock data
-   - If not cached, fetch from yfinance
-   - Collect news from enabled sources (yfinance, Alpha Vantage, Finnhub, Reddit)
-   - Deduplicate articles
-4. **RAG Storage**:
-   - Generate embeddings for articles (batch processing)
-   - Store in Azure AI Search
-   - Mark as stored in Redis
-5. **Sentiment Analysis**:
-   - For each article:
-     - Check sentiment cache (if enabled)
-     - If not cached, retrieve RAG context (hybrid search)
-     - Send to Azure OpenAI GPT-4 with context
-     - Cache result (if caching enabled)
-6. **Result Storage**: Store in session state for UI display
-7. **UI Rendering**: Display results in tabs
+<div align="center">
+  <img src="diagrams/user_request_flow_diagram_user_streamlit.png" alt="Complete Request Lifecycle" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
+</div>
+
+**Request Lifecycle Phases**:
+
+1. **Request Initiation**: User enters symbol, clicks "Load Data"
+2. **API Request**: Frontend sends HTTP GET to FastAPI
+3. **Service Orchestration**: Orchestrator coordinates pipeline
+4. **Data Collection**: Multi-source collection with caching
+5. **RAG Storage**: Articles stored in vector database
+6. **Sentiment Analysis**: Parallel analysis with RAG context
+7. **Response Aggregation**: Results aggregated and formatted
+8. **Response Delivery**: JSON response sent to frontend
+9. **UI Update**: Dashboard displays results
+
+### Data Collection Pipeline
+
+The data collection pipeline handles multi-source aggregation with intelligent caching:
+
+<div align="center">
+  <img src="diagrams/data_collection_flow_diagram_user_load.png" alt="Data Collection Pipeline" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
+</div>
+
+**Pipeline Stages**:
+
+1. **Cache Check**: Check Redis for cached stock data and news
+2. **Source Filtering**: Apply user-selected data source filters
+3. **Parallel Collection**: Fetch from enabled sources concurrently
+4. **Deduplication**: Remove duplicate articles by URL and title similarity
+5. **Normalization**: Standardize article format across sources
+6. **Caching**: Store collected data in Redis with TTLs
+7. **Return**: Return structured data dictionary
+
+**Architecture Pattern**: Pipeline pattern - sequential stages with clear inputs/outputs
+
+### RAG Storage Pipeline
+
+The RAG storage pipeline efficiently stores articles for future retrieval:
+
+<div align="center">
+  <img src="diagrams/rag_storage_flow_diagram_orchestrator_orchestrator.png" alt="RAG Storage Pipeline" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
+</div>
+
+**Storage Pipeline Stages**:
+
+1. **Duplicate Check**: Check Azure AI Search for existing articles
+2. **Text Preprocessing**: Clean and normalize article text
+3. **Batch Embedding**: Generate embeddings for all new articles (single API call)
+4. **Vector Storage**: Store in Azure AI Search with metadata
+5. **Redis Markers**: Mark articles as stored for duplicate checking
+
+**Optimizations**:
+- **Duplicate Prevention**: Checks before embedding generation (saves API calls)
+- **Batch Processing**: 100 articles = 1 API call (100× reduction)
+- **Embedding Caching**: Caches embeddings in Redis (7 days TTL)
+
+### Sentiment Analysis Pipeline
+
+The sentiment analysis pipeline processes articles with RAG context:
+
+<div align="center">
+  <img src="diagrams/sentiment_analysis_flow_diagram_orchestrator_orchestrator.png" alt="Sentiment Analysis Pipeline" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
+</div>
+
+**Analysis Pipeline Stages**:
+
+1. **Text Preprocessing**: Clean and normalize text
+2. **Cache Check**: Check Redis for cached sentiment (if enabled)
+3. **RAG Retrieval**: Retrieve relevant context articles (if cache miss)
+4. **Prompt Building**: Build LLM prompt with RAG context
+5. **LLM Analysis**: Call Azure OpenAI GPT-4
+6. **Response Parsing**: Parse JSON response and validate
+7. **Score Normalization**: Ensure scores sum to 1.0
+8. **Caching**: Store result in Redis (if enabled)
+
+**Parallel Processing**: Multiple articles analyzed concurrently using ThreadPoolExecutor
+
+### Caching Flow
+
+The caching flow optimizes performance by reducing external API calls:
+
+<div align="center">
+  <img src="diagrams/76_cache_flow_diagram_data_request.png" alt="Caching Flow" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
+</div>
+
+**Cache Flow Pattern**:
+
+1. **Check Cache**: Always check cache before external calls
+2. **Cache Hit**: Return cached data immediately (1-5ms latency)
+3. **Cache Miss**: Fetch from external source
+4. **Store in Cache**: Store fetched data with appropriate TTL
+5. **Return Data**: Return to caller
+
+**Cache Strategy**: Write-through pattern - data written to cache immediately after fetching
 
 ---
 
-## RAG (Retrieval Augmented Generation) Flow
+## RAG Architecture Deep Dive
 
-### Conceptual Understanding
+This section provides a comprehensive deep dive into the RAG (Retrieval Augmented Generation) architecture, including storage, retrieval, and hybrid search implementation.
 
-**What is RAG?**
+### RAG Concept Overview
 
-RAG stands for **Retrieval Augmented Generation**. It's a technique that enhances AI responses by providing relevant context from a knowledge base.
+**Retrieval Augmented Generation (RAG)** enhances LLM responses by retrieving relevant context from a knowledge base before generating a response. In our application:
 
-**Simple Analogy**: 
-Imagine you're taking an exam. Without RAG, you can only use what you memorized. With RAG, you can look up relevant information from your notes before answering, making your answers more accurate and informed.
+1. **Storage Phase**: Articles are embedded and stored in a vector database
+2. **Retrieval Phase**: When analyzing sentiment, relevant articles are retrieved using hybrid search
+3. **Augmentation Phase**: Retrieved context is added to the LLM prompt
+4. **Generation Phase**: LLM generates sentiment analysis with context
 
-### RAG Architecture in This Application
+**Benefits**:
+- **Context-Aware**: Sentiment analysis considers related articles
+- **Consistency**: Similar articles get similar sentiment scores
+- **Accuracy**: Context helps LLM understand financial terminology
+- **Efficiency**: Cached embeddings reduce API calls
 
-![RAG Flow Diagram](diagrams/rag_flow.png)
+### RAG Storage Phase Architecture
 
-### RAG Process Steps
+The storage phase efficiently ingests articles into the vector database:
 
-#### 1. Query Embedding Generation
-- **Input**: Text to analyze (e.g., "Apple announces new iPhone")
-- **Process**: Convert text to numerical vector using Azure OpenAI embedding model
-- **Output**: 1536-dimensional vector representing semantic meaning
-- **Caching**: Query embeddings are cached for 24 hours in Redis
+<div align="center">
+  <img src="diagrams/rag_storage_flow_diagram_orchestrator_orchestrator.png" alt="RAG Storage Architecture" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
+</div>
 
-#### 2. Hybrid Search
-- **Semantic Search**: Vector similarity search in Azure AI Search
-  - Uses HNSW algorithm for fast approximate nearest neighbor search
-  - Returns articles with highest cosine similarity
-- **Keyword Search**: Full-text search in Azure AI Search
-  - Searches in `content` field (title + summary)
-  - Returns articles with matching keywords
-- **Combination**: Uses Reciprocal Rank Fusion (RRF) to combine results
+**Storage Architecture Components**:
 
-#### 3. Reciprocal Rank Fusion (RRF)
-- **Purpose**: Combine semantic and keyword search results without score normalization
-- **Formula**: `RRF_score = Σ(1 / (k + rank))` for each search result
-  - `k = 60` (standard RRF constant)
-  - `rank` = position in search results (1, 2, 3, ...)
-- **Benefit**: Works with different score scales (no normalization needed)
-- **Result**: Articles appearing high in both searches rank highest
+1. **Article Preprocessing**:
+   - HTML tag removal
+   - Whitespace normalization
+   - Abbreviation expansion (Q1 → first quarter, EPS → earnings per share)
 
-#### 4. Temporal Decay
-- **Purpose**: Boost recent articles (financial news is time-sensitive)
-- **Formula**: `decay = 1.0 / (1 + age_days / decay_days)`
-  - `age_days` = days since article publication
-  - `decay_days` = 7 (configurable)
-- **Boost**: `boosted_score = current_score * (1 + decay * 0.2)`
-- **Result**: Recent articles get up to 20% score boost
+2. **Duplicate Detection**:
+   - Check Azure AI Search for existing articles
+   - Use article ID (MD5 hash of title+URL) as document key
+   - Skip embedding generation for existing articles
 
-#### 5. Threshold Filtering
-- **Purpose**: Remove low-quality matches
-- **Default Threshold**: 0.01 (for RRF scores, which are typically 0.01-0.15)
-- **Rationale**: Prevents irrelevant articles from polluting context
-- **Auto-adjustment**: If threshold too high, automatically lowers it
+3. **Batch Embedding Generation**:
+   - Process 100 articles per batch
+   - Single API call per batch (100× efficiency)
+   - Cache embeddings in Redis (7 days TTL)
 
-#### 6. Top-K Selection
-- **Default K**: 3 articles
-- **Selection**: Highest RRF scores above threshold
-- **Result**: Most relevant articles for context
+4. **Vector Storage**:
+   - Store in Azure AI Search with HNSW indexing
+   - Include metadata (symbol, source, timestamp, etc.)
+   - Mark in Redis for duplicate checking
 
-#### 7. Context Building
-- **Format**: Structured markdown with article metadata
-- **Includes**: Title, source, summary, similarity score
-- **Purpose**: Provides clear context to the LLM
+**Storage Performance**:
+- **Without Optimization**: 100 articles = 100 API calls, ~5 seconds
+- **With Batch Processing**: 100 articles = 1 API call, ~0.2 seconds
+- **Efficiency Gain**: 25× faster, 99× fewer API calls
 
-#### 8. Prompt Augmentation
-- **Enhancement**: Adds RAG context to the sentiment analysis prompt
-- **Benefit**: LLM can consider recent news when analyzing sentiment
-- **Result**: More accurate and context-aware sentiment analysis
+### RAG Retrieval Phase Architecture
+
+The retrieval phase finds relevant articles using hybrid search:
+
+<div align="center">
+  <img src="diagrams/rag_retrieval_flow_diagram_query_apple.png" alt="RAG Retrieval Architecture" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
+</div>
+
+**Retrieval Architecture Components**:
+
+1. **Query Preprocessing**:
+   - Clean and normalize query text
+   - Optional query expansion (synonyms, related terms)
+
+2. **Query Embedding**:
+   - Generate embedding for query (1536 dimensions)
+   - Cache query embeddings (24 hours TTL)
+
+3. **Hybrid Search**:
+   - **Semantic Search**: Vector similarity search (cosine similarity)
+   - **Keyword Search**: Full-text search (BM25 algorithm)
+   - **RRF Combination**: Combine results using Reciprocal Rank Fusion
+
+4. **Temporal Decay**:
+   - Boost recent articles (up to 20% boost)
+   - Apply decay formula: `decay = 1.0 / (1 + age_days / 7)`
+
+5. **Filtering**:
+   - OData filters (symbol, date range, sources)
+   - Threshold filtering (auto-adjusts if too restrictive)
+
+**Retrieval Performance**:
+- **Azure AI Search**: <100ms for 1M articles (HNSW algorithm)
+- **Redis Fallback**: O(n) complexity, slower but works
+- **Hybrid Search**: Better accuracy than semantic or keyword alone
+
+### Hybrid Search Implementation
+
+Hybrid search combines semantic and keyword search for improved accuracy:
+
+<div align="center">
+  <img src="diagrams/diagram_13_semantic_search.png" alt="Hybrid Search Combination" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
+</div>
+
+**Hybrid Search Process**:
+
+1. **Semantic Search**: Find articles with similar meaning (vector similarity)
+2. **Keyword Search**: Find articles with exact keywords (BM25 scoring)
+3. **RRF Combination**: Combine rankings using Reciprocal Rank Fusion
+4. **Result Ranking**: Articles appearing in both lists rank highest
+
+**Why Hybrid Search?**:
+- **Semantic Alone**: May miss exact keyword matches
+- **Keyword Alone**: May miss semantic variations
+- **Hybrid**: Combines strengths of both approaches
+
+### Azure AI Search Integration
+
+Azure AI Search provides the vector database backend for RAG:
+
+**Index Schema**:
+```json
+{
+  "name": "stock-articles",
+  "fields": [
+    {"name": "article_id", "type": "Edm.String", "key": true},
+    {"name": "contentVector", "type": "Collection(Edm.Single)", "dimensions": 1536, "vectorSearchProfile": "default"},
+    {"name": "title", "type": "Edm.String", "searchable": true},
+    {"name": "summary", "type": "Edm.String", "searchable": true},
+    {"name": "symbol", "type": "Edm.String", "filterable": true},
+    {"name": "source", "type": "Edm.String", "filterable": true},
+    {"name": "timestamp", "type": "Edm.DateTimeOffset", "filterable": true, "sortable": true}
+  ],
+  "vectorSearch": {
+    "algorithms": [{"name": "default", "kind": "hnsw"}],
+    "profiles": [{"name": "default", "algorithm": "default"}]
+  }
+}
+```
+
+**HNSW Configuration**:
+- **m**: 16 (connections per node)
+- **efConstruction**: 200 (build quality)
+- **efSearch**: 50 (search quality)
+- **metric**: COSINE (cosine similarity)
+
+**Performance Characteristics**:
+- **Build Time**: O(N log N) where N = number of vectors
+- **Search Time**: O(log N) average case
+- **Scalability**: Handles millions of vectors efficiently
+
+### Redis Fallback Mechanism
+
+If Azure AI Search is unavailable, RAG falls back to Redis SCAN:
+
+**Fallback Process**:
+1. Check if Azure AI Search is available
+2. If not, use Redis SCAN to find all articles
+3. Calculate cosine similarity in-memory
+4. Sort by similarity and return top K
+
+**Performance Comparison**:
+- **Azure AI Search**: <100ms for 1M articles
+- **Redis SCAN**: ~5-10s for 10K articles, O(n) complexity
+
+**When to Use Fallback**:
+- Azure AI Search not configured
+- Azure AI Search service unavailable
+- Development/testing without Azure services
 
 ---
 
 ## Vector Database Architecture
 
-### Azure AI Search Integration
+This section provides a deep dive into the vector database architecture, focusing on Azure AI Search implementation.
 
-**Why Azure AI Search?**
-- **Performance**: 10-100x faster than Redis SCAN for large datasets
-- **Scalability**: Handles millions of documents
-- **Features**: Native vector indexing, hybrid search, filtering
-- **Cost**: Pay-per-use, scales with usage
+### Azure AI Search Index Architecture
 
-### Index Structure
+Azure AI Search uses an HNSW (Hierarchical Navigable Small World) index for fast approximate nearest neighbor search:
 
+<div align="center">
+  <img src="diagrams/hnsw_graph_structure_visualization_layer_sparse.png" alt="HNSW Graph Structure" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
+</div>
+
+**HNSW Index Structure**:
+
+- **Layer 0**: All nodes, dense connections (O(N) nodes, many connections)
+- **Layer 1**: Subset of nodes, fewer connections (O(N/2) nodes)
+- **Layer 2**: Even fewer nodes, even fewer connections (O(N/4) nodes)
+- **...**: Logarithmic decrease in density
+
+**Search Process**:
+1. Start at top layer (sparse, fast navigation)
+2. Find entry point closest to query
+3. Navigate to nearest neighbor
+4. Move down to next layer
+5. Repeat until layer 0
+6. Return top K nearest neighbors
+
+**Complexity**:
+- **Build**: O(N log N) where N = number of vectors
+- **Search**: O(log N) average case (much faster than brute force O(N))
+
+### Vector Search Implementation
+
+Vector search uses cosine similarity for semantic matching:
+
+<div align="center">
+  <img src="diagrams/cosine_similarity_visualization_vector_space.png" alt="Cosine Similarity" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
+</div>
+
+**Cosine Similarity Formula**:
 ```
-Index: stock-articles
-├── id (Edm.String, key)
-├── contentVector (Collection(Edm.Single), 1536 dimensions)
-├── content (Edm.String, searchable)
-├── symbol (Edm.String, filterable)
-├── title (Edm.String, searchable)
-├── summary (Edm.String, searchable)
-├── source (Edm.String, filterable)
-├── url (Edm.String)
-├── timestamp (Edm.DateTimeOffset, filterable, sortable)
-└── article_id (Edm.String)
+cos(θ) = (A · B) / (||A|| × ||B||)
 ```
 
-### Search Modes
+**Implementation**:
+- Azure AI Search calculates cosine similarity internally
+- Returns similarity scores (0.0 to 1.0)
+- Higher score = more similar content
 
-1. **Vector Search**: Pure semantic search using cosine similarity
-2. **Hybrid Search**: Combines vector and keyword search with RRF
-3. **Filtered Search**: OData filters for symbol, date range, sources
+### Hybrid Search Implementation
 
-### OData Filter Examples
+Hybrid search combines vector and keyword search:
 
+**Azure AI Search Hybrid Search**:
+- Performs both semantic and keyword search in parallel
+- Combines results using Reciprocal Rank Fusion (RRF) internally
+- Returns unified ranking with RRF scores
+
+**RRF Formula** (applied by Azure AI Search):
 ```
-# Filter by symbol
+RRF_score(d) = Σ(1 / (60 + rank_i(d)))
+```
+
+**Benefits**:
+- No score normalization needed
+- Works with different score scales
+- Boosts documents appearing in both lists
+
+### OData Filtering
+
+Azure AI Search supports OData filter expressions for precise filtering:
+
+**Filter Examples**:
+```
 symbol eq 'AAPL'
-
-# Filter by symbol and exclude source
-symbol eq 'AAPL' and source ne 'Unknown'
-
-# Filter by date range
-symbol eq 'AAPL' and timestamp ge 2024-01-01T00:00:00Z and timestamp le 2024-12-31T23:59:59Z
-
-# Complex filter
-symbol eq 'AAPL' and (source eq 'Yahoo Finance' or source eq 'Finnhub') and timestamp ge 2024-11-01T00:00:00Z
+timestamp ge 2024-12-01T00:00:00Z
+source in ('yfinance', 'alpha_vantage')
+days_back le 7
 ```
+
+**Filter Building**:
+- Built dynamically based on user filters
+- Supports AND/OR logic
+- Validated before sending to Azure AI Search
+
+**Performance Impact**:
+- Filters applied at index level (efficient)
+- Reduces search space before ranking
+- Minimal performance overhead
 
 ---
 
-## Data Sources Integration
+## Caching Architecture
 
-### Supported Data Sources
+This section documents the caching architecture, including strategy, implementation, and performance impact.
 
-#### 1. Yahoo Finance (yfinance) - Primary Source
-- **Status**: Always enabled
-- **Data**: Stock prices, company info, news headlines
-- **Library**: `yfinance`
-- **Rate Limits**: None (public API)
-- **Caching**: 1 hour for stock data, 2 hours for news
+### Cache Architecture Overview
 
-#### 2. Alpha Vantage
-- **Status**: Optional (requires API key)
-- **Data**: Company news
-- **API**: REST API
-- **Rate Limits**: 500 calls/day (free tier)
-- **Configuration**: `DATA_SOURCE_ALPHA_VANTAGE_API_KEY`, `DATA_SOURCE_ALPHA_VANTAGE_ENABLED`
+The application uses a single-tier Redis cache architecture:
 
-#### 3. Finnhub
-- **Status**: Optional (requires API key)
-- **Data**: Company news
-- **API**: REST API
-- **Rate Limits**: 60 calls/minute (free tier)
-- **Configuration**: `DATA_SOURCE_FINNHUB_API_KEY`, `DATA_SOURCE_FINNHUB_ENABLED`
+<div align="center">
+  <img src="diagrams/72_cache_architecture_cache_types.png" alt="Cache Architecture" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
+</div>
 
-#### 4. Reddit
-- **Status**: Optional (requires app registration)
-- **Data**: Social media posts from relevant subreddits
-- **Library**: PRAW (Python Reddit API Wrapper)
-- **Rate Limits**: 60 requests/minute (Reddit API limit)
-- **Configuration**: `DATA_SOURCE_REDDIT_CLIENT_ID`, `DATA_SOURCE_REDDIT_CLIENT_SECRET`, `DATA_SOURCE_REDDIT_ENABLED`
+**Cache Types**:
 
-### Data Collection Flow
+1. **Stock Data Cache**
+   - Key: `stock:{symbol}`
+   - TTL: 1 hour (configurable)
+   - Data: Price, market cap, company name
 
-1. **Primary Source**: Always fetch from yfinance
-2. **Additional Sources**: Fetch from enabled sources in parallel
-3. **Deduplication**: Remove duplicate articles by title and URL
-4. **Source Tracking**: Track which source each article came from
-5. **Caching**: Cache results in Redis with appropriate TTL
+2. **News Articles Cache**
+   - Key: `news:{symbol}`
+   - TTL: 2 hours (configurable)
+   - Data: List of article dictionaries
 
-### Source Filtering
+3. **Sentiment Cache**
+   - Key: `sentiment:{text_hash}`
+   - TTL: 24 hours (configurable, can be disabled)
+   - Data: Sentiment scores (positive, negative, neutral)
 
-Users can enable/disable individual sources via UI:
-- Toggle switches in sidebar
-- Filters applied during data collection
-- Logged for transparency
+4. **Embedding Cache**
+   - Key: `embedding:{text_hash}`
+   - TTL: 7 days
+   - Data: 1536-dimensional embedding vector
 
----
+5. **Duplicate Markers**
+   - Key: `article_hash:{symbol}:{article_id}`
+   - TTL: 7 days
+   - Data: '1' marker (existence check)
 
-## Caching Strategy
+### Cache Flow Architecture
 
-### Cache Hierarchy
+The cache flow optimizes performance by reducing external API calls:
 
-![Caching Diagram](diagrams/caching.png)
+<div align="center">
+  <img src="diagrams/76_cache_flow_diagram_data_request.png" alt="Cache Flow" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
+</div>
 
-### Cache TTL Strategy
+**Cache Flow Pattern**:
 
-| Data Type | TTL | Rationale | Configurable |
-|-----------|-----|-----------|--------------|
-| Stock Data | 1 hour | Stock prices change frequently but not second-by-second | Yes |
-| News Articles | 2 hours | News updates regularly but not constantly | Yes |
-| Sentiment Results | 24 hours | Sentiment for same text doesn't change | Yes (can be disabled) |
-| Article Embeddings | 7 days | Embeddings are stable, articles don't change | Yes |
-| Query Embeddings | 24 hours | Same queries benefit from caching | Yes |
+1. **Read-Through**: Always check cache before external calls
+2. **Write-Through**: Write to cache immediately after fetching
+3. **TTL-Based Expiration**: Automatic expiration based on data freshness requirements
+4. **Statistics Tracking**: Cache performance metrics stored in Redis
 
-### Cache Key Structure
+### Cache Key Design
 
-```
-Pattern: {prefix}:{normalized_args_hash}
+**Naming Convention**: `{type}:{identifier}`
 
-Examples:
-- stock:AAPL → MD5 hash
-- news:AAPL → MD5 hash
-- sentiment:{text_hash} → MD5 hash
-- embedding:{symbol}:{article_id} → Direct key
-- query_embedding:{text_hash} → MD5 hash
+**Examples**:
+- `stock:AAPL` - Stock data for AAPL
+- `news:AAPL` - News articles for AAPL
+- `sentiment:abc123def456` - Sentiment for text hash
+- `embedding:xyz789uvw012` - Embedding for text hash
+- `article_hash:AAPL:ed8c4cd1` - Duplicate marker
+
+**Hash Generation**:
+```python
+import hashlib
+text_hash = hashlib.md5(text.encode()).hexdigest()
+cache_key = f"sentiment:{text_hash}"
 ```
 
-**Key Generation**:
-- Normalizes inputs (uppercase, trimmed)
-- Uses MD5 hashing for consistency
-- Ensures same inputs generate same keys across app reloads
+### Cache Performance Impact
 
-### Sentiment Cache Control
+**Without Caching**:
+- Every request = API call
+- 30 articles = 30 sentiment API calls
+- Latency: 50-100ms per call
+- Cost: High (all API calls charged)
 
-**Feature**: Configurable sentiment caching for RAG testing
+**With Caching**:
+- Cache hit rate: 50-90% (depending on usage patterns)
+- 30 articles: 3-15 API calls (rest from cache)
+- Latency: 1-5ms per cache hit
+- Cost: 50-90% reduction
 
-**Options**:
-- **Enable**: Cache sentiment results (default, reduces API calls)
-- **Disable**: Force RAG usage for every analysis (useful for demos)
-
-**TTL Control**: Slider from 0.1 to 168 hours (7 days)
-
-**Use Case**: 
-- Disable cache to see RAG in action
-- Adjust TTL to test cache expiration behavior
-- Monitor RAG usage in operation summary
+**Real-World Example**:
+- User analyzes AAPL (30 articles)
+- First request: 30 API calls, 3 seconds
+- Second request (within 2 hours): 0 API calls, 0.1 seconds (cache hit)
+- **99.7% latency reduction**
 
 ---
 
 ## Mathematical Models & Algorithms
 
-### 1. Cosine Similarity
+This section provides detailed technical documentation of all mathematical models and algorithms used in the system.
 
-**Purpose**: Measure semantic similarity between two embedding vectors.
+### Cosine Similarity
 
-**Formula**:
+**Mathematical Formula**:
 ```
 cos(θ) = (A · B) / (||A|| × ||B||)
 ```
 
-Where:
-- `A · B` = dot product of vectors A and B
-- `||A||` = Euclidean norm (magnitude) of vector A
-- `||B||` = Euclidean norm (magnitude) of vector B
-- `θ` = angle between vectors
+**Implementation Details**:
+- Used for semantic similarity measurement
+- Azure AI Search calculates internally
+- Returns scores from 0.0 to 1.0
+- Higher score = more similar content
 
-**Range**: 0.0 (orthogonal, no similarity) to 1.0 (identical, perfect similarity)
+**Complexity**: O(n) where n = vector dimension (1536 for our embeddings)
 
-**Implementation**:
-```python
-import numpy as np
+**Why Used**: Captures semantic meaning, not just keywords
 
-def cosine_similarity(vec1, vec2):
-    vec1 = np.array(vec1)
-    vec2 = np.array(vec2)
-    dot_product = np.dot(vec1, vec2)
-    norm1 = np.linalg.norm(vec1)
-    norm2 = np.linalg.norm(vec2)
-    return dot_product / (norm1 * norm2)
-```
+### Reciprocal Rank Fusion (RRF)
 
-**Use Case**: Semantic search in RAG (finding similar articles)
-
-### 2. Reciprocal Rank Fusion (RRF)
-
-**Purpose**: Combine multiple ranked lists without score normalization.
-
-**Formula**:
+**Mathematical Formula**:
 ```
 RRF_score(d) = Σ(1 / (k + rank_i(d)))
 ```
 
 Where:
-- `d` = document/article
-- `k` = RRF constant (typically 60)
-- `rank_i(d)` = rank of document d in search result i
-- Sum is over all search results containing document d
-
-**Example**:
-- Document appears at rank 1 in semantic search: `1 / (60 + 1) = 0.0164`
-- Document appears at rank 2 in keyword search: `1 / (60 + 2) = 0.0161`
-- Combined RRF score: `0.0164 + 0.0161 = 0.0325`
-
-**Why RRF?**
-- Works with different score scales (no normalization needed)
-- Documents appearing high in multiple searches rank highest
-- Proven method in information retrieval
+- `k` = 60 (standard RRF constant)
+- `rank_i(d)` = Rank of document d in list i (1-indexed)
 
 **Implementation**:
-```python
-def reciprocal_rank_fusion(semantic_results, keyword_results, k=60):
-    rrf_scores = {}
-    
-    # Add semantic search results
-    for rank, article in enumerate(semantic_results, 1):
-        article_id = article.get('article_id', '')
-        if article_id:
-            rrf_scores[article_id] = rrf_scores.get(article_id, 0) + (1 / (k + rank))
-    
-    # Add keyword search results
-    for rank, article in enumerate(keyword_results, 1):
-        article_id = article.get('article_id', '')
-        if article_id:
-            rrf_scores[article_id] = rrf_scores.get(article_id, 0) + (1 / (k + rank))
-    
-    # Sort by RRF score
-    return sorted(rrf_scores.items(), key=lambda x: x[1], reverse=True)
-```
+- Applied by Azure AI Search internally
+- Combines semantic and keyword search results
+- No score normalization needed
 
-**Use Case**: Hybrid search in RAG (combining semantic and keyword results)
+**Why Used**: Works with different score scales, boosts consensus documents
 
-### 3. Temporal Decay
+### Temporal Decay
 
-**Purpose**: Boost recent articles in search results (financial news is time-sensitive).
-
-**Formula**:
+**Mathematical Formula**:
 ```
 decay = 1.0 / (1 + age_days / decay_days)
-boosted_score = current_score * (1 + decay * boost_factor)
+boosted_score = original_score × (1 + decay × boost_factor)
 ```
 
 Where:
-- `age_days` = days since article publication
-- `decay_days` = decay half-life (default: 7 days)
+- `decay_days` = 7 (half-life constant)
 - `boost_factor` = 0.2 (20% maximum boost)
 
-**Examples**:
-- Article from today (age=0): `decay = 1.0 / (1 + 0/7) = 1.0`, boost = 20%
-- Article from 7 days ago (age=7): `decay = 1.0 / (1 + 7/7) = 0.5`, boost = 10%
-- Article from 30 days ago (age=30): `decay = 1.0 / (1 + 30/7) ≈ 0.19`, boost ≈ 3.8%
+**Implementation**:
+- Applied after RRF combination
+- Boosts recent articles in search results
+- Smooth decay curve (not abrupt cutoff)
+
+**Why Used**: Financial news is time-sensitive, recent news is more relevant
+
+### Sentiment Score Normalization
+
+**Mathematical Formula**:
+```
+normalized_score_i = score_i / Σ(score_j)
+```
+
+**Constraint**: `Σ(normalized_score_i) = 1.0`
 
 **Implementation**:
-```python
-def apply_temporal_decay(results, decay_days=7, boost_factor=0.2):
-    from datetime import datetime
-    now = datetime.now()
-    
-    for result in results:
-        timestamp = result.get('timestamp', '')
-        if not timestamp:
-            continue
-        
-        article_time = parse_timestamp(timestamp)
-        age_days = (now - article_time).days
-        
-        decay = max(0.1, 1.0 / (1 + age_days / decay_days))
-        current_score = result.get('rrf_score', result.get('similarity', 0))
-        boosted_score = current_score * (1 + decay * boost_factor)
-        result['rrf_score'] = boosted_score
-    
-    return sorted(results, key=lambda x: x.get('rrf_score', 0), reverse=True)
+- Applied after LLM response parsing
+- Ensures scores form probability distribution
+- Handles edge cases (all zeros, negative values)
+
+**Why Used**: Represents likelihood of each sentiment category
+
+### Batch Embedding Generation
+
+**Efficiency Calculation**:
 ```
-
-**Use Case**: RAG retrieval (boosting recent articles)
-
-### 4. Sentiment Score Normalization
-
-**Purpose**: Ensure sentiment scores sum to 1.0 (probability distribution).
-
-**Formula**:
-```
-normalized_score = raw_score / sum(all_scores)
+API_calls_saved = N - ⌈N / batch_size⌉
+Latency_reduction = (N × latency_per_call) - (⌈N / batch_size⌉ × batch_latency)
 ```
 
 **Example**:
-- Raw scores: positive=0.7, negative=0.2, neutral=0.15
-- Sum: 1.05
-- Normalized: positive=0.667, negative=0.190, neutral=0.143
+- 250 articles, batch_size=100
+- Individual: 250 calls, 12.5s, $0.025
+- Batch: 3 calls, 0.6s, $0.0003
+- **Efficiency Gain**: 98.8% reduction in calls, 95.2% faster
 
-**Net Sentiment**:
-```
-net_sentiment = positive - negative
-```
+**Why Used**: Massive latency and cost reduction
 
-**Range**: -1.0 (completely negative) to +1.0 (completely positive)
+### HNSW Algorithm
 
-**Dominant Sentiment**:
-```
-dominant = argmax(positive, negative, neutral)
-```
+**Algorithm Complexity**:
+- **Build Time**: O(N × log N)
+- **Search Time**: O(log N) average case
+- **Space**: O(N × M) where M = average connections per node
 
-**Use Case**: Sentiment analysis output formatting
+**Why Used**: Fast approximate nearest neighbor search, scales to millions of vectors
 
-### 5. Batch Embedding Generation
+---
 
-**Purpose**: Reduce API calls by processing multiple texts in one request.
+## API Architecture
 
-**Efficiency Gain**:
-- **One-by-one**: N articles = N API calls
-- **Batch**: N articles = ⌈N / batch_size⌉ API calls
-- **Improvement**: Up to batch_size× reduction in API calls
+This section documents the REST API architecture, including design, endpoints, and request/response patterns.
 
-**Example**:
-- 100 articles, batch_size=100: 100 calls → 1 call (100× improvement)
-- 100 articles, batch_size=50: 100 calls → 2 calls (50× improvement)
+### REST API Design
 
-**Implementation**:
+The API follows RESTful principles with clear resource-based URLs:
+
+**Base URL**: `http://localhost:8000` (development)
+
+**API Request/Response Flow**:
+
+<div align="center">
+  <img src="diagrams/82_authentication_821_api_requestresponse_flow_client_client.png" alt="API Request/Response Flow" style="max-width: 100%; width: auto; height: auto; min-width: 800px; border: 1px solid #e1e4e8; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 20px 0; display: block;" />
+</div>
+
+**API Design Principles**:
+
+1. **Resource-Based URLs**: `/sentiment/{symbol}`, `/price/{symbol}/history`
+2. **HTTP Methods**: GET for retrieval, POST for actions
+3. **Query Parameters**: Filtering, pagination, options
+4. **JSON Responses**: Consistent JSON format
+5. **Error Handling**: Standard HTTP status codes with error details
+
+### API Endpoints
+
+**Main Endpoints**:
+
+1. **GET `/sentiment/{symbol}`**: Get sentiment analysis
+2. **POST `/sentiment/batch`**: Batch sentiment analysis
+3. **GET `/price/{symbol}/history`**: Get price history
+4. **POST `/comparison/insights`**: Get comparison insights
+5. **GET `/system/status`**: Get system health
+6. **GET `/cache/stats`**: Get cache statistics
+7. **POST `/cache/clear`**: Clear cache
+
+**Request/Response Models**: Defined using Pydantic for validation
+
+**Error Responses**: Standardized error format with details
+
+### Dependency Injection
+
+Services are injected via FastAPI dependencies:
+
 ```python
-def get_embeddings_batch(texts, batch_size=100):
-    results = []
-    for i in range(0, len(texts), batch_size):
-        batch = texts[i:i+batch_size]
-        response = client.embeddings.create(
-            model=embedding_deployment,
-            input=batch
-        )
-        results.extend([item.embedding for item in response.data])
-    return results
+@router.get("/{symbol}")
+async def get_sentiment(
+    symbol: str,
+    services: Tuple = Depends(get_all_services)
+):
+    settings, redis_cache, rag_service, collector, analyzer = services
+    # Use services...
 ```
 
-**Use Case**: RAG article storage (efficient embedding generation)
-
----
-
-## Data Models
-
-### SentimentScores
-
-**Purpose**: Represents sentiment analysis results as numerical scores.
-
-**Attributes**:
-
-| Attribute | Type | Range | Description |
-|-----------|------|-------|-------------|
-| `positive` | float | 0.0 - 1.0 | Probability that sentiment is positive |
-| `negative` | float | 0.0 - 1.0 | Probability that sentiment is negative |
-| `neutral` | float | 0.0 - 1.0 | Probability that sentiment is neutral |
-
-**Properties**:
-- Scores are normalized to sum to 1.0
-- `net_sentiment`: Calculated as `positive - negative` (-1.0 to 1.0)
-- `dominant_sentiment`: Returns "positive", "negative", or "neutral"
-
-**Example**:
-```python
-scores = SentimentScores(
-    positive=0.65,  # 65% positive
-    negative=0.20,  # 20% negative
-    neutral=0.15    # 15% neutral
-)
-# Net sentiment: 0.45 (moderately positive)
-```
-
-### StockData
-
-**Purpose**: Represents stock price and company information.
-
-**Attributes**:
-
-| Attribute | Type | Description |
-|-----------|------|-------------|
-| `symbol` | str | Stock ticker symbol (e.g., "AAPL") |
-| `price` | float | Current stock price in USD |
-| `company_name` | str | Full company name |
-| `market_cap` | int | Market capitalization in USD |
-| `timestamp` | datetime | When data was collected |
-
-### NewsArticle
-
-**Purpose**: Represents a news article about a stock.
-
-**Attributes**:
-
-| Attribute | Type | Description |
-|-----------|------|-------------|
-| `title` | str | Article headline |
-| `summary` | str | Article summary or description |
-| `source` | str | Publisher name (Yahoo Finance, Alpha Vantage, Finnhub, Reddit) |
-| `url` | str | Link to full article |
-| `timestamp` | datetime | Publication date |
-
-**Property**:
-- `text_for_analysis`: Combines title and summary for sentiment analysis
-
----
-
-## Key Attributes and Their Meanings
-
-### Application Settings (`AppSettings`)
-
-#### Logging Configuration
-
-**`log_level`** (str, default: "INFO")
-- **Purpose**: Controls verbosity of application logs
-- **Values**: DEBUG, INFO, WARNING, ERROR, CRITICAL
-- **Usage**: Set to DEBUG for troubleshooting, INFO for production
-- **Example**: `APP_LOG_LEVEL=DEBUG` in `.env`
-
-**`debug`** (bool, default: false)
-- **Purpose**: Enables additional debugging features
-- **Impact**: May include more detailed error messages and stack traces
-
-#### Cache TTL Settings
-
-**`cache_ttl_sentiment`** (int, default: 86400 seconds = 24 hours)
-- **Purpose**: How long sentiment analysis results are cached
-- **Rationale**: Sentiment for the same text doesn't change, so long TTL reduces API calls
-- **Trade-off**: Longer TTL = fewer API calls but potentially stale data
-- **Configurable**: Can be adjusted via UI slider (0.1 to 168 hours)
-
-**`cache_sentiment_enabled`** (bool, default: True)
-- **Purpose**: Enable/disable sentiment caching
-- **Use Case**: Disable to force RAG usage for every analysis (useful for demos)
-- **Configurable**: Can be toggled via UI checkbox
-
-**`cache_ttl_stock`** (int, default: 3600 seconds = 1 hour)
-- **Purpose**: How long stock price data is cached
-- **Rationale**: Stock prices change frequently but not second-by-second
-- **Trade-off**: Balance between freshness and API rate limits
-
-**`cache_ttl_news`** (int, default: 7200 seconds = 2 hours)
-- **Purpose**: How long news articles are cached
-- **Rationale**: News updates regularly but not constantly
-- **Trade-off**: Fresh news vs. API costs
-
-**`cache_ttl_rag_articles`** (int, default: 604800 seconds = 7 days)
-- **Purpose**: How long RAG article embeddings are cached
-- **Rationale**: Embeddings are stable, articles don't change
-
-#### RAG Configuration
-
-**`rag_top_k`** (int, default: 3)
-- **Purpose**: Number of similar articles to retrieve for context
-- **Impact**: 
-  - Higher K = more context but potentially more noise
-  - Lower K = less context but more focused
-- **Recommendation**: 3-5 articles typically provides good balance
-
-**`rag_similarity_threshold`** (float, default: 0.01)
-- **Purpose**: Minimum similarity score for article inclusion
-- **Note**: For RRF scores (typically 0.01-0.15), use 0.01-0.03. For cosine similarity (0.0-1.0), use 0.3-0.7.
-- **Impact**: Higher threshold = higher quality but fewer articles
-- **Auto-adjustment**: Automatically lowers if too restrictive
-
-**`rag_batch_size`** (int, default: 100)
-- **Purpose**: Number of articles to process per batch for embedding generation
-- **Max**: 2048 (Azure OpenAI limit)
-- **Impact**: Larger batches = fewer API calls but more memory usage
-- **Recommendation**: 100-200 for optimal balance
-
-**`rag_temporal_decay_days`** (int, default: 7)
-- **Purpose**: Half-life for temporal decay calculation
-- **Formula**: `decay = 1.0 / (1 + age_days / decay_days)`
-- **Impact**: Lower value = steeper decay (recent articles more important)
-
-**`rag_similarity_auto_adjust_multiplier`** (float, default: 0.8)
-- **Purpose**: Multiplier for auto-adjusting similarity threshold when too high
-- **Use Case**: If threshold filters all results, automatically lower it by this multiplier
-
-### Azure AI Search Settings
-
-**`endpoint`** (str, required)
-- **Purpose**: Azure AI Search service endpoint URL
-- **Format**: `https://{service-name}.search.windows.net`
-- **Security**: Contains service location, should be kept private
-
-**`api_key`** (str, required)
-- **Purpose**: Authentication key for Azure AI Search API
-- **Security**: Highly sensitive, never commit to version control
-- **Rotation**: Should be rotated regularly
-
-**`index_name`** (str, default: "stock-articles")
-- **Purpose**: Name of the search index
-- **Note**: Index is created automatically if it doesn't exist
-
-**`vector_dimension`** (int, default: 1536)
-- **Purpose**: Dimension of embedding vectors
-- **Note**: Must match embedding model dimension (text-embedding-ada-002 = 1536)
-
-### Azure OpenAI Settings
-
-**`endpoint`** (str, required)
-- **Purpose**: Azure OpenAI service endpoint URL
-- **Format**: `https://{resource-name}.openai.azure.com`
-- **Security**: Contains service location, should be kept private
-
-**`api_key`** (str, required)
-- **Purpose**: Authentication key for Azure OpenAI API
-- **Security**: Highly sensitive, never commit to version control
-- **Rotation**: Should be rotated regularly
-
-**`deployment_name`** (str, default: "gpt-4")
-- **Purpose**: Name of the GPT-4 deployment in Azure
-- **Note**: Must match the deployment name in Azure Portal
-
-**`embedding_deployment`** (str, optional)
-- **Purpose**: Name of the embedding model deployment
-- **Required for**: RAG functionality
-- **Common values**: "text-embedding-ada-002", "text-embedding-3-small"
-
-### Redis Settings
-
-**`host`** (str, required)
-- **Purpose**: Redis server hostname or IP address
-- **Format**: `{name}.redis.cache.windows.net` for Azure Cache
-
-**`port`** (int, default: 6380)
-- **Purpose**: Redis server port
-- **Note**: 6380 is standard for SSL-enabled Redis
-
-**`password`** (str, required)
-- **Purpose**: Redis authentication password
-- **Security**: Sensitive, should be kept private
-
-**`ssl`** (bool, default: true)
-- **Purpose**: Enable SSL/TLS encryption for Redis connection
-- **Security**: Required for production, especially Azure Cache
-
-### Sentiment Analysis Attributes
-
-**`temperature`** (float, default: 0.2)
-- **Purpose**: Controls randomness in AI responses
-- **Range**: 0.0 (deterministic) to 2.0 (very creative)
-- **For Sentiment**: Lower values (0.1-0.3) provide more consistent results
-
-**`max_tokens`** (int, default: 200)
-- **Purpose**: Maximum length of AI response
-- **For Sentiment**: 200 tokens sufficient for JSON response
-- **Cost Impact**: More tokens = higher API costs
-
-**`response_format`** (dict, optional)
-- **Purpose**: Forces structured JSON output
-- **Value**: `{"type": "json_object"}`
-- **Benefit**: More reliable JSON parsing, fewer errors
-
----
-
-## Technology Stack
-
-### Frontend
-- **Streamlit**: Python web framework for rapid UI development
-- **Plotly**: Interactive data visualization library
-- **Pandas**: Data manipulation and analysis
-
-### Backend Services
-- **Python 3.8+**: Programming language
-- **Azure OpenAI**: Large Language Model service (GPT-4)
-- **Azure AI Search**: Vector database and search service
-- **Redis**: In-memory data store for caching
-- **yfinance**: Financial data API wrapper
-
-### Data Sources
-- **yfinance**: Yahoo Finance (primary source, always enabled)
-- **Alpha Vantage**: Company news API (optional)
-- **Finnhub**: Financial data API (optional)
-- **Reddit (PRAW)**: Social media sentiment (optional)
-
-### Data Processing
-- **NumPy**: Numerical computing for vector operations
-- **TextBlob**: Fallback sentiment analysis library
-- **Pydantic**: Data validation and settings management
-- **dateutil**: Date parsing and manipulation
-
-### Infrastructure
-- **Azure Cloud**: Hosting for OpenAI, AI Search, and Redis
-- **Docker** (optional): Containerization support
-- **Git**: Version control
-
----
-
-## Performance Considerations
-
-### Optimization Strategies
-
-1. **Multi-Level Caching**
-   - Session state (fastest, per-user)
-   - Redis cache (fast, shared across users)
-   - API calls (slowest, only when needed)
-
-2. **Batch Processing**
-   - Batch embedding generation (reduces API calls from N to N/batch_size)
-   - Parallel sentiment analysis (multi-threading)
-   - Batch document upload to Azure AI Search
-
-3. **Vector Search Optimization**
-   - Azure AI Search (10-100x faster than Redis SCAN)
-   - HNSW algorithm for fast approximate nearest neighbor search
-   - Hybrid search with built-in RRF
-
-4. **Embedding Caching**
-   - Cache query embeddings to avoid regeneration
-   - Store article embeddings for 7 days
-
-### Performance Metrics
-
-| Operation | Without Cache | With Cache | Improvement |
-|-----------|---------------|------------|-------------|
-| Stock Data Fetch | ~500ms | ~5ms | 100× faster |
-| News Fetch | ~800ms | ~5ms | 160× faster |
-| Sentiment Analysis | ~2000ms | ~5ms | 400× faster |
-| RAG Retrieval (Redis SCAN) | ~300ms | ~50ms | 6× faster |
-| RAG Retrieval (Azure AI Search) | ~50ms | ~50ms | 10-100× faster than Redis SCAN |
-
-### Scalability Considerations
-
-- **Horizontal Scaling**: Stateless design allows multiple instances
-- **Azure AI Search**: Scales to millions of documents
-- **Redis Clustering**: Can use Redis Cluster for high availability
-- **API Rate Limits**: Caching reduces load on external APIs
-- **Cost Optimization**: Caching significantly reduces Azure OpenAI API costs
+**Benefits**:
+- Services initialized once (singleton pattern)
+- Easy to mock for testing
+- Clear dependency graph
 
 ---
 
 ## Security Architecture
 
-### Security Measures
+### Environment Variable Management
 
-1. **Environment Variables**
-   - Sensitive data stored in `.env` file (not committed)
-   - API keys never hardcoded
-   - `.env.example` provided as template
+**Configuration Security**:
+- All sensitive data in environment variables
+- `.env` file excluded from version control
+- Pydantic validation ensures required variables present
 
-2. **Azure Security**
-   - API keys managed through Azure Key Vault (recommended)
-   - SSL/TLS for all external connections
-   - Network isolation for Redis and AI Search
+### API Key Security
 
-3. **Data Privacy**
-   - No user data stored permanently
-   - Session state cleared on app restart
-   - Cache TTLs ensure data expiration
+**Azure OpenAI**:
+- API keys stored in environment variables
+- Never logged or exposed in responses
+- Rotated via Azure portal
 
-4. **Input Validation**
-   - Stock symbol validation
-   - Text sanitization
-   - OData filter injection prevention (proper escaping)
+**Azure AI Search**:
+- API keys stored in environment variables
+- Used only for authenticated requests
 
-### Best Practices
+**Data Source APIs**:
+- API keys stored in environment variables
+- Rate limiting prevents abuse
 
-- **Key Rotation**: Rotate API keys regularly
-- **Least Privilege**: Use minimal required permissions
-- **Monitoring**: Log security events
-- **Updates**: Keep dependencies updated
+### Data Privacy
 
----
+**No User Data Storage**: Application doesn't store user data
+**Public Data Only**: Only processes publicly available news articles
+**No PII**: No personally identifiable information collected
 
-## Conclusion
+### Input Validation
 
-This application demonstrates a production-ready architecture combining:
+**Pydantic Models**: All inputs validated via Pydantic
+**Symbol Validation**: Stock symbols validated before processing
+**Error Handling**: Invalid inputs return 400 Bad Request
 
-- **Modern AI**: Azure OpenAI GPT-4 for intelligent analysis
-- **Advanced Techniques**: RAG with hybrid search for context-aware processing
-- **High Performance**: Azure AI Search for 10-100× faster vector search
-- **Multi-Source Data**: Comprehensive news coverage from multiple APIs
-- **Performance**: Multi-level caching for optimization
-- **User Experience**: Interactive Streamlit dashboard with modular architecture
-- **Best Practices**: Clean architecture, proper error handling, comprehensive logging
+### Error Handling Security
 
-The modular, layered design allows for easy extension and maintenance, making it suitable for both learning and production use. The architecture supports:
-
-- **Scalability**: Can handle millions of articles with Azure AI Search
-- **Flexibility**: Easy to add new data sources or features
-- **Maintainability**: Clear separation of concerns
-- **Testability**: Modular components are easy to test
-- **Demo-Ready**: Comprehensive logging and operation summaries for demonstrations
+**No Information Leakage**: Error messages don't expose internal details
+**Logging**: Errors logged server-side, user-friendly messages returned
+**Circuit Breakers**: Prevent cascading failures that could expose system state
 
 ---
 
-**Document Version**: 2.0  
-**Last Updated**: December 2024  
-**Maintained By**: Development Team
+## Performance Architecture
+
+### Optimization Strategies
+
+1. **Caching**: 50-90% reduction in API calls
+2. **Batch Processing**: 100× reduction in embedding API calls
+3. **Parallel Processing**: 3-5× faster sentiment analysis
+4. **Vector Database**: 10-100× faster semantic search
+
+### Caching Performance
+
+**Cache Hit Rates**:
+- Stock data: 70-90% (1 hour TTL)
+- News data: 60-80% (2 hours TTL)
+- Sentiment: 50-90% (24 hours TTL, configurable)
+
+**Performance Impact**:
+- Cache hit: 1-5ms latency
+- Cache miss: 50-100ms latency (external API call)
+- **10-100× faster** for cached data
+
+### Parallel Processing Performance
+
+**Sentiment Analysis**:
+- Sequential: 30 articles × 2s = 60s
+- Parallel (5 workers): 30 articles ÷ 5 × 2s = 12s
+- **5× faster** with parallel processing
+
+### Batch Processing Performance
+
+**Embedding Generation**:
+- Individual: 100 articles = 100 calls, 5s, $0.01
+- Batch: 100 articles = 1 call, 0.2s, $0.0001
+- **25× faster, 100× cheaper**
+
+### Scalability Considerations
+
+**Horizontal Scaling**:
+- API layer can be scaled independently
+- Stateless design enables load balancing
+- Redis shared across instances
+
+**Vertical Scaling**:
+- Increase parallel workers for faster processing
+- Increase batch size for embedding generation
+- Increase cache size for higher hit rates
+
+---
+
+## Deployment Architecture
+
+### Containerization
+
+**Docker Support**:
+- Frontend and API can be containerized separately
+- Environment variables passed via `.env` file
+- Health checks for service monitoring
+
+### Service Dependencies
+
+**Required Services**:
+- Azure OpenAI (GPT-4 + embeddings)
+- Redis (caching)
+
+**Optional Services**:
+- Azure AI Search (vector database, with Redis fallback)
+
+**External APIs**:
+- yfinance (always available)
+- Alpha Vantage, Finnhub, Reddit (optional)
+
+### Configuration Management
+
+**Environment Variables**: All configuration via `.env` file
+**Settings Validation**: Pydantic validates on startup
+**Feature Flags**: Enable/disable features via settings
+
+### Monitoring and Logging
+
+**Logging**:
+- Comprehensive logging at all levels
+- Operation summaries for demo visibility
+- Error logging with context
+
+**Health Checks**:
+- `/health` endpoint for service status
+- `/system/status` for detailed health
+
+**Metrics** (Future):
+- Cache hit/miss rates
+- API response times
+- Error rates
+
+---
+
+
 

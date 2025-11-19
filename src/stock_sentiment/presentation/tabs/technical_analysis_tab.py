@@ -3,64 +3,83 @@ Technical analysis tab component.
 """
 
 import streamlit as st
-import yfinance as yf
 import plotly.graph_objects as go
+from typing import Optional
+from datetime import datetime
+import pandas as pd
+
 from ...utils.logger import get_logger
+from ...presentation.api_client import SentimentAPIClient
 
 logger = get_logger(__name__)
 
 
-def render_technical_analysis_tab(current_symbol):
+def render_technical_analysis_tab(current_symbol: str, api_client: Optional[SentimentAPIClient]):
     """Render the technical analysis tab."""
     st.header(f"🔧 Technical Analysis - {current_symbol}")
     
+    if not api_client:
+        st.error("❌ API client not available. Please ensure API mode is enabled.")
+        return
+    
     try:
-        ticker = yf.Ticker(current_symbol)
         period = st.selectbox(
             "📅 Analysis Period",
             ["1mo", "3mo", "6mo", "1y", "2y"],
             index=2,
             key="tech_period"
         )
-        hist = ticker.history(period=period)
         
-        if not hist.empty:
+        # Get price history from API
+        price_data = api_client.get_price_history(current_symbol, period=period)
+        data_points = price_data.get('data', [])
+        
+        if not data_points:
+            st.warning("⚠️ No data available for technical analysis.")
+            return
+        
+        # Convert to DataFrame
+        hist_df = pd.DataFrame(data_points)
+        hist_df['date'] = pd.to_datetime(hist_df['date'])
+        hist_df = hist_df.set_index('date').sort_index()
+        
+        if not hist_df.empty:
             # Calculate technical indicators
-            hist['SMA_20'] = hist['Close'].rolling(window=20).mean()
-            hist['SMA_50'] = hist['Close'].rolling(window=50).mean()
-            hist['EMA_12'] = hist['Close'].ewm(span=12, adjust=False).mean()
-            hist['EMA_26'] = hist['Close'].ewm(span=26, adjust=False).mean()
+            hist_df['SMA_20'] = hist_df['close'].rolling(window=20).mean()
+            hist_df['SMA_50'] = hist_df['close'].rolling(window=50).mean()
+            hist_df['EMA_12'] = hist_df['close'].ewm(span=12, adjust=False).mean()
+            hist_df['EMA_26'] = hist_df['close'].ewm(span=26, adjust=False).mean()
             
             # RSI calculation
-            delta = hist['Close'].diff()
+            delta = hist_df['close'].diff()
             gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
             loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
             rs = gain / loss
-            hist['RSI'] = 100 - (100 / (1 + rs))
+            hist_df['RSI'] = 100 - (100 / (1 + rs))
             
             # MACD
-            hist['MACD'] = hist['EMA_12'] - hist['EMA_26']
-            hist['Signal'] = hist['MACD'].ewm(span=9, adjust=False).mean()
+            hist_df['MACD'] = hist_df['EMA_12'] - hist_df['EMA_26']
+            hist_df['Signal'] = hist_df['MACD'].ewm(span=9, adjust=False).mean()
             
             # Enhanced price chart with moving averages
             fig = go.Figure()
             fig.add_trace(go.Scatter(
-                x=hist.index,
-                y=hist['Close'],
+                x=hist_df.index,
+                y=hist_df['close'],
                 mode='lines',
                 name='Close Price',
                 line=dict(color='#1f77b4', width=3)
             ))
             fig.add_trace(go.Scatter(
-                x=hist.index,
-                y=hist['SMA_20'],
+                x=hist_df.index,
+                y=hist_df['SMA_20'],
                 mode='lines',
                 name='SMA 20',
                 line=dict(color='#ff9800', width=2, dash='dash')
             ))
             fig.add_trace(go.Scatter(
-                x=hist.index,
-                y=hist['SMA_50'],
+                x=hist_df.index,
+                y=hist_df['SMA_50'],
                 mode='lines',
                 name='SMA 50',
                 line=dict(color='#e74c3c', width=2, dash='dash')
@@ -84,8 +103,8 @@ def render_technical_analysis_tab(current_symbol):
                 st.subheader("📊 Relative Strength Index (RSI)")
                 fig_rsi = go.Figure()
                 fig_rsi.add_trace(go.Scatter(
-                    x=hist.index,
-                    y=hist['RSI'],
+                    x=hist_df.index,
+                    y=hist_df['RSI'],
                     mode='lines',
                     name='RSI',
                     line=dict(color='#9b59b6', width=2)
@@ -101,7 +120,7 @@ def render_technical_analysis_tab(current_symbol):
                 )
                 st.plotly_chart(fig_rsi, width='stretch', key="rsi_chart")
                 
-                current_rsi = hist['RSI'].iloc[-1]
+                current_rsi = hist_df['RSI'].iloc[-1]
                 rsi_status = "Overbought" if current_rsi > 70 else "Oversold" if current_rsi < 30 else "Normal"
                 st.metric("Current RSI", f"{current_rsi:.2f}", rsi_status)
             
@@ -109,15 +128,15 @@ def render_technical_analysis_tab(current_symbol):
                 st.subheader("📈 MACD Indicator")
                 fig_macd = go.Figure()
                 fig_macd.add_trace(go.Scatter(
-                    x=hist.index,
-                    y=hist['MACD'],
+                    x=hist_df.index,
+                    y=hist_df['MACD'],
                     mode='lines',
                     name='MACD',
                     line=dict(color='#3498db', width=2)
                 ))
                 fig_macd.add_trace(go.Scatter(
-                    x=hist.index,
-                    y=hist['Signal'],
+                    x=hist_df.index,
+                    y=hist_df['Signal'],
                     mode='lines',
                     name='Signal',
                     line=dict(color='#e74c3c', width=2)
@@ -132,8 +151,8 @@ def render_technical_analysis_tab(current_symbol):
                 )
                 st.plotly_chart(fig_macd, width='stretch', key="macd_chart")
                 
-                current_macd = hist['MACD'].iloc[-1]
-                current_signal = hist['Signal'].iloc[-1]
+                current_macd = hist_df['MACD'].iloc[-1]
+                current_signal = hist_df['Signal'].iloc[-1]
                 macd_trend = "Bullish" if current_macd > current_signal else "Bearish"
                 st.metric("MACD", f"{current_macd:.2f}", f"Signal: {current_signal:.2f} ({macd_trend})")
         else:
