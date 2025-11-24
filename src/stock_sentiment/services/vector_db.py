@@ -509,9 +509,8 @@ class AzureAISearchVectorDB(VectorDatabase):
             )
             
             # Build search options
+            # Azure Search SDK expects vector_queries as a list and search_text as separate parameter
             search_options = {
-                "vector_queries": [vector_query],
-                "search_text": query_text,  # Keyword search
                 "top": top_k,
                 "select": ["id", "symbol", "title", "summary", "source", "url", "timestamp", "article_id"]
             }
@@ -521,7 +520,12 @@ class AzureAISearchVectorDB(VectorDatabase):
                 logger.info(f"Azure AI Search: Filter applied - {filter[:100]}...")
             
             # Perform hybrid search (Azure AI Search handles RRF internally)
-            results = self._client.search(**search_options)
+            # Pass search_text and vector_queries as separate keyword arguments
+            results = self._client.search(
+                search_text=query_text or "",
+                vector_queries=[vector_query],
+                **search_options
+            )
             
             # Format results safely (handle None values)
             formatted_results = []

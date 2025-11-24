@@ -313,6 +313,9 @@ def get_aggregated_sentiment(
         # Combine for aggregation (but keep separate for detailed return)
         all_sentiments = news_sentiments + social_sentiments
         
+        # Filter out None values (failed analyses)
+        all_sentiments = [s for s in all_sentiments if s is not None]
+        
         # Step 4: Aggregate sentiment scores
         step4_start = time.time()
         logger.info(f"📊 STEP 4: Aggregating sentiment scores...")

@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from contextlib import asynccontextmanager
 import time
 from typing import Dict
 
@@ -23,6 +24,31 @@ from ..config.settings import get_settings
 # Initialize logger
 setup_logger("stock_sentiment", level="INFO")
 logger = get_logger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Lifespan context manager for startup and shutdown events."""
+    # Startup
+    logger.info("Starting Stock Sentiment Analysis API...")
+    
+    try:
+        # Initialize services
+        settings, redis_cache, rag_service, collector, analyzer = get_all_services()
+        
+        logger.info("API startup complete")
+        logger.info(f"Redis cache: {'available' if redis_cache else 'not configured'}")
+        logger.info(f"RAG service: {'available' if rag_service else 'not configured'}")
+        logger.info(f"Sentiment analyzer: {'available' if analyzer else 'unavailable'}")
+        
+    except Exception as e:
+        logger.error(f"Error during startup: {e}", exc_info=True)
+    
+    yield
+    
+    # Shutdown
+    logger.info("Shutting down Stock Sentiment Analysis API...")
+
 
 # Create FastAPI app
 app = FastAPI(
@@ -47,7 +73,8 @@ app = FastAPI(
     version="1.0.0",
     docs_url="/docs",
     redoc_url="/redoc",
-    openapi_url="/openapi.json"
+    openapi_url="/openapi.json",
+    lifespan=lifespan
 )
 
 # CORS configuration
@@ -101,7 +128,7 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
         content=ErrorResponse(
             error=exc.detail,
             detail=f"HTTP {exc.status_code} error"
-        ).dict()
+        ).model_dump()
     )
 
 
@@ -114,7 +141,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         content=ErrorResponse(
             error="Validation error",
             detail=str(exc.errors())
-        ).dict()
+        ).model_dump()
     )
 
 
@@ -127,7 +154,7 @@ async def general_exception_handler(request: Request, exc: Exception):
         content=ErrorResponse(
             error="Internal server error",
             detail=str(exc) if str(exc) else "An unexpected error occurred"
-        ).dict()
+        ).model_dump()
     )
 
 
@@ -249,28 +276,5 @@ async def health_check():
         )
 
 
-# Startup event
-@app.on_event("startup")
-async def startup_event():
-    """Initialize services on startup."""
-    logger.info("Starting Stock Sentiment Analysis API...")
-    
-    try:
-        # Initialize services
-        settings, redis_cache, rag_service, collector, analyzer = get_all_services()
-        
-        logger.info("API startup complete")
-        logger.info(f"Redis cache: {'available' if redis_cache else 'not configured'}")
-        logger.info(f"RAG service: {'available' if rag_service else 'not configured'}")
-        logger.info(f"Sentiment analyzer: {'available' if analyzer else 'unavailable'}")
-        
-    except Exception as e:
-        logger.error(f"Error during startup: {e}", exc_info=True)
-
-
-# Shutdown event
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Cleanup on shutdown."""
-    logger.info("Shutting down Stock Sentiment Analysis API...")
+# Startup and shutdown events are now handled by the lifespan context manager above
 

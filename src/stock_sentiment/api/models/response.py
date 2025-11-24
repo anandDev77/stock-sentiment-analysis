@@ -2,7 +2,7 @@
 API response models using Pydantic.
 """
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional, Dict, Any, List
 from datetime import datetime
 
@@ -30,8 +30,8 @@ class SentimentResponse(BaseModel):
     timestamp: str = Field(..., description="ISO format timestamp")
     sources_analyzed: int = Field(..., ge=0, description="Number of articles analyzed")
     
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "symbol": "AAPL",
                 "positive": 0.65,
@@ -43,6 +43,7 @@ class SentimentResponse(BaseModel):
                 "sources_analyzed": 15
             }
         }
+    )
 
 
 class DetailedSentimentResponse(SentimentResponse):
@@ -64,8 +65,8 @@ class DetailedSentimentResponse(SentimentResponse):
     social_sentiments: Optional[List[Dict[str, float]]] = Field(None, description="Individual sentiment scores for social media")
     operation_summary: Optional[Dict[str, Any]] = Field(None, description="Operation statistics")
     
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "symbol": "AAPL",
                 "positive": 0.65,
@@ -102,6 +103,7 @@ class DetailedSentimentResponse(SentimentResponse):
                 }
             }
         }
+    )
 
 
 class ErrorResponse(BaseModel):
@@ -117,14 +119,15 @@ class ErrorResponse(BaseModel):
     detail: Optional[str] = Field(None, description="Detailed error information")
     timestamp: str = Field(default_factory=lambda: datetime.now().isoformat(), description="ISO format timestamp")
     
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "error": "Invalid stock symbol",
                 "detail": "Symbol 'INVALID' not found",
                 "timestamp": "2024-12-20T10:30:00"
             }
         }
+    )
 
 
 class HealthResponse(BaseModel):
@@ -140,8 +143,8 @@ class HealthResponse(BaseModel):
     services: Dict[str, str] = Field(..., description="Service health statuses")
     timestamp: str = Field(default_factory=lambda: datetime.now().isoformat(), description="ISO format timestamp")
     
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "status": "healthy",
                 "services": {
@@ -152,4 +155,5 @@ class HealthResponse(BaseModel):
                 "timestamp": "2024-12-20T10:30:00"
             }
         }
+    )
 
