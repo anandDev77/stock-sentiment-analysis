@@ -31,13 +31,19 @@ def render_comparison_tab(api_client: Optional[SentimentAPIClient]):
     
     current_symbol = st.session_state.get('symbol', 'AAPL')
     
+    # Stock selector options
+    stock_options = ['AAPL', 'MSFT', 'GOOGL', 'TSLA', 'AMZN', 'META', 'NVDA', 'NFLX', 'AMD', 'INTC', 'ORCL', 'JPM', 'V', 'WMT', 'MA', 'PG', 'UNH', 'HD', 'DIS', 'BAC']
+    
+    # Only use current_symbol as default if it's in the options list
+    default_value = [current_symbol] if current_symbol and current_symbol in stock_options else []
+    
     # Stock selector
     col1, col2 = st.columns([3, 1])
     with col1:
         compare_stocks = st.multiselect(
             "Select stocks to compare (2-5 recommended)",
-                options=['AAPL', 'MSFT', 'GOOGL', 'TSLA', 'AMZN', 'META', 'NVDA', 'NFLX', 'AMD', 'INTC'],
-            default=[current_symbol] if current_symbol else [],
+            options=stock_options,
+            default=default_value,
             key="compare_stocks_select",
             help="Select 2 or more stocks to compare their sentiment and performance"
         )
