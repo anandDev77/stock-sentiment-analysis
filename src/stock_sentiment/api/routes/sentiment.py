@@ -215,7 +215,7 @@ async def get_sentiment(
 
 class BatchSentimentRequest(BaseModel):
     """Request model for batch sentiment analysis."""
-    symbols: List[str] = Field(..., description="List of stock symbols to analyze", min_items=1)
+    symbols: List[str] = Field(..., description="List of stock symbols to analyze", min_length=1)
     sources: Optional[str] = Field(None, description="Comma-separated list of data sources")
     cache_enabled: Optional[bool] = Field(True, description="Enable sentiment caching")
     detailed: Optional[bool] = Field(False, description="Return detailed response")

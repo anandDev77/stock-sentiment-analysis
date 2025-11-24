@@ -15,6 +15,13 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/cache", tags=["cache"])
 
 
+class CacheStatsResponse(BaseModel):
+    """Response model for cache statistics."""
+    cache_hits: int = Field(..., description="Number of cache hits")
+    cache_misses: int = Field(..., description="Number of cache misses")
+    cache_sets: int = Field(..., description="Number of cache sets")
+
+
 class ClearCacheRequest(BaseModel):
     """Request model for clearing cache."""
     confirm: bool = Field(True, description="Confirmation flag for safety")
@@ -25,6 +32,54 @@ class CacheResponse(BaseModel):
     success: bool = Field(..., description="Operation success status")
     message: str = Field(..., description="Operation message")
     keys_deleted: Optional[int] = Field(None, description="Number of keys deleted (for clear operation)")
+
+
+@router.get(
+    "/stats",
+    response_model=CacheStatsResponse,
+    responses={
+        200: {"description": "Successful response"},
+        503: {"model": ErrorResponse, "description": "Service unavailable"}
+    },
+    summary="Get cache statistics",
+    description="""
+    Get cache statistics (hits, misses, sets).
+    
+    Returns the current cache statistics counters.
+    """
+)
+async def get_cache_stats():
+    """
+    Get cache statistics.
+    
+    Returns:
+        Cache statistics (hits, misses, sets)
+    
+    Raises:
+        HTTPException: If cache is unavailable
+    """
+    try:
+        settings, redis_cache, rag_service, collector, analyzer = get_all_services()
+        
+        if not redis_cache or not redis_cache.client:
+            raise HTTPException(
+                status_code=503,
+                detail="Redis cache not available"
+            )
+        
+        stats = redis_cache.get_cache_stats()
+        logger.info(f"Cache statistics retrieved: {stats}")
+        
+        return CacheStatsResponse(**stats)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting cache stats: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get cache statistics: {str(e)}"
+        )
 
 
 @router.post(
