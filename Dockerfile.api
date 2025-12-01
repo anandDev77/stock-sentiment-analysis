@@ -20,8 +20,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY src/ ./src/
 COPY pyproject.toml .
 
-# Set Python path
-ENV PYTHONPATH=/app
+# Install the package in editable mode so it can be imported
+RUN pip install -e .
+
+# Set Python path (backup, but package should be installed)
+ENV PYTHONPATH=/app/src
 
 # Expose API port
 EXPOSE 8000
