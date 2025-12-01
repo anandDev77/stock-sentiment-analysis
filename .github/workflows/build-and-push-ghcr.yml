@@ -1,4 +1,4 @@
-name: Build and push stock-sentiment-api image to GHCR
+name: Build and push stock-sentiment images to GHCR
 
 on:
   push:
@@ -12,18 +12,23 @@ permissions:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository_owner }}/stock-sentiment-api
 
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service:
+          - name: api
+            dockerfile: Dockerfile.api
+            image: stock-sentiment-api
+          - name: dashboard
+            dockerfile: Dockerfile.dashboard
+            image: stock-sentiment-dashboard
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      # No language toolchain needed for a pure Docker build.
-      # If you later want to run tests, you can add setup-python here.
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
@@ -39,16 +44,16 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.service.image }}
           tags: |
             type=raw,value=sentimentAnalysis
             type=sha,format=short,prefix=sentimentAnalysis-
 
-      - name: Build and push
+      - name: Build and push ${{ matrix.service.name }}
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: ./Dockerfile.api
+          file: ./${{ matrix.service.dockerfile }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
