@@ -3,7 +3,7 @@ name: Build and push stock-sentiment-api image to GHCR
 on:
   push:
     branches:
-      - feat-sentimentIntegration
+      - feat-fastAPI
   workflow_dispatch: {}
 
 permissions:
