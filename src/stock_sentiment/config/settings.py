@@ -331,17 +331,37 @@ class Settings:
         
         try:
             import os
+            from urllib.parse import urlparse
             if PYDANTIC_V2:
                 # Manually construct from environment variables
                 redis_host = os.getenv("REDIS_HOST")
                 redis_password = os.getenv("REDIS_PASSWORD")
+                redis_connection_string = os.getenv("REDIS_CONNECTION_STRING")
+                
+                # If connection string is provided, parse it
+                if redis_connection_string and not (redis_host and redis_password):
+                    try:
+                        # Parse redis:// or rediss:// connection string
+                        # Format: rediss://:password@host:port
+                        parsed = urlparse(redis_connection_string)
+                        redis_host = parsed.hostname
+                        redis_password = parsed.password or (parsed.username if parsed.username else None)
+                        redis_port = parsed.port or 6380
+                        redis_ssl = parsed.scheme == "rediss"
+                    except Exception as parse_err:
+                        # If parsing fails, set to None (will disable Redis)
+                        redis_host = None
+                        redis_password = None
+                        redis_port = 6380
+                        redis_ssl = True
+                
                 if redis_host and redis_password:
                     self.redis = RedisSettings(
                         host=redis_host,
-                        port=int(os.getenv("REDIS_PORT", "6380")),
+                        port=int(os.getenv("REDIS_PORT", str(redis_port if 'redis_port' in locals() else 6380))),
                         password=redis_password,
-                        ssl=os.getenv("REDIS_SSL", "true").lower() in ("true", "1", "yes"),
-                        connection_string=os.getenv("REDIS_CONNECTION_STRING")
+                        ssl=os.getenv("REDIS_SSL", str(redis_ssl if 'redis_ssl' in locals() else "true")).lower() in ("true", "1", "yes"),
+                        connection_string=redis_connection_string
                     )
                 else:
                     self.redis = None
@@ -349,6 +369,8 @@ class Settings:
                 self.redis = RedisSettings()
         except Exception as e:
             # Redis is optional, so we allow it to fail
+            import logging
+            logging.getLogger(__name__).warning(f"Redis initialization failed: {e}")
             self.redis = None
         
         try:
