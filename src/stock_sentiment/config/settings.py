@@ -395,6 +395,12 @@ class Settings:
             self.data_sources = DataSourceSettings()
         
         self.app = AppSettings()
+        
+        # Override api_base_url with SENTIMENT_API_URL if set (for Kubernetes deployments)
+        import os
+        sentiment_api_url = os.getenv("SENTIMENT_API_URL")
+        if sentiment_api_url:
+            self.app.api_base_url = sentiment_api_url.rstrip('/')
     
     def is_redis_available(self) -> bool:
         """Check if Redis is configured and available."""
